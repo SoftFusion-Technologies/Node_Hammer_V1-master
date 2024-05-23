@@ -44,14 +44,14 @@ let mail = {
   ]
 };
 
-transporter.sendMail(mail, (error, info) => {
-     if (error) {
-         console.log("Error sending email", error)
-     }
-     else {
-         console.log('Email send');
-     }
- })
+// transporter.sendMail(mail, (error, info) => {
+//      if (error) {
+//          console.log("Error sending email", error)
+//      }
+//      else {
+//          console.log('Email send');
+//      }
+//  })
 
 if (process.env.NODE_ENV !== 'production') {
     dotenv.config()
