@@ -62,3 +62,24 @@ export const ER_FrecAsk_CTS = async (req, res) => {
 };
 
 
+// Actualizar un registro en SchedulerTaskModel por su ID
+export const UR_FrecAsk_CTS = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [numRowsUpdated] = await FrecAskModel.update(req.body, {
+      where: { id }
+    });
+
+    if (numRowsUpdated === 1) {
+      const registroActualizado = await FrecAskModel.findByPk(id);
+      res.json({
+        message: 'Registro actualizado correctamente',
+        registroActualizado
+      });
+    } else {
+      res.status(404).json({ mensajeError: 'Registro no encontrado' });
+    }
+  } catch (error) {
+    res.status(500).json({ mensajeError: error.message });
+  }
+};
