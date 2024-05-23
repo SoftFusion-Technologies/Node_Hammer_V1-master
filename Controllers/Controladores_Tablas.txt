@@ -1,0 +1,240 @@
+/*
+  * Programador: Benjamin Orellana
+  * Fecha Cración: 15 /03 / 2024
+  * Versión: 1.0
+  *
+  * Descripción:
+    *Este archivo (Controladores_Tablas.js) contiene controladores para manejar operaciones CRUD en dos modelos Sequelize: 
+  * Tema: Controladores
+  
+  * Capa: Backend 
+ 
+  * Nomenclatura: OBR_ obtenerRegistro
+  *               OBRS_obtenerRegistros(plural)
+  *               CR_ crearRegistro
+  *               ER_ eliminarRegistro
+*/
+
+// Importa los modelos necesarios desde el archivo Modelos_Tablas.js
+import Modelos_Tablas from '../models/Modelos_Tablas.js';
+
+// Asigna los modelos a variables para su uso en los controladores
+const TrabajoModel = Modelos_Tablas.TrabajoModel;
+const FrecAskModel = Modelos_Tablas.FrecAskModel;
+const MigrationModel = Modelos_Tablas.MigrationModel;
+const PostulanteModel = Modelos_Tablas.PostulanteModel;
+const TestClassModel = Modelos_Tablas.TestClassModel;
+
+// ----------------------------------------------------------------
+// Controladores para operaciones CRUD en la tabla 'failed_jobs'
+// ----------------------------------------------------------------
+// Mostrar todos los registros de la tabla failed_jobs
+
+export const OBRS_TrabajoModel = async (req, res) => {
+  try {
+    const registros = await TrabajoModel.findAll();
+    res.json(registros);
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Mostrar un registro específico de TrabajoModel por su ID
+export const OBR_TrabajoModel = async (req, res) => {
+  try {
+    const registro = await TrabajoModel.findByPk(req.params.id);
+    res.json(registro);
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Crear un nuevo registro en TrabajoModel
+export const CR_TrabajoModel = async (req, res) => {
+  try {
+    await TrabajoModel.create(req.body);
+    res.json({ message: 'Registro creado correctamente' });
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Eliminar un registro en TrabajoModel por su ID
+export const ER_TrabajoModel = async (req, res) => {
+  try {
+    await TrabajoModel.destroy({ where: { id: req.params.id } });
+    res.json({ message: 'Registro eliminado correctamente' });
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+// ----------------------------------------------------------------
+// Controladores para operaciones CRUD en la tabla 'frec_asks'
+// ----------------------------------------------------------------
+// Mostrar todos los registros de la tabla FrecAskModel
+export const OBRS_FrecAskModel = async (req, res) => {
+  try {
+    const registros = await FrecAskModel.findAll();
+    res.json(registros);
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Mostrar un registro específico de FrecAskModel por su ID
+export const OBR_FrecAskModel = async (req, res) => {
+  try {
+    const registro = await FrecAskModel.findByPk(req.params.id);
+    res.json(registro);
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Crear un nuevo registro en FrecAskModel
+export const CR_FrecAskModel = async (req, res) => {
+  try {
+    await FrecAskModel.create(req.body);
+    res.json({ message: 'Registro creado correctamente' });
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Eliminar un registro en TrabajoModel por su ID
+export const ER_FrecAskModel = async (req, res) => {
+  try {
+    await FrecAskModel.destroy({ where: { id: req.params.id } });
+    res.json({ message: 'Registro eliminado correctamente' });
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// ----------------------------------------------------------------
+// Controladores para operaciones CRUD en la tabla 'migrations'
+// ----------------------------------------------------------------
+// Mostrar todos los registros de la tabla MigrationModel
+export const OBRS_MigrationModel = async (req, res) => {
+  try {
+    const registros = await MigrationModel.findAll();
+    res.json(registros);
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Mostrar un registro específico de MigrationModel por su ID
+export const OBR_MigrationModel = async (req, res) => {
+  try {
+    const registro = await MigrationModel.findByPk(req.params.id);
+    res.json(registro);
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Crear un nuevo registro en MigrationModel
+export const CR_MigrationModel = async (req, res) => {
+  try {
+    await MigrationModel.create(req.body);
+    res.json({ message: 'Registro creado correctamente' });
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Eliminar un registro en TrabajoModel por su ID
+export const ER_MigrationModel = async (req, res) => {
+  try {
+    await MigrationModel.destroy({ where: { id: req.params.id } });
+    res.json({ message: 'Registro eliminado correctamente' });
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+// ----------------------------------------------------------------
+// Controladores para operaciones CRUD en la tabla 'postulantes'
+// ----------------------------------------------------------------
+// Mostrar todos los registros de la tabla PostulanteModel
+export const OBRS_Postulante = async (req, res) => {
+  try {
+    const registros = await PostulanteModel.findAll();
+    res.json(registros);
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Mostrar un registro específico de PostulanteModel por su ID
+export const OBR_Postulante = async (req, res) => {
+  try {
+    const registro = await PostulanteModel.findByPk(req.params.id);
+    res.json(registro);
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Crear un nuevo registro en PostulanteModel
+export const CR_Postulante = async (req, res) => {
+  try {
+    await PostulanteModel.create(req.body);
+    res.json({ message: 'Registro creado correctamente' });
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Eliminar un r egistro en PostulanteModel por su ID
+export const ER_Postulante = async (req, res) => {
+  try {
+    await PostulanteModel.destroy({ where: { id: req.params.id } });
+    res.json({ message: 'Registro eliminado correctamente' });
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+// ----------------------------------------------------------------
+// Controladores para operaciones CRUD en la tabla TestClassModel
+// ----------------------------------------------------------------
+
+// Mostrar todos los registros de TestClassModel
+export const OBRS_TestClass = async (req, res) => {
+  try {
+    const registros = await TestClassModel.findAll();
+    res.json(registros);
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Mostrar un registro específico de TestClassModel por su ID
+export const OBR_TestClass = async (req, res) => {
+  try {
+    const registro = await TestClassModel.findByPk(req.params.id);
+    res.json(registro);
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Crear un nuevo registro en TestClassModel
+export const CR_TestClass = async (req, res) => {
+  try {
+    await TestClassModel.create(req.body);
+    res.json({ message: 'Registro creado correctamente' });
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
+
+// Eliminar un registro en TestClassModel por su ID
+export const ER_TestClass = async (req, res) => {
+  try {
+    await TestClassModel.destroy({ where: { id: req.params.id } });
+    res.json({ message: 'Registro eliminado correctamente' });
+  } catch (error) {
+    res.json({ mensajeError: error.message });
+  }
+};
