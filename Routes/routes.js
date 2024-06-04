@@ -135,6 +135,24 @@ import {
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_Users.js';
 
+// PARTE NUEVA CONVENIOS
+
+import {
+  OBR_AdmConve_CTS,
+  OBRS_AdmConve_CTS,
+  CR_AdmConve_CTS,
+  ER_AdmConve_CTS
+  // Importa los controladores necesarios para la tabla password_reset - tb_15
+} from '../Controllers/CTS_TB_AdmConve.js';
+
+
+import {
+  OBR_IntegrantesConve_CTS,
+  OBRS_IntegrantesConve_CTS,
+  CR_IntegrantesConve_CTS,
+  ER_IntegrantesConve_CTS
+  // Importa los controladores necesarios para la tabla password_reset - tb_15
+} from '../Controllers/CTS_TB_IntegrantesConve.js';
 // Crea un enrutador de Express
 const router = express.Router();
 
@@ -391,6 +409,40 @@ router.get('/users/:id', OBR_Users_CTS);
 
 // Eliminar un registro en Users_CTS por su ID
 router.delete('/users/:id', ER_Users_CTS);
+
+// ----------------------------------------------------------------
+// Ruta para obtener todos los registros de AdmConve tb_15
+// ----------------------------------------------------------------
+// Define las rutas para cada método del controlador de AdmConve
+
+router.get('/admconvenios', OBRS_AdmConve_CTS);
+
+// Obtener un registro específico de AdmConve por su ID
+router.get('/admconvenios/:id', OBR_AdmConve_CTS);
+
+// Crear un nuevo registro en AdmConve
+ router.post('/admconvenios', CR_AdmConve_CTS);
+
+// Eliminar un registro en AdmConve por su ID
+router.delete('/admconvenios/:id', ER_AdmConve_CTS);
+
+
+// ----------------------------------------------------------------
+// Ruta para obtener todos los registros de IntegrantesConve tb_15
+// ----------------------------------------------------------------
+// Define las rutas para cada método del controlador de IntegrantesConve
+
+router.get('/integrantes', OBRS_IntegrantesConve_CTS);
+
+// Obtener un registro específico de IntegrantesConve por su ID
+router.get('/integrantes/:id', OBR_IntegrantesConve_CTS);
+
+// Crear un nuevo registro en IntegrantesConve
+ router.post('/integrantes', CR_IntegrantesConve_CTS);
+
+// Eliminar un registro en IntegrantesConve por su ID
+router.delete('/integrantes/:id', ER_IntegrantesConve_CTS);
+
 
 
 // Exporta el enrutador
