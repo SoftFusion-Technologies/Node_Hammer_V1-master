@@ -124,6 +124,27 @@ app.get('/', (req, res) => {
         res.end('404 ERROR')
     }
 })
+
+// Ruta para obtener convenio y sus integrantes
+app.get('/admconvenios/:id_conv/integrantes', async (req, res) => {
+  const { id_conv } = req.params;
+
+  try {
+    const results = await db.query(
+      'SELECT * FROM integrantes_conve i WHERE i.id_conv = :id_conv',
+      {
+        replacements: { id_conv },
+        type: db.QueryTypes.SELECT
+      }
+    );
+
+    res.json(results);
+  } catch (err) {
+    console.log('Error executing query', err);
+    res.status(500).json({ error: 'Error ejecutando la consulta' });
+  }
+});
+
 // // Ruta para obtener todos los registros de las tablas
 // app.get('/datos', async (req, res) => {
 //     try {
