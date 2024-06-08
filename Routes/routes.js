@@ -312,16 +312,16 @@ router.delete('/personalaccess/:id', ER_PersonalAccessTokens_CTS);
 // ----------------------------------------------------------------
 // Define las rutas para cada método del controlador de Postulante
 
-router.get('/postulante', OBRS_Postulante_CTS);
+router.get('/postulantes', OBRS_Postulante_CTS);
 
 // Ruta para obtener un registro específico de Postulante_CTS por su ID
-router.get('/postulante/:id', OBR_Postulante_CTS);
+router.get('/postulantes/:id', OBR_Postulante_CTS);
 
 // Ruta para crear un nuevo registro en Postulante_CTS
-router.post('/postulante', CR_Postulante_CTS);
+router.post('/postulantes', CR_Postulante_CTS);
 
 // Ruta para eliminar un registro en Postulante_CTS por su ID
-router.delete('/postulante/:id', ER_Postulante_CTS);
+router.delete('/postulantes/:id', ER_Postulante_CTS);
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de SchedulerTaskUser tb_11
