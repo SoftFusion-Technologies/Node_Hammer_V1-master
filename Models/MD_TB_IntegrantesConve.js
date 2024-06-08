@@ -34,15 +34,15 @@ const IntegrantesConveModel = db.define(
       type: DataTypes.STRING,
       allowNull: false
     },
+    dni: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     telefono: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    direccion: {
-      type: DataTypes.STRING,
-      allowNull: true
-    },
-    trabajo: {
+    email: {
       type: DataTypes.STRING,
       allowNull: true
     },
