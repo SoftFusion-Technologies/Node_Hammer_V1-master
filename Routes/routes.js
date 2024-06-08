@@ -153,6 +153,16 @@ import {
   ER_IntegrantesConve_CTS
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_IntegrantesConve.js';
+
+import {
+  OBR_ImagenConve_CTS,
+  OBRS_ImagenConve_CTS,
+  CR_ImagenConve_CTS,
+  ER_ImagenConve_CTS,
+  cargarImagen
+  // Importa los controladores necesarios para la tabla password_reset - tb_15
+} from '../Controllers/CTS_TB_ImagesConve.js';
+
 // Crea un enrutador de Express
 const router = express.Router();
 
@@ -443,6 +453,20 @@ router.get('/integrantes/:id', OBR_IntegrantesConve_CTS);
 // Eliminar un registro en IntegrantesConve por su ID
 router.delete('/integrantes/:id', ER_IntegrantesConve_CTS);
 
+
+
+router.get('/imagenes', OBRS_ImagenConve_CTS);
+
+// Obtener un registro específico de ImagesConve por su ID
+router.get('/imagenes/:id', OBR_ImagenConve_CTS);
+
+// Crear un nuevo registro en ImagesConve
+router.post('/imagenes', CR_ImagenConve_CTS);
+
+// Eliminar un registro en ImagesConve por su ID
+router.delete('/imagenes/:id', ER_ImagenConve_CTS);
+
+router.post('/subir-imagen', cargarImagen);
 
 
 // Exporta el enrutador
