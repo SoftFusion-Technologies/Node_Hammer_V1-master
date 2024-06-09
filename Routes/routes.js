@@ -89,7 +89,8 @@ import {
   OBR_Postulante_CTS,
   OBRS_Postulante_CTS,
   CR_Postulante_CTS,
-  ER_Postulante_CTS
+  ER_Postulante_CTS,
+  UR_Postulante_CTS
   // Importa los controladores necesarios para la tabla password_reset - tb_10
 } from '../Controllers/CTS_TB_Postulante.js';
 
@@ -332,6 +333,8 @@ router.post('/postulantes', CR_Postulante_CTS);
 
 // Ruta para eliminar un registro en Postulante_CTS por su ID
 router.delete('/postulantes/:id', ER_Postulante_CTS);
+
+router.put('/postulantes/:id', UR_Postulante_CTS);
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de SchedulerTaskUser tb_11
