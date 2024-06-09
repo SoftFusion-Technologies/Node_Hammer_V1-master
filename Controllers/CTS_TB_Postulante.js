@@ -62,7 +62,7 @@ export const ER_Postulante_CTS = async (req, res) => {
   }
 };
 
-// Actualizar un registro en SchedulerTaskModel por su ID
+// Actualizar un registro en Postulante por su ID
 export const UR_Postulante_CTS = async (req, res) => {
   try {
     const { id } = req.params;

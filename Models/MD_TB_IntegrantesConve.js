@@ -49,6 +49,22 @@ const IntegrantesConveModel = db.define(
     sede: {
       type: DataTypes.STRING,
       allowNull: true
+    },
+    notas: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    precio: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    descuento: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    preciofinal: {
+      type: DataTypes.STRING,
+      allowNull: true
     }
   },
   {
