@@ -5,8 +5,8 @@
   * Versión: 1.0
   *
   * Descripción:
-    *Este archivo (CTS_TB_IntegrantesConve.js) contiene controladores para manejar operaciones CRUD en dos modelos Sequelize: 
-  * Tema: Controladores - IntegrantesConve
+    *Este archivo (CTS_TB_FamIntegrante.js) contiene controladores para manejar operaciones CRUD en dos modelos Sequelize: 
+  * Tema: Controladores - FamIntegrante
   
   * Capa: Backend 
  
@@ -17,49 +17,49 @@
 */
 
 // Importa los modelos necesarios desde el archivo Modelos_Tablas.js
-import MD_TB_IntegrantesConve from '../Models/MD_TB_IntegrantesConve.js';
+import MD_TB_FamIntegrante from '../Models/MD_TB_FamIntegrante.js';
 
 // Asigna los modelos a variables para su uso en los controladores
-const IntegrantesConveModel = MD_TB_IntegrantesConve.IntegrantesConveModel;
+const FamIntegranteModel = MD_TB_FamIntegrante.FamIntegranteModel;
 
 // ----------------------------------------------------------------
 // Controladores para operaciones CRUD en la tabla 'failed_jobs'
 // ----------------------------------------------------------------
 // Mostrar todos los registros de la tabla failed_jobs
 
-export const OBRS_IntegrantesConve_CTS = async (req, res) => {
+export const OBRS_FamIntegrante_CTS = async (req, res) => {
   try {
-    const registros = await IntegrantesConveModel.findAll();
+    const registros = await FamIntegranteModel.findAll();
     res.json(registros);
   } catch (error) {
     res.json({ mensajeError: error.message });
   }
 };
 
-// Mostrar un registro específico de IntegrantesConveModel por su ID
-export const OBR_IntegrantesConve_CTS = async (req, res) => {
+// Mostrar un registro específico de FamIntegranteModel por su ID
+export const OBR_FamIntegrante_CTS = async (req, res) => {
   try {
-    const registro = await IntegrantesConveModel.findByPk(req.params.id);
+    const registro = await FamIntegranteModel.findByPk(req.params.id);
     res.json(registro);
   } catch (error) {
     res.json({ mensajeError: error.message });
   }
 };
 
-// Crear un nuevo registro en IntegrantesConveModel
-export const CR_IntegrantesConve_CTS = async (req, res) => {
+// Crear un nuevo registro en FamIntegranteModel
+export const CR_FamIntegrante_CTS = async (req, res) => {
   try {
-    const registro = await IntegrantesConveModel.create(req.body);
+    const registro = await FamIntegranteModel.create(req.body);
     res.json({ message: 'Registro creado correctamente' });
   } catch (error) {
     res.json({ mensajeError: error.message });
   }
 };
 
-// Eliminar un registro en IntegrantesConveModel por su ID
-export const ER_IntegrantesConve_CTS = async (req, res) => {
+// Eliminar un registro en FamIntegranteModel por su ID
+export const ER_FamIntegrante_CTS = async (req, res) => {
   try {
-    await IntegrantesConveModel.destroy({ where: { id: req.params.id } });
+    await FamIntegranteModel.destroy({ where: { id: req.params.id } });
     res.json({ message: 'Registro eliminado correctamente' });
   } catch (error) {
     res.json({ mensajeError: error.message });
@@ -67,15 +67,15 @@ export const ER_IntegrantesConve_CTS = async (req, res) => {
 };
 
 // Actualizar un registro en Integrante por su ID
-export const UR_IntegrantesConve_CTS = async (req, res) => {
+export const UR_FamIntegrante_CTS = async (req, res) => {
   try {
     const { id } = req.params;
-    const [numRowsUpdated] = await IntegrantesConveModel.update(req.body, {
+    const [numRowsUpdated] = await FamIntegranteModel.update(req.body, {
       where: { id }
     });
 
     if (numRowsUpdated === 1) {
-      const registroActualizado = await IntegrantesConveModel.findByPk(id);
+      const registroActualizado = await FamIntegranteModel.findByPk(id);
       res.json({
         message: 'Registro actualizado correctamente',
         registroActualizado

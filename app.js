@@ -145,6 +145,27 @@ app.get('/admconvenios/:id_conv/integrantes', async (req, res) => {
   }
 });
 
+// Ruta para obtener integrantes y sus familiares
+app.get('/integrantes/:id_integrante/integrantesfam', async (req, res) => {
+  const { id_integrante } = req.params;
+
+  try {
+  const results = await db.query(
+    'SELECT * FROM fam_integrante i WHERE i.id_integrante = :id_integrante',
+    {
+      replacements: { id_integrante },
+      type: db.QueryTypes.SELECT
+    }
+  );
+
+  res.json(results);
+} catch (err) {
+  console.log('Error executing query', err);
+  res.status(500).json({ error: 'Error ejecutando la consulta' });
+}
+});
+
+
 // // Ruta para obtener todos los registros de las tablas
 // app.get('/datos', async (req, res) => {
 //     try {
