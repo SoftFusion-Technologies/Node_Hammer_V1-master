@@ -165,6 +165,15 @@ import {
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_ImagesConve.js';
 
+import {
+  OBR_FamIntegrante_CTS,
+  OBRS_FamIntegrante_CTS,
+  CR_FamIntegrante_CTS,
+  ER_FamIntegrante_CTS,
+  UR_FamIntegrante_CTS
+  // Importa los controladores necesarios para la tabla password_reset - tb_15
+} from '../Controllers/CTS_TB_FamIntegrante.js';
+
 // Crea un enrutador de Express
 const router = express.Router();
 
@@ -474,6 +483,20 @@ router.delete('/imagenes/:id', ER_ImagenConve_CTS);
 
 router.post('/subir-imagen', cargarImagen);
 
+
+router.get('/integrantesfam', OBRS_FamIntegrante_CTS);
+
+// Obtener un registro específico de FamIntegrante por su ID
+router.get('/integrantesfam/:id', OBR_FamIntegrante_CTS);
+
+// Crear un nuevo registro en FamIntegrante
+router.post('/integrantesfam', CR_FamIntegrante_CTS);
+
+// Eliminar un registro en FamIntegrante por su ID
+router.delete('/integrantesfam/:id', ER_FamIntegrante_CTS);
+
+// Actualizar un registro en FamIntegrante por su ID
+router.put('/integrantesfam/:id', UR_FamIntegrante_CTS);
 
 // Exporta el enrutador
 export default router;
