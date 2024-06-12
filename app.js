@@ -87,8 +87,12 @@ app.post('/login', async (req, res) => {
     });
     if (results.length > 0) {
       const user = results[0];
-      const token = jwt.sign({ id: user.id }, 'softfusion', { expiresIn: '1h' });
-      return res.json({ message: 'Success', token });
+          const token = jwt.sign(
+            { id: user.id, level: user.level },
+            'softfusion',
+            { expiresIn: '1h' }
+          );
+          return res.json({ message: 'Success', token, level: user.level });
     } else {
       return res.json('Fail');
     }
