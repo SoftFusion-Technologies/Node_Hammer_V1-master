@@ -29,7 +29,7 @@ import {
  } from '../Controllers/CTS_TB_FrecAsk.js';
 
 import {
-     OBR_Migration_CTS,
+  OBR_Migration_CTS,
   OBRS_Migration_CTS,
   CR_Migration_CTS,
   ER_Migration_CTS
@@ -116,7 +116,8 @@ import {
   OBR_TestClass_CTS,
   OBRS_TestClass_CTS,
   CR_TestClass_CTS,
-  ER_TestClass_CTS
+  ER_TestClass_CTS,
+  UR_TestClass_CTS
   // Importa los controladores necesarios para la tabla password_reset - tb_13
 } from '../Controllers/CTS_TB_TestClass.js';
 
@@ -399,6 +400,8 @@ router.get('/testclass/:id', OBR_TestClass_CTS);
 
 // Eliminar un registro en TestClass_CTS por su ID
 router.delete('/testclass/:id', ER_TestClass_CTS);
+// Actualizar un registro en TestClass_CTS por su ID
+router.put('/testclass/:id', UR_TestClass_CTS);
 
 
 // ----------------------------------------------------------------
