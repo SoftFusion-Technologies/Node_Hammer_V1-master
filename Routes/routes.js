@@ -133,7 +133,8 @@ import {
   OBR_Users_CTS,
   OBRS_Users_CTS,
   CR_Users_CTS,
-  ER_Users_CTS
+  ER_Users_CTS,
+  UR_Users_CTS
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_Users.js';
 
@@ -174,6 +175,18 @@ import {
   UR_FamIntegrante_CTS
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_FamIntegrante.js';
+
+// NUEVA PARTE DE ADMINISTRACION DE PRECIOS PARA CONVENIOS
+
+import {
+  OBR_AdmPrecio_CTS,
+  OBRS_AdmPrecio_CTS,
+  CR_AdmPrecio_CTS,
+  ER_AdmPrecio_CTS
+  // Importa los controladores necesarios para la tabla password_reset - tb_15
+} from '../Controllers/CTS_TB_AdmPrecio.js';
+
+
 
 // Crea un enrutador de Express
 const router = express.Router();
@@ -436,6 +449,9 @@ router.get('/users/:id', OBR_Users_CTS);
 // Eliminar un registro en Users_CTS por su ID
 router.delete('/users/:id', ER_Users_CTS);
 
+// Actualizar un registro en Users_CTS por su ID
+router.put('/users/:id', UR_Users_CTS);
+
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de AdmConve tb_15
 // ----------------------------------------------------------------
@@ -500,6 +516,23 @@ router.delete('/integrantesfam/:id', ER_FamIntegrante_CTS);
 
 // Actualizar un registro en FamIntegrante por su ID
 router.put('/integrantesfam/:id', UR_FamIntegrante_CTS);
+
+// ----------------------------------------------------------------
+// Ruta para obtener todos los registros de AdmPrecio tb_15
+// ----------------------------------------------------------------
+// Define las rutas para cada método del controlador de AdmPrecio
+
+router.get('/admprecio', OBRS_AdmPrecio_CTS);
+
+// Obtener un registro específico de AdmPrecio por su ID
+router.get('/admprecio/:id', OBR_AdmPrecio_CTS);
+
+// Crear un nuevo registro en AdmPrecio
+ router.post('/admprecio', CR_AdmPrecio_CTS);
+
+// Eliminar un registro en AdmPrecio por su ID
+router.delete('/admprecio/:id', ER_AdmPrecio_CTS);
+
 
 // Exporta el enrutador
 export default router;
