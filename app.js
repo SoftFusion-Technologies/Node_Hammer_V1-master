@@ -182,5 +182,5 @@ app.get('/integrantes/:id_integrante/integrantesfam', async (req, res) => {
 // });
 
 app.listen(PORT, () => {
-    console.log(`Servidor Iniciado `)
+    console.log(`Servidor escuchando en el puerto http://localhost:${PORT}/ o bien  http://localhost:${PORT}/postulante/ `)
 })
