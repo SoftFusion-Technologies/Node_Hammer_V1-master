@@ -150,24 +150,49 @@ app.get('/admconvenios/:id_conv/integrantes', async (req, res) => {
 });
 
 // Ruta para obtener integrantes y sus familiares
-app.get('/integrantes/:id_integrante/integrantesfam', async (req, res) => {
-  const { id_integrante } = req.params;
+app.get('/admconvenios/:id_conv/integrantes/:id_integrante/integrantesfam', async (req, res) => {
+  const { id_conv, id_integrante } = req.params;
 
   try {
-  const results = await db.query(
-    'SELECT * FROM fam_integrante i WHERE i.id_integrante = :id_integrante',
-    {
-      replacements: { id_integrante },
-      type: db.QueryTypes.SELECT
+    // Validar id_conv e id_integrante
+    if (!id_conv || !id_integrante) {
+      return res.status(400).json({ error: 'id_conv y id_integrante son requeridos' });
     }
-  );
 
-  res.json(results);
-} catch (err) {
-  console.log('Error executing query', err);
-  res.status(500).json({ error: 'Error ejecutando la consulta' });
-}
+    const results = await db.query(
+      'SELECT * FROM fam_integrante i WHERE i.id_integrante = :id_integrante',
+      {
+        replacements: { id_integrante },
+        type: db.QueryTypes.SELECT
+      }
+    );
+
+    res.json(results);
+  } catch (err) {
+    console.log('Error executing query', err);
+    res.status(500).json({ error: 'Error ejecutando la consulta' });
+  }
 });
+
+// // Ruta para obtener integrantes y sus familiares
+// app.get('/admconvenios/:id_conv/integrantes/:id_integrante/integrantesfam', async (req, res) => {
+//   const { id_integrante } = req.params;
+
+//   try {
+//   const results = await db.query(
+//     'SELECT * FROM fam_integrante i WHERE i.id_integrante = :id_integrante',
+//     {
+//       replacements: { id_integrante },
+//       type: db.QueryTypes.SELECT
+//     }
+//   );
+
+//   res.json(results);
+// } catch (err) {
+//   console.log('Error executing query', err);
+//   res.status(500).json({ error: 'Error ejecutando la consulta' });
+// }
+// });
 
 
 // // Ruta para obtener todos los registros de las tablas
