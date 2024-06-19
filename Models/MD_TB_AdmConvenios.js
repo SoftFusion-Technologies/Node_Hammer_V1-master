@@ -41,8 +41,30 @@ const AdmConveniosModel = db.define(
     ultima_actualizacion: {
       type: DataTypes.DATE,
       allowNull: true
+    },
+    precio: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    descuento: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    preciofinal: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    cantFamiliares: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    permiteFam: {
+      type: DataTypes.TINYINT,
+      allowNull: false,
+      defaultValue: 0 // Puedes establecer un valor predeterminado si es necesario
     }
   },
+  
   {
     timestamps: false // Esto evita que Sequelize añada automáticamente los campos createdAt y updatedAt
   }
