@@ -1,5 +1,4 @@
 /*
-/*
   * Programador: Benjamin Orellana
   * Fecha Cración: 17 /03 / 2024
   * Versión: 1.0
@@ -21,10 +20,8 @@
 // ----------------------------------------------------------------
 
 // Importa los modelos necesarios desde el archivo
-import MD_TB_Users from '../Models/MD_TB_Users.js';
+import UsersModel from '../Models/MD_TB_Users.js';
 
-// Asigna los modelos a variables para su uso en los controladores
-const UsersModel = MD_TB_Users.UsersModel;
 
 // Mostrar todos los registros de UsersModel o filtrar por sede
 export const OBRS_Users_CTS = async (req, res) => {
@@ -34,7 +31,8 @@ export const OBRS_Users_CTS = async (req, res) => {
     const registros = await UsersModel.findAll({ where: whereClause });
     res.json(registros);
   } catch (error) {
-    res.json({ mensajeError: error.message });
+    console.error('Error al obtener usuarios:', error);
+    res.status(500).json({ mensajeError: 'Error al obtener usuarios' });
   }
 };
 
@@ -91,5 +89,3 @@ export const UR_Users_CTS = async (req, res) => {
     res.status(500).json({ mensajeError: error.message });
   }
 };
-
-

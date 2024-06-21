@@ -16,10 +16,13 @@
 */
 
 // Importa los modelos necesarios desde el archivo Modelos_Tablas.js
-import MD_TB_Novedades from '../Models/MD_TB_Novedades.js';
+import NovedadesModel from '../Models/MD_TB_Novedades.js';
+import NovedadUserModel from '../Models/MD_TB_NovedadUser.js';
+import UsersModel from '../Models/MD_TB_Users.js';
 
-// Asigna los modelos a variables para su uso en los controladores
-const NovedadesModel = MD_TB_Novedades.NovedadesModel;
+//Asigna los modelos a variables para su uso en los controladores
+//const NovedadesModel = MD_TB_Novedades.NovedadesModel;
+//const NovedadUserModel = MD_TB_NovedadUser.NovedadUserModel;
 
 // ----------------------------------------------------------------
 // Controladores para operaciones CRUD en la tabla 'Novedades'
@@ -28,12 +31,23 @@ const NovedadesModel = MD_TB_Novedades.NovedadesModel;
 
 export const OBRS_Novedades_CTS = async (req, res) => {
   try {
-    const registros = await NovedadesModel.findAll();
+    const registros = await NovedadesModel.findAll({
+      include: {
+        model: NovedadUserModel,
+        as: 'novedadUsers',
+        include: {
+          model: UsersModel,
+          as: 'user',
+          attributes: ['id', 'name']
+        }
+      }
+    });
     res.json(registros);
   } catch (error) {
     res.json({ mensajeError: error.message });
   }
 };
+
 
 // Mostrar un registro específico de NovedadesModel por su ID
 export const OBR_Novedades_CTS = async (req, res) => {
@@ -48,7 +62,14 @@ export const OBR_Novedades_CTS = async (req, res) => {
 // Crear un nuevo registro en NovedadesModel
 export const CR_Novedades_CTS = async (req, res) => {
   try {
-    const registro = await NovedadesModel.create(req.body);
+    const { sede, titulo, mensaje, vencimiento, estado, user } = req.body;
+    const registro = await NovedadesModel.create({ sede, titulo, mensaje, vencimiento, estado });
+
+    if (user && user.length > 0) {
+      const userPromises = user.map(userId => NovedadUserModel.create({ novedad_id: registro.id, user_id: userId }));
+      await Promise.all(userPromises);
+    }
+
     res.json({ message: 'Registro creado correctamente' });
   } catch (error) {
     res.json({ mensajeError: error.message });
