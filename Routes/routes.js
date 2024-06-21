@@ -283,32 +283,32 @@ router.put('/novedades/:id', UR_Novedades_CTS);
 // ----------------------------------------------------------------
 // Define las rutas para cada método del controlador de NovedadUser
 
-router.get('/novedaduser', OBRS_NovedadUser_CTS);
+router.get('/novedad_user', OBRS_NovedadUser_CTS);
 
 // Ruta para obtener un registro específico de Novedad por su ID
-router.get('/novedaduser/:id', OBR_NovedadUser_CTS);
+router.get('/novedad_user/:id', OBR_NovedadUser_CTS);
 
 // Ruta para crear un nuevo registro en Novedad
-router.post('/novedaduser', CR_NovedadUser_CTS);
+router.post('/novedad_user', CR_NovedadUser_CTS);
 
 // Ruta para eliminar un registro en Novedad por su ID
-router.delete('/novedaduser/:id', ER_NovedadUser_CTS);
+router.delete('/novedad_user/:id', ER_NovedadUser_CTS);
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de NovedadUserDestino tb_7
 // ----------------------------------------------------------------
 // Define las rutas para cada método del controlador de NovedadUserDestino
 
-router.get('/novedaduserdestino', OBRS_NovedadUserDestino_CTS);
+router.get('/novedad_users_destino', OBRS_NovedadUserDestino_CTS);
 
 // Ruta para obtener un registro específico de NovedadUser por su ID
-router.get('/novedaduserdestino/:id', OBR_NovedadUserDestino_CTS);
+router.get('/novedad_users_destino/:id', OBR_NovedadUserDestino_CTS);
 
 // Ruta para crear un nuevo registro en NovedadUser
-router.post('/novedaduserdestino', CR_NovedadUserDestino_CTS);
+router.post('/novedad_users_destino', CR_NovedadUserDestino_CTS);
 
 // Ruta para eliminar un registro en NovedadUser por su ID
-router.delete('/novedaduserdestino/:id', ER_NovedadUserDestino_CTS);
+router.delete('/novedad_users_destino/:id', ER_NovedadUserDestino_CTS);
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de PassReset tb_8
