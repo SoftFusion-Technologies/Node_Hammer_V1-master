@@ -72,6 +72,4 @@ const UsersModel = db.define(
   }
 );
 
-export default {
-    UsersModel
-};
+export default UsersModel;
