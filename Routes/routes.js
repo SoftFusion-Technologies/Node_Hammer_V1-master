@@ -25,7 +25,8 @@ import {
   OBR_FrecAsk_CTS,
   OBRS_FrecAsk_CTS,
   CR_FrecAsk_CTS,
-  ER_FrecAsk_CTS
+  ER_FrecAsk_CTS,
+  UR_FrecAsk_CTS
  } from '../Controllers/CTS_TB_FrecAsk.js';
 
 import {
@@ -217,6 +218,9 @@ router.post('/ask', CR_FrecAsk_CTS);
 
 // Ruta para eliminar un registro en FrecAsk_CTS por su ID
 router.delete('/ask/:id', ER_FrecAsk_CTS);
+
+// Ruta para actualizar un registro en FrecAsk_CTS por su ID
+router.put('/ask/:id', UR_FrecAsk_CTS);
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de migration tb_3
