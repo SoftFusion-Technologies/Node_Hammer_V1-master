@@ -65,3 +65,26 @@ export const ER_AdmConve_CTS = async (req, res) => {
     res.json({ mensajeError: error.message });
   }
 };
+
+
+// Actualizar un registro en Users por su ID
+export const UR_AdmConve_CTS = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [numRowsUpdated] = await AdmConveniosModel.update(req.body, {
+      where: { id }
+    });
+
+    if (numRowsUpdated === 1) {
+      const registroActualizado = await AdmConveniosModel.findByPk(id);
+      res.json({
+        message: 'Registro actualizado correctamente',
+        registroActualizado
+      });
+    } else {
+      res.status(404).json({ mensajeError: 'Registro no encontrado' });
+    }
+  } catch (error) {
+    res.status(500).json({ mensajeError: error.message });
+  }
+};
