@@ -373,7 +373,6 @@ router.post('/schedulertaskuser', CR_SchedulerTaskUser_CTS);
 router.delete('/schedulertaskuser/:id', ER_SchedulerTaskUser_CTS);
 
 
-
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de SchedulerTask tb_12
 // ----------------------------------------------------------------
@@ -389,7 +388,6 @@ router.post('/schedulertask', CR_SchedulerTask_CTS);
 
 // Ruta para eliminar un registro en SchedulerTask por su ID
 router.delete('/schedulertask/:id', ER_SchedulerTask_CTS);
-
 
 // Ruta para actualizar un registro en SchedulerTask por su ID
 router.put('/schedulertask/:id', UR_SchedulerTask_CTS);
