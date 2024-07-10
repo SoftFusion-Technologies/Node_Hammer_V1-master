@@ -145,7 +145,8 @@ import {
   OBR_AdmConve_CTS,
   OBRS_AdmConve_CTS,
   CR_AdmConve_CTS,
-  ER_AdmConve_CTS
+  ER_AdmConve_CTS,
+  UR_AdmConve_CTS
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_AdmConve.js';
 
@@ -462,6 +463,7 @@ router.get('/admconvenios/:id', OBR_AdmConve_CTS);
 // Eliminar un registro en AdmConve por su ID
 router.delete('/admconvenios/:id', ER_AdmConve_CTS);
 
+router.put('/admconvenios/:id', UR_AdmConve_CTS);
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de IntegrantesConve tb_15
