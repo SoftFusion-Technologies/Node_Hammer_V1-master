@@ -1,80 +1,88 @@
-/*
-  * Programador: Benjamin Orellana
-  * Fecha Cración: 17 /03 / 2024
-  * Versión: 1.0
-  *
-  * Descripción:
-    *Este archivo (CTS_TB_SchedulerTask.js) contiene controladores para manejar operaciones CRUD en dos modelos Sequelize: 
-  * Tema: Controladores - SchedulerTask
-  
-  * Capa: Backend 
- 
-  * Nomenclatura: OBR_ obtenerRegistro
-  *               OBRS_obtenerRegistros(plural)
-  *               CR_ crearRegistro
-  *               ER_ eliminarRegistro
-*/
+import SchedulerTaskModel from '../Models/MD_TB_SchedulerTask.js';
+import SchedulerTaskUserModel from '../Models/MD_TB_SchedulerTaskUser.js';
+import UsersModel from '../Models/MD_TB_Users.js';
 
-// Importa los modelos necesarios desde el archivo
-import MD_TB_SchedulerTask from '../Models/MD_TB_SchedulerTask.js';
-
-const SchedulerTaskModel = MD_TB_SchedulerTask.SchedulerTaskModel;
-
-// ----------------------------------------------------------------
-// Controladores para operaciones CRUD en la tabla 'SchedulerTask'
-// ----------------------------------------------------------------
-// Mostrar todos los registros de la tabla SchedulerTask
-
+// Obtener todos los registros de SchedulerTask con los usuarios relacionados
 export const OBRS_SchedulerTask_CTS = async (req, res) => {
   try {
-    const registros = await SchedulerTaskModel.findAll();
+    const registros = await SchedulerTaskModel.findAll({
+      include: {
+        model: SchedulerTaskUserModel,
+        as: 'taskUsers',
+        include: {
+          model: UsersModel,
+          as: 'user',
+          attributes: ['id', 'name']
+        }
+      }
+    });
     res.json(registros);
   } catch (error) {
     res.status(500).json({ mensajeError: error.message });
   }
 };
 
+// Mostrar un registro específico de SchedulerTask por su ID
 export const OBR_SchedulerTask_CTS = async (req, res) => {
   try {
-    const registro = await SchedulerTaskModel.findByPk(req.params.id);
+    const registro = await SchedulerTaskModel.findByPk(req.params.id, {
+      include: {
+        model: SchedulerTaskUserModel,
+        as: 'taskUsers',
+        include: {
+          model: UsersModel,
+          as: 'user',
+          attributes: ['id', 'name']
+        }
+      }
+    });
     res.json(registro);
-  } catch (error) {
-    res.status(500).json({ mensajeError: error.message });
-  }
-};
-
-export const CR_SchedulerTask_CTS = async (req, res) => {
-  try {
-    const registro = await SchedulerTaskModel.create(req.body);
-    res.json({ message: 'Registro creado correctamente' });
   } catch (error) {
     res.json({ mensajeError: error.message });
   }
 };
 
+// Crear un nuevo registro en SchedulerTask
+export const CR_SchedulerTask_CTS = async (req, res) => {
+  try {
+      const { titulo, descripcion, hora, dias, user, state } = req.body;
+
+      if (!user || user.length === 0) {
+          return res.status(400).json({ mensajeError: 'El campo user_id es obligatorio y no puede ser nulo.' });
+      }
+
+      const registro = await SchedulerTaskModel.create({ titulo, descripcion, hora, dias, user_id: user[0], state });
+
+      await Promise.all(user.map(userId => SchedulerTaskUserModel.create({ schedulertask_id: registro.id, user_id: userId })));
+
+      res.json({ message: 'Registro creado correctamente', registro });
+  } catch (error) {
+      console.error('Error al crear la tarea:', error.message);
+      res.status(500).json({ mensajeError: error.message });
+  }
+};
+
+// Eliminar un registro en SchedulerTask por su ID
 export const ER_SchedulerTask_CTS = async (req, res) => {
   try {
     await SchedulerTaskModel.destroy({ where: { id: req.params.id } });
     res.json({ message: 'Registro eliminado correctamente' });
   } catch (error) {
-    res.status(500).json({ mensajeError: error.message });
+    res.json({ mensajeError: error.message });
   }
 };
 
-// Actualizar un registro en SchedulerTaskModel por su ID
+// Actualizar un registro en SchedulerTask por su ID
 export const UR_SchedulerTask_CTS = async (req, res) => {
   try {
     const { id } = req.params;
     const [numRowsUpdated] = await SchedulerTaskModel.update(req.body, {
-      where: { id }
+      where: { id },
     });
 
     if (numRowsUpdated === 1) {
       const registroActualizado = await SchedulerTaskModel.findByPk(id);
-      res.json({
-        message: 'Registro actualizado correctamente',
-        registroActualizado
-      });
+      res.json({ message: 'Registro actualizado correctamente', registroActualizado });
     } else {
       res.status(404).json({ mensajeError: 'Registro no encontrado' });
     }

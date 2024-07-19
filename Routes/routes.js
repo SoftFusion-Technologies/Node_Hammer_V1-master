@@ -362,16 +362,16 @@ router.put('/postulantes/:id', UR_Postulante_CTS);
 // ----------------------------------------------------------------
 // Define las rutas para cada método del controlador de SchedulerTaskUser
 
-router.get('/schedulertaskuser', OBRS_SchedulerTaskUser_CTS);
+router.get('/schedulertask_user', OBRS_SchedulerTaskUser_CTS);
 
 // Ruta para obtener un registro específico de SchedulerTaskUser por su ID
-router.get('/schedulertaskuser/:id', OBR_SchedulerTaskUser_CTS);
+router.get('/schedulertask_user/:id', OBR_SchedulerTaskUser_CTS);
 
 // Ruta para crear un nuevo registro en SchedulerTaskUser
-router.post('/schedulertaskuser', CR_SchedulerTaskUser_CTS);
+router.post('/schedulertask_user', CR_SchedulerTaskUser_CTS); 
 
 // Ruta para eliminar un registro en SchedulerTaskUser por su ID
-router.delete('/schedulertaskuser/:id', ER_SchedulerTaskUser_CTS);
+router.delete('/schedulertask_user/:id', ER_SchedulerTaskUser_CTS);
 
 
 // ----------------------------------------------------------------
