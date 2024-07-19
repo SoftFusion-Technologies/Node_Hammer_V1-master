@@ -1,31 +1,7 @@
-/*
-  * Programador: Benjamin Orellana
-  * Fecha Cración: 17 /03 / 2024
-  * Versión: 1.0
-  *
-  * Descripción:
-    *Este archivo (CTS_TB_SchedulerTaskUser.js) contiene controladores para manejar operaciones CRUD en dos modelos Sequelize: 
-  * Tema: Controladores - SchedulerTaskUser
-  
-  * Capa: Backend 
- 
-  * Nomenclatura: OBR_ obtenerRegistro
-  *               OBRS_obtenerRegistros(plural)
-  *               CR_ crearRegistro
-  *               ER_ eliminarRegistro
-  * Contacto: 3863531891
-*/
+import SchedulerTaskModel from '../Models/MD_TB_SchedulerTask.js';
+import SchedulerTaskUserModel from '../Models/MD_TB_SchedulerTaskUser.js';
 
-// Importa los modelos necesarios desde el archivo
-import MD_TB_SchedulerTaskUser from '../Models/MD_TB_SchedulerTaskUser.js';
-
-const SchedulerTaskUserModel = MD_TB_SchedulerTaskUser.SchedulerTaskUserModel;
-
-// ----------------------------------------------------------------
-// Controladores para operaciones CRUD en la tabla 'SchedulerTaskUser'
-// ----------------------------------------------------------------
-// Mostrar todos los registros de la tabla SchedulerTaskUser
-
+// Mostrar todos los registros de SchedulerTaskUser
 export const OBRS_SchedulerTaskUser_CTS = async (req, res) => {
   try {
     const registros = await SchedulerTaskUserModel.findAll();
@@ -35,6 +11,7 @@ export const OBRS_SchedulerTaskUser_CTS = async (req, res) => {
   }
 };
 
+// Mostrar un registro específico de SchedulerTaskUser por su ID
 export const OBR_SchedulerTaskUser_CTS = async (req, res) => {
   try {
     const registro = await SchedulerTaskUserModel.findByPk(req.params.id);
@@ -44,15 +21,17 @@ export const OBR_SchedulerTaskUser_CTS = async (req, res) => {
   }
 };
 
+// Crear un nuevo registro en SchedulerTaskUser
 export const CR_SchedulerTaskUser_CTS = async (req, res) => {
-   try {
-     const registro = await SchedulerTaskUserModel.create(req.body);
-     res.json({ message: 'Registro creado correctamente' });
-   } catch (error) {
-     res.json({ mensajeError: error.message });
-   }
+  try {
+    const registro = await SchedulerTaskUserModel.create(req.body);
+    res.json({ message: 'Registro creado correctamente' });
+  } catch (error) {
+    res.status(500).json({ mensajeError: error.message });
+  }
 };
 
+// Eliminar un registro en SchedulerTaskUser por su ID
 export const ER_SchedulerTaskUser_CTS = async (req, res) => {
   try {
     await SchedulerTaskUserModel.destroy({ where: { id: req.params.id } });

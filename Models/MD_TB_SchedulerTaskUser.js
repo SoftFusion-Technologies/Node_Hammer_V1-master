@@ -1,53 +1,46 @@
-/*
-  * Programador: Benjamin Orellana
-  * Fecha Cración: 17 /03 / 2024
-  * Versión: 1.0
-  *
-  * Descripción:
-    *Este archivo (MD_TB_SchedulerTaskUser.js) contiene la definición de modelos Sequelize para las tablas de la base de datos. 
-   
-  * Tema: Modelos - SchedulerTaskUser
-  
-  * Capa: Backend 
-*/
+import dotenv from 'dotenv';
+import db from '../DataBase/db.js';
+import { DataTypes } from 'sequelize';
+import SchedulerTaskModel from './MD_TB_SchedulerTask.js';
+import UsersModel from './MD_TB_Users.js';
 
-// Importa la configuración de la base de datos y los tipos de datos necesarios
-import dotenv from 'dotenv'; // Importa el módulo dotenv para cargar variables de entorno desde un archivo .env
-import db from '../DataBase/db.js'; // Importa la conexión a la base de datos
-import { DataTypes } from 'sequelize'; // Importa el módulo DataTypes de Sequelize para definir tipos de datos
-
-// Si no estás en producción, carga las variables de entorno desde el archivo .env
 if (process.env.NODE_ENV !== 'production') {
-  dotenv.config(); // Carga las variables de entorno desde el archivo .env
+  dotenv.config();
 }
 
-// Define el modelo para la tabla 'schedulertask_user' en la base de datos
-
-export const SchedulerTaskUserModel = db.define(
-  'schedulertask_user',
-  {
-    schedulertask_id: {
-      type: DataTypes.BIGINT.UNSIGNED,
-      allowNull: false
-    },
-    user_id: {
-      type: DataTypes.BIGINT.UNSIGNED,
-      allowNull: false
-    },
-    created_at: {
-      type: DataTypes.DATE,
-      allowNull: true // Puedes ajustar esto según tus requisitos
-    },
-    updated_at: {
-      type: DataTypes.DATE,
-      allowNull: true // Puedes ajustar esto según tus requisitos
+const SchedulerTaskUserModel = db.define('schedulertask_user', {
+  schedulertask_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+    references: {
+      model: SchedulerTaskModel,
+      key: 'id'
     }
   },
-  {
-    timestamps: false // Esto evita que Sequelize añada automáticamente los campos createdAt y updatedAt
+  user_id: {
+    type: DataTypes.BIGINT.UNSIGNED,
+    allowNull: false,
+    references: {
+      model: UsersModel,
+      key: 'id'
+    }
+  },
+  created_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  updated_at: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
-);
+}, {
+  timestamps: false
+});
 
-export default {
-  SchedulerTaskUserModel
-};
+SchedulerTaskUserModel.belongsTo(SchedulerTaskModel, { foreignKey: 'schedulertask_id', as: 'schedulertask' });
+SchedulerTaskModel.hasMany(SchedulerTaskUserModel, { foreignKey: 'schedulertask_id', as: 'taskUsers' });
+
+SchedulerTaskUserModel.belongsTo(UsersModel, { foreignKey: 'user_id', as: 'user' });
+UsersModel.hasMany(SchedulerTaskUserModel, { foreignKey: 'user_id', as: 'taskUsers' });
+
+export default SchedulerTaskUserModel;
