@@ -218,5 +218,16 @@ if (!PORT) {
 }
 
 app.listen(PORT, () => {
-  console.log(`Servidor escuchando en el puerto http://localhost:${PORT}/`);
+  console.log(`Servidor escuchando en el puerto ${PORT}`);
+});
+
+
+process.on('uncaughtException', (err) => {
+  console.error('Excepción no capturada:', err);
+  process.exit(1); // Opcional: reiniciar la aplicación
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Promesa rechazada no capturada:', promise, 'razón:', reason);
+  process.exit(1); // Opcional: reiniciar la aplicación
 });
