@@ -15,7 +15,7 @@ module.exports = {
         DB_USER: 'root',
         DB_PASSWORD: '8aKPXCd25GBR',
         DB_NAME: 'c1841398_hammer',
-        DB_PORT: 3306 // Puerto de la base de datos
+        DB_PORT: 5417 // Puerto de la base de datos
       }
     }
   ]
