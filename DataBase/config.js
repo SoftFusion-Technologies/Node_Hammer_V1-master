@@ -8,4 +8,4 @@ export const DB_PASSWORD = process.env.DB_PASSWORD || '123456'
 
 export const DB_NAME = process.env.DB_NAME || 'DB_HammerDESA_c1841398'
 
-export const DB_PORT = process.env.DB_PORT || 3306
+export const DB_PORT = process.env.DB_PORT || 3000
