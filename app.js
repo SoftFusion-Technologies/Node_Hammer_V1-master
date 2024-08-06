@@ -12,6 +12,10 @@ import dotenv from 'dotenv'
 import nodemailer from 'nodemailer';
 
 
+// CONFIGURACION PRODUCCION
+
+import { PORT } from './DataBase/config.js';
+
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
   port: 465,
@@ -57,7 +61,7 @@ if (process.env.NODE_ENV !== 'production') {
     dotenv.config()
 }
 
-const PORT = process.env.PORT || 3000;
+// const PORT = process.env.PORT || 3000;
 
 // console.log(process.env.PORT)
 
