@@ -61,6 +61,7 @@ if (process.env.NODE_ENV !== 'production') {
     dotenv.config()
 }
 
+
 // const PORT = process.env.PORT || 3000;
 
 // console.log(process.env.PORT)
@@ -70,6 +71,7 @@ app.use(cors())// aca configuramos cors para no tener errores
 app.use(express.json());
 app.use('/', GetRoutes);
 // definimos la conexion 
+
 
 
 // Para verificar si nuestra conexión funciona, lo hacemos con el método authenticate()
@@ -210,6 +212,11 @@ app.get('/admconvenios/:id_conv/integrantes/:id_integrante/integrantesfam', asyn
 //     }
 // });
 
+if (!PORT) {
+  console.error('El puerto no está definido en el archivo de configuración.');
+  process.exit(1);
+}
+
 app.listen(PORT, () => {
-    console.log(`Servidor escuchando en el puerto http://localhost:${PORT}/ o bien  http://localhost:${PORT}/postulante/ `)
-})
+  console.log(`Servidor escuchando en el puerto http://localhost:${PORT}/`);
+});
