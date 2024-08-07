@@ -18,8 +18,8 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3000,
         DB_HOST: '149.50.141.175',
-        DB_USER: 'root',
-        DB_PASSWORD: '8aKPXCd25GBR',
+        DB_USER: 'c1841398_hammer',
+        DB_PASSWORD: 'bu21guPOfu',
         DB_NAME: 'c1841398_hammer',
         DB_PORT: 5417
       }
