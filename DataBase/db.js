@@ -1,31 +1,24 @@
 import { Sequelize } from 'sequelize';
-//Sequelize es un ORM para Nodejs que te permitirá agilizar bastante tus desarrollos que incluyan bases de datos relacionales como MySQL o Postgress.
-// crear una instancia de sequelize
-
 import { DB_HOST, DB_NAME, DB_PASSWORD, DB_USER, DB_PORT } from './config.js';
 
-// para realizar la conexion de forma muy sensilla es poner los parametros dentro de la instancia
 const db = new Sequelize(DB_NAME, DB_USER, DB_PASSWORD, {
   host: DB_HOST,
   port: DB_PORT,
   dialect: 'mysql',
   define: { freezeTableName: true },
   pool: {
-    max: 15, 
+    max: 15, // Está bien para producción, ajusta según el tamaño esperado de la carga
     min: 5,
     acquire: 30000,
     idle: 10000
   },
   dialectOptions: {
-    connectTimeout: 60000,
+    connectTimeout: 60000, // Ajuste razonable para producción
     ssl: {
       require: true,
-      rejectUnauthorized: false
+      rejectUnauthorized: false // Solo si tu base de datos requiere SSL, verifica esto
     }
   }
 });
 
-// Lo primero que estamos haciendo es importar la clase Sequelize despues lo que se hace es crear una nueva instancia de esta clase
-// que recibe como parámetros en su constructor, el nombre de la base de datos, el nombre del usuario, la contraseña,
-// y un objeto de configuración donde especificamos el host de nuestra base de datos, el dialect que es donde ponemos que base de datos se esta utilizando.
 export default db;
