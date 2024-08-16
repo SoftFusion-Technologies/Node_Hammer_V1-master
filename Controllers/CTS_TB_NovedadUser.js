@@ -14,27 +14,28 @@
   *               CR_ crearRegistro
   *               ER_ eliminarRegistro
 */
+// Importa el modelo desde el archivo MD_TB_NovedadUser.js
+import NovedadUserModel from '../Models/MD_TB_NovedadUser.js';
 
-// Importa los modelos necesarios desde el archivo Modelos_Tablas.js
-import MD_TB_NovedadUser from '../Models/MD_TB_NovedadUser.js';
-
-// Asigna los modelos a variables para su uso en los controladores
-const NovedadUserModel = MD_TB_NovedadUser.NovedadUserModel;
-
-// ----------------------------------------------------------------
-// Controladores para operaciones CRUD en la tabla 'novedad_user'
-// ----------------------------------------------------------------
-// Mostrar todos los registros de la tabla NovedadesUser
-
+// Controlador para obtener todos los registros
 export const OBRS_NovedadUser_CTS = async (req, res) => {
   try {
+    // Verifica si el modelo está correctamente importado
+    if (!NovedadUserModel) {
+      throw new Error('Modelo NovedadUserModel no está definido.');
+    }
+
     const registros = await NovedadUserModel.findAll();
     res.json(registros);
   } catch (error) {
-    res.json({ mensajeError: error.message });
+    console.error('Error al obtener los registros:', error); // Imprime el error en la consola para depuración
+    res
+      .status(500)
+      .json({
+        mensajeError: `Error al obtener los registros: ${error.message}`
+      });
   }
 };
-
 // Mostrar un registro específico de NovedadUserModel por su ID
 export const OBR_NovedadUser_CTS = async (req, res) => {
   try {
@@ -62,5 +63,38 @@ export const ER_NovedadUser_CTS = async (req, res) => {
     res.json({ message: 'Registro eliminado correctamente' });
   } catch (error) {
     res.json({ mensajeError: error.message });
+  }
+};
+
+// Controlador para marcar una novedad como leída por un usuario específico
+export const UPDATE_NovedadUser_CTS = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Verifica que el parámetro 'id' esté presente
+    if (!id) {
+      return res.status(400).json({ mensajeError: 'Falta el parámetro ID.' });
+    }
+
+    // Encuentra el registro en la base de datos
+    const novedadUser = await NovedadUserModel.findByPk(id);
+
+    // Verifica si el registro existe
+    if (!novedadUser) {
+      return res.status(404).json({ mensajeError: 'Registro no encontrado.' });
+    }
+
+    // Cambia el estado 'leido'
+    novedadUser.leido = novedadUser.leido === 1 ? 0 : 1;
+
+    // Guarda los cambios
+    await novedadUser.save();
+
+    res.json(novedadUser);
+  } catch (error) {
+    console.error('Error al actualizar el estado:', error);
+    res.status(500).json({
+      mensajeError: `Error al actualizar el estado: ${error.message}`
+    });
   }
 };

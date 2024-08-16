@@ -50,7 +50,7 @@ import {
   OBRS_Novedades_CTS,
   CR_Novedades_CTS,
   ER_Novedades_CTS,
-  UR_Novedades_CTS
+  UR_Novedades_CTS,
   // Importa los controladores necesarios para la tabla Novedades - tb_5
 } from '../Controllers/CTS_TB_Novedades.js';
 
@@ -58,7 +58,8 @@ import {
   OBR_NovedadUser_CTS,
   OBRS_NovedadUser_CTS,
   CR_NovedadUser_CTS,
-  ER_NovedadUser_CTS
+  ER_NovedadUser_CTS,
+  UPDATE_NovedadUser_CTS
   // Importa los controladores necesarios para la tabla NovedadUser - tb_6
 } from '../Controllers/CTS_TB_NovedadUser.js';
 
@@ -178,6 +179,7 @@ import {
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_FamIntegrante.js';
 
+
 // NUEVA PARTE DE ADMINISTRACION DE PRECIOS PARA CONVENIOS
 
 
@@ -191,6 +193,8 @@ const router = express.Router();
 // Ruta para obtener todos los registros de Trabajo_CTS - tb_1
 // ----------------------------------------------------------------
 // Define las rutas para cada método del controlador de Trabajo_CTS
+
+
 
 router.get('/jobs', OBRS_Trabajo_CTS);
 
@@ -274,7 +278,6 @@ router.delete('/novedades/:id', ER_Novedades_CTS);
 // Ruta para actualizar un registro en Novedades por su ID
 router.put('/novedades/:id', UR_Novedades_CTS);
 
-
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de NovedadUser tb_6
 // ----------------------------------------------------------------
@@ -290,6 +293,8 @@ router.post('/novedad_user', CR_NovedadUser_CTS);
 
 // Ruta para eliminar un registro en Novedad por su ID
 router.delete('/novedad_user/:id', ER_NovedadUser_CTS);
+// Ruta para marcar una novedad como leída
+router.put('/novedad_user/:id', UPDATE_NovedadUser_CTS);
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de NovedadUserDestino tb_7
