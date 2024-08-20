@@ -62,9 +62,18 @@ const AdmConveniosModel = db.define(
       type: DataTypes.TINYINT,
       allowNull: false,
       defaultValue: 0 // Puedes establecer un valor predeterminado si es necesario
+    },
+    // nuevos campos sede y descripción usuario
+    sede: {
+      type: DataTypes.STRING,
+      allowNull: false
+    },
+    desc_usu: {
+      type: DataTypes.STRING,
+      allowNull: true
     }
   },
-  
+
   {
     timestamps: false // Esto evita que Sequelize añada automáticamente los campos createdAt y updatedAt
   }
