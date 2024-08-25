@@ -9,58 +9,24 @@ import cors from 'cors'
 import db from "./DataBase/db.js";
 import GetRoutes from './Routes/routes.js';
 import dotenv from 'dotenv'
-import nodemailer from 'nodemailer';
 
+import { Op } from 'sequelize';
+import NovedadesModel from './Models/MD_TB_Novedades.js';
+import cron from 'node-cron';
 
-// CONFIGURACION PRODUCCION
-
+import multer from 'multer';
+import path, { join } from 'path';
+import fs from 'fs';
+import mysql from 'mysql2/promise'; // Usar mysql2 para las promesas
+import { dirname , extname} from 'path';
+import { fileURLToPath } from 'url'
 import { PORT } from './DataBase/config.js';
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: 'goosta19802@gmail.com',
-    pass: 'ynqekrvulwsrertp'
-  }
-});
-
-// Contenido del correo electrónico
-let mail = {
-  from: 'goosta19802@gmail.com',
-  to: 'softfusionsa@gmail.com',
-  subject: 'Gracias por querer ser parte del equipo de HAMMERX',
-  html: `
-      <img src="cid:imagenlogo" alt="HAMMERX Logo" style="max-width: 100%; height: auto;">
-      <h3 font-family: 'Big Noodle Titling', sans-serif;">¡Gracias por tu interés en ser parte del equipo de HAMMERX!</h3>
-      <p style="font-size: 16px; font-family: 'Big Noodle Titling', sans-serif;">Hemos recibido tu información y la revisaremos cuidadosamente. Nos pondremos en contacto contigo para discutir los próximos pasos en breve.</p>
-      <p style="font-size: 16px; font-family: 'Big Noodle Titling', sans-serif;">Si tienes alguna pregunta o necesitas más información, no dudes en ponerte en contacto con nosotros a través de este correo electrónico.</p>
-      <p style="font-size: 16px; font-family: 'Big Noodle Titling', sans-serif;">Saludos,</p>
-      <p style="font-size: 16px; font-family: 'Big Noodle Titling', sans-serif;">Equipo de HAMMERX</p>
-    `,
-  attachments: [
-    {
-      filename: 'logohammerorange.jpg',
-      path: './Images/logohammerorange.jpg',
-      cid: 'imagenlogo' // ID de la imagen para incrustarla en el HTML
-    }
-  ]
-};
-
-// transporter.sendMail(mail, (error, info) => {
-//      if (error) {
-//          console.log("Error sending email", error)
-//      }
-//      else {
-//          console.log('Email send');
-//      }
-//  })
+// CONFIGURACION PRODUCCION
 
 if (process.env.NODE_ENV !== 'production') {
     dotenv.config()
 }
-
 
 // const PORT = process.env.PORT || 3000;
 
@@ -199,37 +165,263 @@ app.get('/admconvenios/:id_conv/integrantes/:id_integrante/integrantesfam', asyn
   }
 });
 
-// // Ruta para obtener integrantes y sus familiares
-// app.get('/admconvenios/:id_conv/integrantes/:id_integrante/integrantesfam', async (req, res) => {
-//   const { id_integrante } = req.params;
+// Función para eliminar novedades vencidas hace más de un mes
+async function deleteOldNovedades() {
+  try {
+    // Calcula la fecha de hace un mes desde hoy
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
 
-//   try {
-//   const results = await db.query(
-//     'SELECT * FROM fam_integrante i WHERE i.id_integrante = :id_integrante',
-//     {
-//       replacements: { id_integrante },
-//       type: db.QueryTypes.SELECT
-//     }
-//   );
+    // Elimina los registros con vencimiento anterior o igual a esa fecha
+    const result = await NovedadesModel.destroy({
+      where: {
+        vencimiento: {
+          [Op.lte]: oneMonthAgo
+        }
+      }
+    });
 
-//   res.json(results);
-// } catch (err) {
-//   console.log('Error executing query', err);
-//   res.status(500).json({ error: 'Error ejecutando la consulta' });
-// }
+    console.log(`${result} novedades eliminadas.`);  // Muestra cuántos registros fueron eliminados
+  } catch (error) {
+    console.error('Error eliminando novedades:', error);
+  }
+}
+
+deleteOldNovedades();
+
+// Programar la tarea para que se ejecute cada día a medianoche
+cron.schedule('0 0 * * *', () => {
+  console.log('Cron job iniciado - eliminando novedades vencidas...');
+  deleteOldNovedades();
+});
+
+const pool = mysql.createPool({
+   host: 'localhost', // Configurar según tu base de datos
+   user: 'root', // Configurar según tu base de datos
+   password: '123456', // Configurar según tu base de datos
+   database: 'DB_HammerDESA_c1841398'
+ });
+
+
+// const pool = mysql.createPool({
+//   host: '149.50.141.175', // Configurar según tu base de datos
+//   user: 'c1841398_hammer', // Configurar según tu base de datos
+//   password: 'bu21guPOfu', // Configurar según tu base de datos
+//   database: 'c1841398_hammer'
 // });
 
+const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
+console.log('Current Directory:', CURRENT_DIR);
 
-// // Ruta para obtener todos los registros de las tablas
-// app.get('/datos', async (req, res) => {
-//     try {
-//         const postulantes = await obtenerRegistrosPostulante();
-//         const testClasses = await obtenerRegistrosTestClass();
-//         res.json({ postulantes, testClasses });
-//     } catch (error) {
-//         res.status(500).json({ error: 'Error al obtener los registros de las tablas' });
-//     }
-// });
+const multerUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const uploadPath = join(CURRENT_DIR, 'uploads'); // Esto debe ser la carpeta en la raíz del proyecto
+      cb(null, uploadPath); // Asegúrate de que esta ruta sea la correcta
+    },
+    filename: (req, file, cb) => {
+      const fileExtension = extname(file.originalname);
+      const fileName = file.originalname.split(fileExtension)[0];
+      cb(null, `${fileName}-${Date.now()}${fileExtension}`);
+    }
+  }),
+  fileFilter: (req, file, cb) => {
+    const MIMETYPES = ['image/jpeg', 'image/png', 'image/jpg'];
+    if (MIMETYPES.includes(file.mimetype)) cb(null, true);
+    else cb(new Error(`Solo ${MIMETYPES.join(', ')} están permitidos`));
+  },
+  limits: {
+    fieldSize: 30000000
+  }
+});
+
+app.post(
+  '/upload/:convenio_id',
+  multerUpload.single('file'),
+  async (req, res) => {
+    const { convenio_id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'Archivo no proporcionado' });
+    }
+
+    const imagePath = `uploads/${req.file.filename}`;
+
+    try {
+      // Guardar la ruta de la imagen en la base de datos
+      await pool.query(
+        'INSERT INTO adm_convenio_images (convenio_id, image_path) VALUES (?, ?)',
+        [convenio_id, imagePath]
+      );
+      res
+        .status(200)
+        .json({ message: 'Imagen subida y guardada correctamente.' });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Error al guardar la imagen.' });
+    }
+  }
+);
+
+app.get('/download/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+   const [rows] = await pool.query(
+     'SELECT image_path FROM adm_convenio_images WHERE id = ?',
+     [id]
+   );
+
+   if (rows.length === 0) {
+     return res.status(404).json({ message: 'Imagen no encontrada.' });
+   }
+
+   console.log('Ruta de la imagen desde la BD:', rows[0].image_path);
+
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Imagen no encontrada.' });
+    }
+
+    // Construir la ruta relativa a la carpeta "uploads"
+  const imagePath = join(
+    CURRENT_DIR,
+    'uploads',
+    rows[0].image_path.split('/').pop()
+  );
+  console.log('Ruta completa de la imagen:', imagePath);
+
+  // Verifica si el archivo existe
+  if (!fs.existsSync(imagePath)) {
+    console.log('El archivo no existe en:', imagePath);
+    return res
+      .status(404)
+      .json({ message: 'Archivo no encontrado en el servidor.' });
+  }
+
+
+      // Enviar la imagen al cliente
+      res.download(imagePath);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Error al descargar la imagen.' });
+    }
+});
+
+app.get('/images/:convenio_id', async (req, res) => {
+  const { convenio_id } = req.params;
+
+  try {
+    // Obtener las imágenes relacionadas al convenio
+    const [rows] = await pool.query(
+      'SELECT image_path FROM adm_convenio_images WHERE convenio_id = ?',
+      [convenio_id]
+    );
+
+    // Enviar las rutas de las imágenes al frontend
+    const images = rows.map((row) => row.image_path.split('/').pop()); // Obtener solo el nombre del archivo
+    res.json({ images });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al obtener las imágenes.' });
+  }
+});
+
+
+//Para administrar las facturas emitidas por el comercio
+
+app.post(
+  '/uploadfac/:convenio_id',
+  multerUpload.single('file'),
+  async (req, res) => {
+    const { convenio_id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'Archivo no proporcionado' });
+    }
+
+    const imagePath = `uploads/${req.file.filename}`;
+
+    try {
+      // Guardar la ruta de la imagen en la base de datos
+      await pool.query(
+        'INSERT INTO adm_convenio_fac (convenio_id, image_path) VALUES (?, ?)',
+        [convenio_id, imagePath]
+      );
+      res
+        .status(200)
+        .json({ message: 'Imagen subida y guardada correctamente.' });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Error al guardar la imagen.' });
+    }
+  }
+);
+
+app.get('/downloadfac/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [rows] = await pool.query(
+      'SELECT image_path FROM adm_convenio_fac WHERE id = ?',
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Imagen no encontrada.' });
+    }
+
+    console.log('Ruta de la imagen desde la BD:', rows[0].image_path);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Imagen no encontrada.' });
+    }
+
+    // Construir la ruta relativa a la carpeta "uploads"
+    const imagePath = join(
+      CURRENT_DIR,
+      'uploads',
+      rows[0].image_path.split('/').pop()
+    );
+    console.log('Ruta completa de la imagen:', imagePath);
+
+    // Verifica si el archivo existe
+    if (!fs.existsSync(imagePath)) {
+      console.log('El archivo no existe en:', imagePath);
+      return res
+        .status(404)
+        .json({ message: 'Archivo no encontrado en el servidor.' });
+    }
+
+    // Enviar la imagen al cliente
+    res.download(imagePath);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al descargar la imagen.' });
+  }
+});
+
+app.get('/imagesfac/:convenio_id', async (req, res) => {
+  const { convenio_id } = req.params;
+
+  try {
+    // Obtener las imágenes relacionadas al convenio
+    const [rows] = await pool.query(
+      'SELECT image_path FROM adm_convenio_fac WHERE convenio_id = ?',
+      [convenio_id]
+    );
+
+    // Enviar las rutas de las imágenes al frontend
+    const images = rows.map((row) => row.image_path.split('/').pop()); // Obtener solo el nombre del archivo
+    res.json({ images });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al obtener las imágenes.' });
+  }
+});
+
+// app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
+app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 
 if (!PORT) {
   console.error('El puerto no está definido en el archivo de configuración.');
@@ -239,7 +431,6 @@ if (!PORT) {
 app.listen(PORT, () => {
   console.log(`Servidor escuchando en el puerto ${PORT}`);
 });
-
 
 process.on('uncaughtException', (err) => {
   console.error('Excepción no capturada:', err);

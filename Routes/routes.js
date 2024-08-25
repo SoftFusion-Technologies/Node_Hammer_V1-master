@@ -151,6 +151,25 @@ import {
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_AdmConve.js';
 
+import {
+  OBR_AdmConveniosImages_CTS,
+  OBRS_AdmConveniosImages_CTS,
+  CR_AdmConveniosImages_CTS,
+  ER_AdmConveniosImages_CTS,
+  UR_AdmConveniosImages_CTS
+  // Importa los controladores necesarios para la tabla password_reset - tb_15
+} from '../Controllers/CTS_TB_AdmImages.js';
+
+import {
+  OBR_AdmConveniosFac_CTS,
+  OBRS_AdmConveniosFac_CTS,
+  CR_AdmConveniosFac_CTS,
+  ER_AdmConveniosFac_CTS,
+  UR_AdmConveniosFac_CTS
+  // Importa los controladores necesarios para la tabla password_reset - tb_15
+} from '../Controllers/CTS_TB_AdmFac.js';
+
+
 
 import {
   OBR_IntegrantesConve_CTS,
@@ -161,14 +180,6 @@ import {
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_IntegrantesConve.js';
 
-import {
-  OBR_ImagenConve_CTS,
-  OBRS_ImagenConve_CTS,
-  CR_ImagenConve_CTS,
-  ER_ImagenConve_CTS,
-  cargarImagen
-  // Importa los controladores necesarios para la tabla password_reset - tb_15
-} from '../Controllers/CTS_TB_ImagesConve.js';
 
 import {
   OBR_FamIntegrante_CTS,
@@ -470,6 +481,44 @@ router.delete('/admconvenios/:id', ER_AdmConve_CTS);
 
 router.put('/admconvenios/:id', UR_AdmConve_CTS);
 
+
+// ----------------------------------------------------------------
+// Ruta para obtener todos los registros de Imagenes
+// ----------------------------------------------------------------
+// Define las rutas para cada método del controlador de imagenes
+
+router.get('/imagesget', OBRS_AdmConveniosImages_CTS);
+
+// Obtener un registro específico de AdmConveniosImages por su ID
+router.get('/imagesget/:id', OBR_AdmConveniosImages_CTS);
+
+// Crear un nuevo registro en AdmConveniosImages
+router.post('/imagesget', CR_AdmConveniosImages_CTS);
+
+// Eliminar un registro en AdmConveniosImages por su ID
+router.delete('/imagesget/:id', ER_AdmConveniosImages_CTS);
+
+router.put('/imagesget/:id', UR_AdmConveniosImages_CTS);
+
+
+// ----------------------------------------------------------------
+// Ruta para obtener todos los registros de Facturas
+// ----------------------------------------------------------------
+// Define las rutas para cada método del controlador de Facturas
+
+router.get('/facget', OBRS_AdmConveniosFac_CTS);
+
+// Obtener un registro específico de AdmConveniosFac por su ID
+router.get('/facget/:id', OBR_AdmConveniosFac_CTS);
+
+// Crear un nuevo registro en AdmConveniosFac
+router.post('/facget', CR_AdmConveniosFac_CTS);
+
+// Eliminar un registro en AdmConveniosFac por su ID
+router.delete('/facget/:id', ER_AdmConveniosFac_CTS);
+
+router.put('/facget/:id', UR_AdmConveniosFac_CTS);
+
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de IntegrantesConve tb_15
 // ----------------------------------------------------------------
@@ -488,20 +537,6 @@ router.delete('/integrantes/:id', ER_IntegrantesConve_CTS);
 
 // Actualizar un registro en IntegrantesConve por su ID
 router.put('/integrantes/:id', UR_IntegrantesConve_CTS);
-
-
-router.get('/imagenes', OBRS_ImagenConve_CTS);
-
-// Obtener un registro específico de ImagesConve por su ID
-router.get('/imagenes/:id', OBR_ImagenConve_CTS);
-
-// Crear un nuevo registro en ImagesConve
-router.post('/imagenes', CR_ImagenConve_CTS);
-
-// Eliminar un registro en ImagesConve por su ID
-router.delete('/imagenes/:id', ER_ImagenConve_CTS);
-
-router.post('/subir-imagen', cargarImagen);
 
 
 router.get('/integrantesfam', OBRS_FamIntegrante_CTS);
