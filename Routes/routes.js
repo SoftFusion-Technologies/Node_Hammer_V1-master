@@ -190,6 +190,8 @@ import {
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_FamIntegrante.js';
 
+import importIntegrantes from '../Controllers/importIntegrantes.js';
+
 
 // NUEVA PARTE DE ADMINISTRACION DE PRECIOS PARA CONVENIOS
 
@@ -530,7 +532,7 @@ router.get('/integrantes', OBRS_IntegrantesConve_CTS);
 router.get('/integrantes/:id', OBR_IntegrantesConve_CTS);
 
 // Crear un nuevo registro en IntegrantesConve
- router.post('/integrantes', CR_IntegrantesConve_CTS);
+router.post('/integrantes', CR_IntegrantesConve_CTS);
 
 // Eliminar un registro en IntegrantesConve por su ID
 router.delete('/integrantes/:id', ER_IntegrantesConve_CTS);
@@ -558,6 +560,8 @@ router.put('/integrantesfam/:id', UR_FamIntegrante_CTS);
 // ----------------------------------------------------------------
 // Define las rutas para cada método del controlador de AdmPrecio
 
+
+router.use('/integrantesImport', importIntegrantes);
 
 
 // Exporta el enrutador
