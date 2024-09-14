@@ -169,8 +169,6 @@ import {
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_AdmFac.js';
 
-
-
 import {
   OBR_IntegrantesConve_CTS,
   OBRS_IntegrantesConve_CTS,
@@ -192,9 +190,19 @@ import {
 
 import importIntegrantes from '../Controllers/importIntegrantes.js';
 
-
 // NUEVA PARTE DE ADMINISTRACION DE PRECIOS PARA CONVENIOS
 
+// R5-SUBIR ARCHIVOS A NOVEDADES - 16-09-2024 - Benjamin Orellana - INICIO
+import {
+  OBR_NovedadArchivos_CTS,
+  OBRS_NovedadArchivos_CTS,
+  CR_NovedadArchivos_CTS,
+  ER_NovedadArchivos_CTS,
+  UR_NovedadArchivos_CTS,
+  // Importa los controladores necesarios para la tabla password_reset - tb_15
+} from '../Controllers/CTS_TB_NovedadesArchivos.js';
+
+// R5-SUBIR ARCHIVOS A NOVEDADES - 16-09-2024 - Benjamin Orellana - FINAL
 
 
 // Crea un enrutador de Express
@@ -540,7 +548,6 @@ router.delete('/integrantes/:id', ER_IntegrantesConve_CTS);
 // Actualizar un registro en IntegrantesConve por su ID
 router.put('/integrantes/:id', UR_IntegrantesConve_CTS);
 
-
 router.get('/integrantesfam', OBRS_FamIntegrante_CTS);
 
 // Obtener un registro específico de FamIntegrante por su ID
@@ -563,6 +570,25 @@ router.put('/integrantesfam/:id', UR_FamIntegrante_CTS);
 
 router.use('/integrantesImport', importIntegrantes);
 
+
+// R5-SUBIR ARCHIVOS A NOVEDADES - 16-09-2024 - Benjamin Orellana - INICIO
+
+router.get('/novedadesarch', OBRS_NovedadArchivos_CTS);
+
+// Obtener un registro específico de NovedadArchivos por su ID
+// router.get('/novedadesarch/:id', OBR_NovedadArchivos_CTS);
+
+// Crear un nuevo registro en NovedadArchivos
+router.post('/novedadesarch', CR_NovedadArchivos_CTS);
+
+// Eliminar un registro en NovedadArchivos por su ID
+router.delete('/novedadesarch/:id', ER_NovedadArchivos_CTS);
+
+// Actualizar un registro en NovedadArchivos por su ID
+router.put('/novedadesarch/:id', UR_NovedadArchivos_CTS);
+
+
+// R5-SUBIR ARCHIVOS A NOVEDADES - 16-09-2024 - Benjamin Orellana - FINAL
 
 // Exporta el enrutador
 export default router;

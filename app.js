@@ -226,87 +226,97 @@ const multerUpload = multer({
     }
   }),
   fileFilter: (req, file, cb) => {
-    const MIMETYPES = ['image/jpeg', 'image/png', 'image/jpg'];
+    // Permitir diferentes tipos de archivos
+      const MIMETYPES = [
+        'image/jpeg',
+        'image/png',
+        'image/jpg',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // Para .docx
+        'application/vnd.oasis.opendocument.text', // Para .odt
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' // Añadido para .xlsx
+      ];
     if (MIMETYPES.includes(file.mimetype)) cb(null, true);
-    else cb(new Error(`Solo ${MIMETYPES.join(', ')} están permitidos`));
+    else cb(new Error(`Solo se permiten ${MIMETYPES.join(', ')}.`));
   },
   limits: {
-    fieldSize: 30000000
+    fileSize: 30000000 // Tamaño máximo del archivo (30 MB)
   }
 });
 
-app.post(
-  '/upload/:convenio_id',
-  multerUpload.single('file'),
-  async (req, res) => {
-    const { convenio_id } = req.params;
+  app.post(
+    '/upload/:convenio_id',
+    multerUpload.single('file'),
+    async (req, res) => {
+      const { convenio_id } = req.params;
 
-    if (!req.file) {
-      return res.status(400).json({ message: 'Archivo no proporcionado' });
+      if (!req.file) {
+        return res.status(400).json({ message: 'Archivo no proporcionado' });
+      }
+
+      const imagePath = `uploads/${req.file.filename}`;
+
+      try {
+        // Guardar la ruta de la imagen en la base de datos
+        await pool.query(
+          'INSERT INTO adm_convenio_images (convenio_id, image_path) VALUES (?, ?)',
+          [convenio_id, imagePath]
+        );
+        res
+          .status(200)
+          .json({ message: 'Imagen subida y guardada correctamente.' });
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error al guardar la imagen.' });
+      }
     }
+  );
 
-    const imagePath = `uploads/${req.file.filename}`;
+  app.get('/download/:id', async (req, res) => {
+    const { id } = req.params;
 
     try {
-      // Guardar la ruta de la imagen en la base de datos
-      await pool.query(
-        'INSERT INTO adm_convenio_images (convenio_id, image_path) VALUES (?, ?)',
-        [convenio_id, imagePath]
-      );
-      res
-        .status(200)
-        .json({ message: 'Imagen subida y guardada correctamente.' });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: 'Error al guardar la imagen.' });
-    }
-  }
-);
-
-app.get('/download/:id', async (req, res) => {
-  const { id } = req.params;
-
-  try {
-   const [rows] = await pool.query(
-     'SELECT image_path FROM adm_convenio_images WHERE id = ?',
-     [id]
-   );
-
-   if (rows.length === 0) {
-     return res.status(404).json({ message: 'Imagen no encontrada.' });
-   }
-
-   console.log('Ruta de la imagen desde la BD:', rows[0].image_path);
-
+    const [rows] = await pool.query(
+      'SELECT image_path FROM adm_convenio_images WHERE id = ?',
+      [id]
+    );
 
     if (rows.length === 0) {
       return res.status(404).json({ message: 'Imagen no encontrada.' });
     }
 
-    // Construir la ruta relativa a la carpeta "uploads"
-  const imagePath = join(
-    CURRENT_DIR,
-    'uploads',
-    rows[0].image_path.split('/').pop()
-  );
-  console.log('Ruta completa de la imagen:', imagePath);
-
-  // Verifica si el archivo existe
-  if (!fs.existsSync(imagePath)) {
-    console.log('El archivo no existe en:', imagePath);
-    return res
-      .status(404)
-      .json({ message: 'Archivo no encontrado en el servidor.' });
-  }
+    console.log('Ruta de la imagen desde la BD:', rows[0].image_path);
 
 
-      // Enviar la imagen al cliente
-      res.download(imagePath);
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: 'Error al descargar la imagen.' });
+      if (rows.length === 0) {
+        return res.status(404).json({ message: 'Imagen no encontrada.' });
+      }
+
+      // Construir la ruta relativa a la carpeta "uploads"
+    const imagePath = join(
+      CURRENT_DIR,
+      'uploads',
+      rows[0].image_path.split('/').pop()
+    );
+    console.log('Ruta completa de la imagen:', imagePath);
+
+    // Verifica si el archivo existe
+    if (!fs.existsSync(imagePath)) {
+      console.log('El archivo no existe en:', imagePath);
+      return res
+        .status(404)
+        .json({ message: 'Archivo no encontrado en el servidor.' });
     }
-});
+
+
+        // Enviar la imagen al cliente
+        res.download(imagePath);
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error al descargar la imagen.' });
+      }
+  });
 
 app.get('/images/:convenio_id', async (req, res) => {
   const { convenio_id } = req.params;
@@ -419,6 +429,103 @@ app.get('/imagesfac/:convenio_id', async (req, res) => {
     res.status(500).json({ message: 'Error al obtener las imágenes.' });
   }
 });
+
+// R5-SUBIR ARCHIVOS A NOVEDADES - 16-09-2024 - Benjamin Orellana - INICIO
+app.post(
+  '/upload/novedad/:novedad_id',
+  multerUpload.single('file'),
+  async (req, res) => {
+    const { novedad_id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'Archivo no proporcionado' });
+    }
+
+    const filePath = `uploads/${req.file.filename}`;
+
+    try {
+      // Guardar la ruta del archivo en la base de datos
+      await pool.query(
+        'INSERT INTO novedad_archivos (novedad_id, nombre_archivo, ruta_archivo) VALUES (?, ?, ?)',
+        [novedad_id, req.file.originalname, filePath]
+      );
+      res
+        .status(200)
+        .json({ message: 'Archivo subido y guardado correctamente.' });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Error al guardar el archivo.' });
+    }
+  }
+);
+app.get('/download/novedad/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [rows] = await pool.query(
+      'SELECT ruta_archivo FROM novedad_archivos WHERE id = ?',
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Archivo no encontrado.' });
+    }
+
+    const filePath = join(CURRENT_DIR, rows[0].ruta_archivo);
+    console.log('Ruta completa del archivo:', filePath);
+
+    // Verifica la existencia del archivo
+    try {
+      await fs.promises.access(filePath);
+    } catch {
+      return res
+        .status(404)
+        .json({ message: 'Archivo no encontrado en el servidor.' });
+    }
+
+    // Configura el tipo de contenido
+    res.setHeader('Content-Type', 'application/octet-stream');
+
+    // Envía el archivo
+    res.download(filePath, (err) => {
+      if (err) {
+        console.error('Error al descargar el archivo:', err);
+        res.status(500).json({ message: 'Error al descargar el archivo.' });
+      }
+    });
+  } catch (error) {
+    console.error('Error en el endpoint de descarga:', error);
+    res.status(500).json({ message: 'Error al descargar el archivo.' });
+  }
+});
+
+// Ejemplo usando Express.js
+app.get('/novedadesarch/:novedadId', async (req, res) => {
+  const novedadId = parseInt(req.params.novedadId);
+
+  try {
+    console.log('Buscando archivos con novedad_id:', novedadId);
+    const [rows] = await pool.query(
+      'SELECT * FROM novedad_archivos WHERE novedad_id = ?',
+      [novedadId]
+    );
+
+    if (rows.length === 0) {
+      console.log('No se encontraron archivos para esta novedad.');
+      return res
+        .status(404)
+        .json({ message: 'No se encontraron archivos para esta novedad.' });
+    }
+    res.json(rows);
+  } catch (error) {
+    console.error('Error en la consulta:', error); // Añadir detalles del error
+    res.status(500).json({ message: 'Error al obtener los archivos.' });
+  }
+});
+
+
+// R5-SUBIR ARCHIVOS A NOVEDADES - 16-09-2024 - Benjamin Orellana - FINAL
+
 
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
