@@ -87,3 +87,36 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
     res.status(500).json({ mensajeError: error.message });
   }
 };
+
+// R6-AutorizarIntegrantes - Benjamin Orellana 15-09-24 - Inicio
+// Actualizar el estado de autorización de un integrante
+export const Autorizar_Integrante_CTS = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { estado_autorizacion } = req.body;
+
+    // Validar que el estado de autorización sea correcto
+    const validStates = ['sin_autorizacion', 'pendiente', 'autorizado'];
+    if (!validStates.includes(estado_autorizacion)) {
+      return res.status(400).json({ mensajeError: 'Estado de autorización no válido' });
+    }
+
+    const [numRowsUpdated] = await IntegrantesConveModel.update(
+      { estado_autorizacion },
+      { where: { id } }
+    );
+
+    if (numRowsUpdated === 1) {
+      const registroActualizado = await IntegrantesConveModel.findByPk(id);
+      res.json({
+        message: 'Estado de autorización actualizado correctamente',
+        registroActualizado
+      });
+    } else {
+      res.status(404).json({ mensajeError: 'Registro no encontrado' });
+    }
+  } catch (error) {
+    res.status(500).json({ mensajeError: error.message });
+  }
+};
+// R6-AutorizarIntegrantes - Benjamin Orellana 15-09-24 - Final

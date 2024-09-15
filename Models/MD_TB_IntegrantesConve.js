@@ -65,6 +65,17 @@ const IntegrantesConveModel = db.define(
     preciofinal: {
       type: DataTypes.STRING,
       allowNull: true
+    },
+    userName: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    fechaCreacion: {
+      type: DataTypes.DATE
+    },
+    estado_autorizacion: {
+      type: DataTypes.ENUM('sin_autorizacion', 'pendiente', 'autorizado'),
+      defaultValue: 'sin_autorizacion'
     }
   },
   {

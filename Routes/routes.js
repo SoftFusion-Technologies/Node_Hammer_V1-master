@@ -174,7 +174,8 @@ import {
   OBRS_IntegrantesConve_CTS,
   CR_IntegrantesConve_CTS,
   ER_IntegrantesConve_CTS,
-  UR_IntegrantesConve_CTS
+  UR_IntegrantesConve_CTS,
+  Autorizar_Integrante_CTS
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_IntegrantesConve.js';
 
@@ -547,6 +548,11 @@ router.delete('/integrantes/:id', ER_IntegrantesConve_CTS);
 
 // Actualizar un registro en IntegrantesConve por su ID
 router.put('/integrantes/:id', UR_IntegrantesConve_CTS);
+
+//R6 - Autorizar Integrantes - BO- 15-09-24 - inicio
+// Ruta para autorizar un integrante
+router.put('/integrantes/:id/autorizar', Autorizar_Integrante_CTS);
+//R6 - Autorizar Integrantes - BO- 15-09-24 - final
 
 router.get('/integrantesfam', OBRS_FamIntegrante_CTS);
 
