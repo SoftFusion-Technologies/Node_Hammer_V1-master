@@ -205,6 +205,9 @@ import {
 
 // R5-SUBIR ARCHIVOS A NOVEDADES - 16-09-2024 - Benjamin Orellana - FINAL
 
+// R6- Agregar mas fechas a novedades  18-09-2024 - Benjamin Orellana - INICIO
+
+// R6- Agregar mas fechas a novedades  18-09-2024 - Benjamin Orellana - FINAL
 
 // Crea un enrutador de Express
 const router = express.Router();
@@ -592,9 +595,21 @@ router.delete('/novedadesarch/:id', ER_NovedadArchivos_CTS);
 
 // Actualizar un registro en NovedadArchivos por su ID
 router.put('/novedadesarch/:id', UR_NovedadArchivos_CTS);
-
-
 // R5-SUBIR ARCHIVOS A NOVEDADES - 16-09-2024 - Benjamin Orellana - FINAL
+
+// R6- Agregar mas fechas a novedades  18-09-2024 - Benjamin Orellana - INICIO
+
+// router.get('/novedades-vencimientos', OBRS_NovedadesVencimientos_CTS);
+// Ruta para obtener un vencimiento por ID
+// router.get('/novedades-vencimientos/:id', OBR_NovedadesVencimientos_CTS);
+
+// Ruta para crear un nuevo vencimiento
+
+// Ruta para actualizar un vencimiento por ID
+
+// Ruta para eliminar un vencimiento por ID
+// R6- Agregar mas fechas a novedades  18-09-2024 - Benjamin Orellana - FINAL
+
 
 // Exporta el enrutador
 export default router;
