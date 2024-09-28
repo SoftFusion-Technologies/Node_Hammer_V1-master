@@ -530,6 +530,117 @@ app.get('/novedadesarch/:novedadId', async (req, res) => {
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 
+
+// Endpoint para obtener vencimientos relacionados con una novedad específica
+app.get('/novedades-vencimientos/:novedadId', async (req, res) => {
+  const novedadId = parseInt(req.params.novedadId);
+
+  // Verificar si novedadId es un número válido
+  if (isNaN(novedadId)) {
+    return res.status(400).json({ message: 'ID de novedad inválido.' });
+  }
+
+  try {
+    console.log('Buscando vencimientos con novedad_id:', novedadId);
+
+    // Realizar la consulta a la base de datos
+    const [rows] = await pool.query(
+      'SELECT * FROM novedades_vencimientos WHERE novedad_id = ?',
+      [novedadId]
+    );
+
+    // Verificar si se encontraron vencimientos
+    if (rows.length === 0) {
+      console.log('No se encontraron vencimientos para esta novedad.');
+      return res.status(404).json({ message: 'No se encontraron vencimientos para esta novedad.' });
+    }
+
+    // Enviar los resultados en formato JSON
+    res.json(rows);
+  } catch (error) {
+    console.error('Error en la consulta:', error); // Añadir detalles del error
+    res.status(500).json({ message: 'Error al obtener los vencimientos.' });
+  }
+});
+
+// Endpoint para crear un nuevo vencimiento
+app.post('/novedades-vencimientos', async (req, res) => {
+  const { novedad_id, vencimiento, sede, titulo, mensaje, user, estado } = req.body;
+
+  // Validar que se envían los campos requeridos
+  if (!novedad_id || !vencimiento || !sede) {
+    return res.status(400).json({
+      message: 'Faltan datos requeridos: novedad_id, vencimiento y sede.'
+    });
+  }
+
+  try {
+    // Verificar si ya existe un vencimiento con el mismo novedad_id, vencimiento y sede
+    const [existingVencimiento] = await pool.query(
+      `SELECT * FROM novedades_vencimientos 
+       WHERE novedad_id = ? AND vencimiento = ? AND sede = ?`,
+      [novedad_id, vencimiento, sede]
+    );
+
+    // Si ya existe, retornamos un error o simplemente no agregamos el duplicado
+    if (existingVencimiento.length > 0) {
+      return res.status(409).json({
+        message: 'El vencimiento ya existe para esta novedad y sede.'
+      });
+    }
+
+    const userId = Array.isArray(user) && user.length > 0 ? user[0].id : null; // Solo tomamos el primer user_id
+
+    // Insertar el vencimiento en la base de datos
+    const [result] = await pool.query(
+      `INSERT INTO novedades_vencimientos 
+        (novedad_id, vencimiento, sede, titulo, mensaje, user, estado) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        novedad_id,
+        vencimiento,
+        sede,
+        titulo || null,
+        mensaje || null,
+        user || null,
+        estado || 1
+      ]
+    );
+
+    res.status(201).json({
+      message: 'Vencimiento creado correctamente',
+      id: result.insertId
+    });
+  } catch (error) {
+    console.error('Error al crear vencimiento:', error);
+    res.status(500).json({ message: 'Error al crear vencimiento.' });
+  }
+});
+
+
+// Endpoint para obtener todas las novedades vencimientos
+app.get('/novedades-vencimientos', async (req, res) => {
+  try {
+    console.log('Buscando todas las novedades vencimientos');
+
+    // Realizar la consulta a la base de datos
+    const [rows] = await pool.query('SELECT * FROM novedades_vencimientos');
+
+    // Verificar si se encontraron vencimientos
+    if (rows.length === 0) {
+      console.log('No se encontraron vencimientos.');
+      return res.status(404).json({ message: 'No se encontraron vencimientos.' });
+    }
+
+    // Enviar los resultados en formato JSON
+    res.json(rows);
+  } catch (error) {
+    console.error('Error en la consulta:', error); // Añadir detalles del error
+    res.status(500).json({ message: 'Error al obtener los vencimientos.' });
+  }
+});
+
+
 if (!PORT) {
   console.error('El puerto no está definido en el archivo de configuración.');
   process.exit(1);
