@@ -85,6 +85,4 @@ const AdmConveniosModel = db.define(
   }
 );
 
-export default {
-  AdmConveniosModel
-};
+export default  AdmConveniosModel;
