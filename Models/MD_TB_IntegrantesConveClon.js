@@ -1,12 +1,12 @@
 /*
  * Programador: Benjamin Orellana
- * Fecha Cración: 30 may 2024
- * Versión: 0.1
+ * Fecha Cración: 16 /03 / 2024
+ * Versión: 1.0
  *
  * Descripción:
- * Este archivo (MD_TB_AdmConvenios.js) contiene la definición del modelo Sequelize para la tabla de la base de datos.
+ * Este archivo (MD_TB_IntegrantesConve.js) contiene la definición del modelo Sequelize para la tabla de la base de datos.
  *
- * Tema: Modelos - AdmConvenios
+ * Tema: Modelos - IntegrantesConve
  *
  * Capa: Backend
  */
@@ -21,25 +21,37 @@ if (process.env.NODE_ENV !== 'production') {
   dotenv.config(); // Carga las variables de entorno desde el archivo .env
 }
 
-// Define el modelo para la tabla 'adm_convenios' en la base de datos
-const AdmConveniosModel = db.define(
+// Define el modelo para la tabla 'integrantes_conve' en la base de datos
+const IntegrantesConveModelClon = db.define(
   // Define los campos y sus tipos de datos correspondientes
-  'adm_convenios',
+  'integrantes_conve',
   {
-    nameConve: {
+    id_conv: {
+      type: DataTypes.BIGINT,
+      allowNull: false
+    },
+    nombre: {
       type: DataTypes.STRING,
       allowNull: false
     },
-    descConve: {
-      type: DataTypes.STRING,
-      allowNull: false
-    },
-    tipoConve: {
+    dni: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    ultima_actualizacion: {
-      type: DataTypes.DATE,
+    telefono: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    email: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    sede: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    notas: {
+      type: DataTypes.STRING,
       allowNull: true
     },
     precio: {
@@ -54,37 +66,21 @@ const AdmConveniosModel = db.define(
       type: DataTypes.STRING,
       allowNull: true
     },
-    cantFamiliares: {
-      type: DataTypes.INTEGER,
-      allowNull: true
-    },
-    permiteFam: {
-      type: DataTypes.TINYINT,
-      allowNull: false,
-      defaultValue: 0 // Puedes establecer un valor predeterminado si es necesario
-    },
-    // nuevos campos sede y descripción usuario
-    sede: {
+    userName: {
       type: DataTypes.STRING,
       allowNull: true
     },
-    desc_usu: {
-      type: DataTypes.STRING,
-      allowNull: true
+    fechaCreacion: {
+      type: DataTypes.DATE
     },
-    //R8 - Nuevo campo permiteFec para trabajar con fechas - Benjamin Orellana 29/09/2024
-    permiteFec: {
-      type: DataTypes.TINYINT,
-      allowNull: false,
-      defaultValue: 0 
+    estado_autorizacion: {
+      type: DataTypes.ENUM('sin_autorizacion', 'pendiente', 'autorizado'),
+      defaultValue: 'sin_autorizacion'
     }
   },
-
   {
     timestamps: false // Esto evita que Sequelize añada automáticamente los campos createdAt y updatedAt
   }
 );
 
-export default {
-  AdmConveniosModel
-};
+export default IntegrantesConveModelClon;
