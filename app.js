@@ -256,13 +256,15 @@ app.post(
     }
 
     const imagePath = `uploads/${req.file.filename}`;
+    const fecha = req.body.fecha;
 
     try {
       // Guardar la ruta de la imagen en la base de datos
       await pool.query(
-        'INSERT INTO adm_convenio_images (convenio_id, image_path) VALUES (?, ?)',
-        [convenio_id, imagePath]
+        'INSERT INTO adm_convenio_images (convenio_id, image_path,created_at) VALUES (?, ?, ?)',
+        [convenio_id, imagePath, fecha]
       );
+      
       res
         .status(200)
         .json({ message: 'Imagen subida y guardada correctamente.' });
@@ -348,12 +350,13 @@ app.post(
     }
 
     const imagePath = `uploads/${req.file.filename}`;
+    const fecha = req.body.fecha;
 
     try {
       // Guardar la ruta de la imagen en la base de datos
       await pool.query(
-        'INSERT INTO adm_convenio_fac (convenio_id, image_path) VALUES (?, ?)',
-        [convenio_id, imagePath]
+        'INSERT INTO adm_convenio_fac (convenio_id, image_path, created_at) VALUES (?, ?, ?)',
+        [convenio_id, imagePath, fecha]
       );
       res
         .status(200)

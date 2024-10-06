@@ -46,7 +46,7 @@ const AdmConveniosImages = db.define(
     },
     created_at: {
       type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
+      allowNull: true
     }
   },
   {
