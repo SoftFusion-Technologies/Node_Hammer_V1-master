@@ -76,10 +76,22 @@ const AdmConveniosModel = db.define(
     permiteFec: {
       type: DataTypes.TINYINT,
       allowNull: false,
-      defaultValue: 0 
+      defaultValue: 0
+    },
+    //R8 - Nuevo campo permiteFec para trabajar con fechas - Benjamin Orellana 29/09/2024
+    precio_concep: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    descuento_concep: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    preciofinal_concep: {
+      type: DataTypes.STRING,
+      allowNull: true
     }
   },
-
   {
     timestamps: false // Esto evita que Sequelize añada automáticamente los campos createdAt y updatedAt
   }
