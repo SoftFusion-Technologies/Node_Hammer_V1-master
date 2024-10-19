@@ -21,7 +21,6 @@ import mysql from 'mysql2/promise'; // Usar mysql2 para las promesas
 import { dirname, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { PORT } from './DataBase/config.js';
-
 // CONFIGURACION PRODUCCION
 
 if (process.env.NODE_ENV !== 'production') {
@@ -264,7 +263,7 @@ app.post(
         'INSERT INTO adm_convenio_images (convenio_id, image_path,created_at) VALUES (?, ?, ?)',
         [convenio_id, imagePath, fecha]
       );
-      
+
       res
         .status(200)
         .json({ message: 'Imagen subida y guardada correctamente.' });
@@ -780,6 +779,155 @@ cron.schedule('0 0 1 * *', () => {
 });
 
 //R8 - SE AGREGAN FECHAS PARA TRABAJAR EN CONVENIOS FINAL - BENJAMIN ORELLANA */
+
+app.post('/congelamientos/:convenio_id', async (req, res) => {
+  const { convenio_id } = req.params;
+  const { estado, vencimiento } = req.body;
+
+  if (typeof estado === 'undefined' || typeof vencimiento === 'undefined') {
+    return res.status(400).json({ error: 'Faltan parámetros en la solicitud' });
+  }
+
+  try {
+    // Verifica si ya existe un registro congelado para el mismo convenio y mes
+    const existingRecord = await db.query(
+      'SELECT * FROM congelamiento_integrantes WHERE convenio_id = :convenio_id AND MONTH(vencimiento) = MONTH(:vencimiento) AND YEAR(vencimiento) = YEAR(:vencimiento)',
+      {
+        replacements: { convenio_id, vencimiento },
+        type: db.QueryTypes.SELECT
+      }
+    );
+
+    if (existingRecord.length > 0) {
+      // Si ya existe, actualizamos el estado contrario (congelar o descongelar)
+      const results = await db.query(
+        'UPDATE congelamiento_integrantes SET estado = :estado WHERE convenio_id = :convenio_id AND vencimiento = :vencimiento',
+        {
+          replacements: { estado, convenio_id, vencimiento },
+          type: db.QueryTypes.UPDATE
+        }
+      );
+
+      return res.status(200).json({
+        message:
+          estado === 1
+            ? 'Congelamiento activado correctamente'
+            : 'Congelamiento desactivado correctamente',
+        data: results
+      });
+    } else {
+      // Si no existe, crear nuevo registro
+      const results = await db.query(
+        'INSERT INTO congelamiento_integrantes (convenio_id, estado, vencimiento) VALUES (:convenio_id, :estado, :vencimiento)',
+        {
+          replacements: { convenio_id, estado, vencimiento },
+          type: db.QueryTypes.INSERT
+        }
+      );
+
+      return res
+        .status(201)
+        .json({ message: 'Congelamiento creado con éxito', data: results });
+    }
+  } catch (err) {
+    console.log('Error ejecutando la consulta', err);
+    res.status(500).json({ error: 'Error ejecutando la consulta' });
+  }
+});
+
+app.put('/congelamientos/:convenio_id', async (req, res) => {
+  const { convenio_id } = req.params;
+  const { estado, vencimiento } = req.body;
+
+  if (typeof estado === 'undefined' || typeof vencimiento === 'undefined') {
+    return res.status(400).json({ error: 'Faltan parámetros en la solicitud' });
+  }
+
+  try {
+    // Si el estado es 0, descongelar
+    if (estado === 0) {
+      const results = await db.query(
+        'UPDATE congelamiento_integrantes SET estado = :estado WHERE convenio_id = :convenio_id AND vencimiento = :vencimiento',
+        {
+          replacements: { estado, convenio_id, vencimiento },
+          type: db.QueryTypes.UPDATE
+        }
+      );
+
+      // Verificar si se realizó alguna actualización
+      if (results[1] > 0) {
+        // results[1] contiene el número de filas afectadas
+        return res
+          .status(200)
+          .json({ message: 'Congelamiento descongelado correctamente' });
+      } else {
+        return res.status(404).json({
+          message: 'No se encontró el congelamiento para descongelar'
+        });
+      }
+    } else {
+      // Si el estado es 1, congelar
+      const [existingRecord] = await db.query(
+        'SELECT * FROM congelamiento_integrantes WHERE convenio_id = :convenio_id AND vencimiento = :vencimiento',
+        {
+          replacements: { convenio_id, vencimiento },
+          type: db.QueryTypes.SELECT
+        }
+      );
+
+      if (existingRecord) {
+        // Si existe, actualizamos el registro
+        const results = await db.query(
+          'UPDATE congelamiento_integrantes SET estado = :estado WHERE convenio_id = :convenio_id AND vencimiento = :vencimiento',
+          {
+            replacements: { estado, convenio_id, vencimiento },
+            type: db.QueryTypes.UPDATE
+          }
+        );
+
+        return res.status(200).json({
+          message: 'Congelamiento actualizado correctamente',
+          data: results
+        });
+      } else {
+        // Si no existe, creamos un nuevo registro
+        const results = await db.query(
+          'INSERT INTO congelamiento_integrantes (convenio_id, estado, vencimiento) VALUES (:convenio_id, :estado, :vencimiento)',
+          {
+            replacements: { convenio_id, estado, vencimiento },
+            type: db.QueryTypes.INSERT
+          }
+        );
+
+        return res
+          .status(201)
+          .json({ message: 'Congelamiento creado con éxito', data: results });
+      }
+    }
+  } catch (err) {
+    console.log('Error executing query', err);
+    res.status(500).json({ error: 'Error ejecutando la consulta' });
+  }
+});
+
+app.get('/integrantes-congelados/:id_conv', async (req, res) => {
+  const { id_conv } = req.params;
+
+  try {
+    const results = await db.query(
+      'SELECT estado, vencimiento FROM congelamiento_integrantes c WHERE c.convenio_id = :convenio_id',
+      {
+        replacements: { convenio_id: id_conv },
+        type: db.QueryTypes.SELECT
+      }
+    );
+
+    res.json(results);
+  } catch (err) {
+    console.log('Error executing query', err);
+    res.status(500).json({ error: 'Error ejecutando la consulta' });
+  }
+});
 
 if (!PORT) {
   console.error('El puerto no está definido en el archivo de configuración.');
