@@ -27,7 +27,7 @@ import {
   CR_FrecAsk_CTS,
   ER_FrecAsk_CTS,
   UR_FrecAsk_CTS
- } from '../Controllers/CTS_TB_FrecAsk.js';
+} from '../Controllers/CTS_TB_FrecAsk.js';
 
 import {
   OBR_Migration_CTS,
@@ -35,8 +35,8 @@ import {
   CR_Migration_CTS,
   ER_Migration_CTS
   // Importa los controladores necesarios para la tabla migrations tb_3
- } from '../Controllers/CTS_TB_Migrations.js';
-  
+} from '../Controllers/CTS_TB_Migrations.js';
+
 import {
   OBR_Notifications_CTS,
   OBRS_Notifications_CTS,
@@ -50,7 +50,7 @@ import {
   OBRS_Novedades_CTS,
   CR_Novedades_CTS,
   ER_Novedades_CTS,
-  UR_Novedades_CTS,
+  UR_Novedades_CTS
   // Importa los controladores necesarios para la tabla Novedades - tb_5
 } from '../Controllers/CTS_TB_Novedades.js';
 
@@ -179,7 +179,6 @@ import {
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_IntegrantesConve.js';
 
-
 import {
   OBR_FamIntegrante_CTS,
   OBRS_FamIntegrante_CTS,
@@ -199,7 +198,7 @@ import {
   OBRS_NovedadArchivos_CTS,
   CR_NovedadArchivos_CTS,
   ER_NovedadArchivos_CTS,
-  UR_NovedadArchivos_CTS,
+  UR_NovedadArchivos_CTS
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_NovedadesArchivos.js';
 
@@ -208,6 +207,34 @@ import {
 // R6- Agregar mas fechas a novedades  18-09-2024 - Benjamin Orellana - INICIO
 
 // R6- Agregar mas fechas a novedades  18-09-2024 - Benjamin Orellana - FINAL
+
+// R9- Planilla Instructores  22-10-2024 - Benjamin Orellana - INICIO
+import {
+  OBRS_Alumnos_CTS,
+  OBR_Alumnos_CTS,
+  CR_Alumnos_CTS,
+  ER_Alumnos_CTS,
+  UR_Alumnos_CTS
+} from '../Controllers/CTS_TB_Alumnos.js';
+
+import {
+  OBRS_Asistencias_CTS,
+  OBR_Asistencias_CTS,
+  CR_Asistencias_CTS,
+  ER_Asistencias_CTS,
+  UR_Asistencias_CTS,
+  GET_Asistencia
+} from '../Controllers/CTS_TB_Asistencias.js';
+
+import {
+  OBRS_Agendas_CTS,
+  OBR_Agendas_CTS,
+  CR_Agendas_CTS,
+  ER_Agendas_CTS,
+  UR_Agendas_CTS,
+  GET_Agenda_CTS
+} from '../Controllers/CTS_TB_Agendas.js';
+// R9- Planilla Instructores  22-10-2024 - Benjamin Orellana - FINAL
 
 // Crea un enrutador de Express
 const router = express.Router();
@@ -219,8 +246,6 @@ const router = express.Router();
 // ----------------------------------------------------------------
 // Define las rutas para cada método del controlador de Trabajo_CTS
 
-
-
 router.get('/jobs', OBRS_Trabajo_CTS);
 
 // Ruta para obtener un registro específico de Trabajo_CTS_CTS por su ID
@@ -231,7 +256,6 @@ router.post('/jobs', CR_Trabajo_CTS);
 
 // Ruta para eliminar un registro en Trabajo_CTS_CTS por su ID
 router.delete('/jobs/:id', ER_Trabajo_CTS);
-
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de frec_asks tb_2
@@ -353,7 +377,6 @@ router.post('/passreset', CR_PassReset_CTS);
 // Ruta para eliminar un registro en PassReset por su ID
 router.delete('/passreset/:id', ER_PassReset_CTS);
 
-
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de PersonalAccessTokens tb_9
 // ----------------------------------------------------------------
@@ -398,11 +421,10 @@ router.get('/schedulertask_user', OBRS_SchedulerTaskUser_CTS);
 router.get('/schedulertask_user/:id', OBR_SchedulerTaskUser_CTS);
 
 // Ruta para crear un nuevo registro en SchedulerTaskUser
-router.post('/schedulertask_user', CR_SchedulerTaskUser_CTS); 
+router.post('/schedulertask_user', CR_SchedulerTaskUser_CTS);
 
 // Ruta para eliminar un registro en SchedulerTaskUser por su ID
 router.delete('/schedulertask_user/:id', ER_SchedulerTaskUser_CTS);
-
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de SchedulerTask tb_12
@@ -434,13 +456,12 @@ router.get('/testclass', OBRS_TestClass_CTS);
 router.get('/testclass/:id', OBR_TestClass_CTS);
 
 // Crear un nuevo registro en TestClass_CTS
- router.post('/testclass', CR_TestClass_CTS);
+router.post('/testclass', CR_TestClass_CTS);
 
 // Eliminar un registro en TestClass_CTS por su ID
 router.delete('/testclass/:id', ER_TestClass_CTS);
 // Actualizar un registro en TestClass_CTS por su ID
 router.put('/testclass/:id', UR_TestClass_CTS);
-
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de TextContents_CTS tb_14
@@ -453,7 +474,7 @@ router.get('/textcontents', OBRS_TextContents_CTS);
 router.get('/textcontents/:id', OBR_TextContents_CTS);
 
 // Crear un nuevo registro en TextContents_CTS
- router.post('/textcontents', CR_TextContents_CTS);
+router.post('/textcontents', CR_TextContents_CTS);
 
 // Eliminar un registro en TextContents_CTS por su ID
 router.delete('/textcontents/:id', ER_TextContents_CTS);
@@ -469,7 +490,7 @@ router.get('/users', OBRS_Users_CTS);
 router.get('/users/:id', OBR_Users_CTS);
 
 // Crear un nuevo registro en Users_CTS
- router.post('/users', CR_Users_CTS);
+router.post('/users', CR_Users_CTS);
 
 // Eliminar un registro en Users_CTS por su ID
 router.delete('/users/:id', ER_Users_CTS);
@@ -488,13 +509,12 @@ router.get('/admconvenios', OBRS_AdmConve_CTS);
 router.get('/admconvenios/:id', OBR_AdmConve_CTS);
 
 // Crear un nuevo registro en AdmConve
- router.post('/admconvenios', CR_AdmConve_CTS);
+router.post('/admconvenios', CR_AdmConve_CTS);
 
 // Eliminar un registro en AdmConve por su ID
 router.delete('/admconvenios/:id', ER_AdmConve_CTS);
 
 router.put('/admconvenios/:id', UR_AdmConve_CTS);
-
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de Imagenes
@@ -513,7 +533,6 @@ router.post('/imagesget', CR_AdmConveniosImages_CTS);
 router.delete('/imagesget/:id', ER_AdmConveniosImages_CTS);
 
 router.put('/imagesget/:id', UR_AdmConveniosImages_CTS);
-
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de Facturas
@@ -576,9 +595,7 @@ router.put('/integrantesfam/:id', UR_FamIntegrante_CTS);
 // ----------------------------------------------------------------
 // Define las rutas para cada método del controlador de AdmPrecio
 
-
 router.use('/integrantesImport', importIntegrantes);
-
 
 // R5-SUBIR ARCHIVOS A NOVEDADES - 16-09-2024 - Benjamin Orellana - INICIO
 
@@ -610,6 +627,69 @@ router.put('/novedadesarch/:id', UR_NovedadArchivos_CTS);
 // Ruta para eliminar un vencimiento por ID
 // R6- Agregar mas fechas a novedades  18-09-2024 - Benjamin Orellana - FINAL
 
+// R9- Planilla Instructores  22-10-2024 - Benjamin Orellana - INICIO
 
+// ----------------------------------------------------------------
+// Ruta para obtener todos los registros de Alumnos tb_15
+// ----------------------------------------------------------------
+// Ruta para obtener todos los registros de Alumnos
+router.get('/alumnos', OBRS_Alumnos_CTS);
+
+// Obtener un registro específico de Alumnos por su ID
+router.get('/alumnos/:id', OBR_Alumnos_CTS);
+
+// Crear un nuevo registro en Alumnos
+router.post('/alumnos', CR_Alumnos_CTS);
+
+// Eliminar un registro en Alumnos por su ID
+router.delete('/alumnos/:id', ER_Alumnos_CTS);
+
+// Actualizar un registro en Alumnos por su ID
+router.put('/alumnos/:id', UR_Alumnos_CTS);
+
+// ----------------------------------------------------------------
+// Ruta para obtener todos los registros de Asistencias tb_15
+// ----------------------------------------------------------------
+// Ruta para obtener todos los registros de Asistencias
+router.get('/asistencias', OBRS_Asistencias_CTS);
+
+// Obtener un registro específico de Asistencias por su ID
+router.get('/asistencias/:id', OBR_Asistencias_CTS);
+
+// Crear un nuevo registro en Asistencias
+router.post('/asistencias', CR_Asistencias_CTS);
+
+// Eliminar un registro en Asistencias por su ID
+router.delete('/asistencias/:id', ER_Asistencias_CTS);
+
+// Actualizar un registro en Asistencias por su ID
+router.put('/asistencias/:id', UR_Asistencias_CTS);
+
+// Nueva ruta para verificar asistencia
+router.get('/asistencias/:alumno_id/:dia', GET_Asistencia);
+
+// ----------------------------------------------------------------
+// Ruta para obtener todos los registros de Agendas tb_15
+// ----------------------------------------------------------------
+// Ruta para obtener todos los registros de Agendas
+router.get('/agendas', OBRS_Agendas_CTS);
+
+// Obtener un registro específico de Agendas por su ID
+router.get('/agendas/:id', OBR_Agendas_CTS);
+
+// Crear un nuevo registro en Agendas
+router.post('/agendas', CR_Agendas_CTS);
+
+// Verificar si existe una agenda específica
+router.get('/agendas/:alumno_id/:agenda_num', GET_Agenda_CTS);
+
+
+// Eliminar un registro en Agendas por su ID
+router.delete('/agendas/:id', ER_Agendas_CTS);
+
+// Actualizar un registro en Agendas por su ID
+router.put('/agendas/:id', UR_Agendas_CTS);
+
+// R9- Planilla Instructores  22-10-2024 - Benjamin Orellana - FINAL
 // Exporta el enrutador
 export default router;
