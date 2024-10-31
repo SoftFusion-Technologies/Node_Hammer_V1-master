@@ -36,7 +36,18 @@ export const OBRS_Users_CTS = async (req, res) => {
   }
 };
 
-
+// Mostrar solo usuarios con nivel de instructor
+export const OBRS_Instructores_CTS = async (req, res) => {
+  try {
+    const registros = await UsersModel.findAll({
+      where: { level: 'instructor' }
+    });
+    res.json(registros);
+  } catch (error) {
+    console.error('Error al obtener instructores:', error);
+    res.status(500).json({ mensajeError: 'Error al obtener instructores' });
+  }
+};
 
 // Mostrar un registro específico de UsersModel por su ID
 export const OBR_Users_CTS = async (req, res) => {

@@ -57,7 +57,11 @@ export const GET_Asistencia = async (req, res) => {
     });
 
     if (existingRecord) {
-      return res.json({ existe: true });
+      return res.json({
+        existe: true,
+        id: existingRecord.id,
+        estado: existingRecord.estado
+      });
     }
 
     return res.json({ existe: false });
