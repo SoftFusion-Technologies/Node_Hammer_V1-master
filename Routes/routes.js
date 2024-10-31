@@ -134,6 +134,7 @@ import {
 import {
   OBR_Users_CTS,
   OBRS_Users_CTS,
+  OBRS_Instructores_CTS,
   CR_Users_CTS,
   ER_Users_CTS,
   UR_Users_CTS
@@ -497,6 +498,9 @@ router.delete('/users/:id', ER_Users_CTS);
 
 // Actualizar un registro en Users_CTS por su ID
 router.put('/users/:id', UR_Users_CTS);
+
+// Ruta para obtener solo usuarios con level = 'instructor'
+router.get('/instructores', OBRS_Instructores_CTS);
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de AdmConve tb_15

@@ -165,6 +165,26 @@ app.get(
   }
 );
 
+// Ruta para obtener alumnos de instructores
+app.get('/instructores/:user_id/alumnos', async (req, res) => {
+  const { user_id } = req.params;
+
+  try {
+    const results = await db.query(
+      'SELECT * FROM alumnos i WHERE i.user_id = :user_id',
+      {
+        replacements: { user_id },
+        type: db.QueryTypes.SELECT
+      }
+    );
+
+    res.json(results);
+  } catch (err) {
+    console.log('Error executing query', err);
+    res.status(500).json({ error: 'Error ejecutando la consulta' });
+  }
+});
+
 // Función para eliminar novedades vencidas hace más de un mes
 async function deleteOldNovedades() {
   try {
