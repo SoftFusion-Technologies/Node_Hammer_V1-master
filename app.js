@@ -37,24 +37,6 @@ app.use(express.json());
 app.use('/', GetRoutes);
 // definimos la conexion
 
-// Ruta en el backend para actualizar el estado de la novedad
-app.patch('/novedades/:id', async (req, res) => {
-  const { id } = req.params;
-  const { estado } = req.body;
-  try {
-    const novedad = await Novedad.findByPk(id);
-    if (!novedad) {
-      return res.status(404).json({ error: 'Novedad no encontrada' });
-    }
-    novedad.estado = estado;
-    await novedad.save();
-    res.json(novedad);
-  } catch (error) {
-    console.error('Error al actualizar la novedad:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
-  }
-});
-
 // Para verificar si nuestra conexión funciona, lo hacemos con el método authenticate()
 //  el cual nos devuelve una promesa que funciona de la siguiente manera:
 // un try y un catch para captar cualquier tipo de errores

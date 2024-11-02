@@ -10,6 +10,7 @@ export const AlumnosModel = db.define(
   'alumnos',
   {
     nombre: { type: DataTypes.STRING, allowNull: true },
+    email: { type: DataTypes.STRING, allowNull: true },
     celular: { type: DataTypes.STRING, allowNull: true },
     punto_d: { type: DataTypes.TEXT, allowNull: true },
     motivo: { type: DataTypes.TEXT, allowNull: true },
