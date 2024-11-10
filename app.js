@@ -21,8 +21,12 @@ import mysql from 'mysql2/promise'; // Usar mysql2 para las promesas
 import { dirname, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { PORT } from './DataBase/config.js';
-// CONFIGURACION PRODUCCION
 
+import { AlumnosModel } from './Models/MD_TB_Alumnos.js';
+import { AsistenciasModel } from './Models/MD_TB_Asistencias.js';
+import moment from 'moment-timezone';
+
+// CONFIGURACION PRODUCCION
 if (process.env.NODE_ENV !== 'production') {
   dotenv.config();
 }
@@ -930,6 +934,61 @@ app.get('/integrantes-congelados/:id_conv', async (req, res) => {
     res.status(500).json({ error: 'Error ejecutando la consulta' });
   }
 });
+
+// Función para obtener el día de asistencia actual
+const obtenerDiaAsistencia = async () => {
+  const ultimaAsistencia = await AsistenciasModel.findOne({
+    order: [['dia', 'DESC']]
+  });
+  return ultimaAsistencia ? ultimaAsistencia.dia + 1 : 1; // Si no hay asistencia, empieza en el día 1
+};
+
+// Función para crear asistencias automáticas
+const crearAsistenciasAutomáticas = async () => {
+  try {
+    // 1. Obtener el día de asistencia actual
+    const diaAsistencia = await obtenerDiaAsistencia();
+
+    // 2. Obtener todos los alumnos
+    const alumnos = await AlumnosModel.findAll(); // Suponiendo que `Alumno` es el modelo de alumnos
+
+    // 3. Crear una asistencia con estado "A" para cada alumno
+    const asistencias = alumnos.map((alumno) => ({
+      alumno_id: alumno.id,
+      dia: diaAsistencia,
+      estado: 'A'
+    }));
+
+    // Insertar todas las asistencias de una vez
+    await AsistenciasModel.bulkCreate(asistencias); // Inserta todas las asistencias al mismo tiempo
+
+    console.log(`Asistencias para el día ${diaAsistencia} creadas con éxito.`);
+  } catch (error) {
+    console.error('Error al crear asistencias automáticas:', error);
+  }
+};
+
+cron.schedule(
+  '0 7 * * 1-5',
+  async () => {
+    try {
+      // Usamos moment para asegurarnos de que se ejecute en la zona horaria deseada
+      const currentTime = moment()
+        .tz('America/Argentina/Buenos_Aires')
+        .format('HH:mm');
+      console.log(
+        `Creando asistencias automáticas a las ${currentTime} en Buenos Aires...`
+      );
+
+      await crearAsistenciasAutomáticas();
+    } catch (error) {
+      console.error('Error en el cron job:', error);
+    }
+  },
+  {
+    timezone: 'America/Argentina/Buenos_Aires'
+  }
+);
 
 if (!PORT) {
   console.error('El puerto no está definido en el archivo de configuración.');
