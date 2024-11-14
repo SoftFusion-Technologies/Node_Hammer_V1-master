@@ -934,10 +934,10 @@ app.get('/integrantes-congelados/:id_conv', async (req, res) => {
     res.status(500).json({ error: 'Error ejecutando la consulta' });
   }
 });
-
-// Función para obtener el día de asistencia actual
-const obtenerDiaAsistencia = async () => {
+// Función para obtener el día de asistencia actual para cada alumno
+const obtenerDiaAsistenciaAlumno = async (alumnoId) => {
   const ultimaAsistencia = await AsistenciasModel.findOne({
+    where: { alumno_id: alumnoId },
     order: [['dia', 'DESC']]
   });
   return ultimaAsistencia ? ultimaAsistencia.dia + 1 : 1; // Si no hay asistencia, empieza en el día 1
@@ -946,33 +946,35 @@ const obtenerDiaAsistencia = async () => {
 // Función para crear asistencias automáticas
 const crearAsistenciasAutomáticas = async () => {
   try {
-    // 1. Obtener el día de asistencia actual
-    const diaAsistencia = await obtenerDiaAsistencia();
+    // 1. Obtener todos los alumnos
+    const alumnos = await AlumnosModel.findAll();
 
-    // 2. Obtener todos los alumnos
-    const alumnos = await AlumnosModel.findAll(); // Suponiendo que `Alumno` es el modelo de alumnos
-
-    // 3. Crear una asistencia con estado "A" para cada alumno
-    const asistencias = alumnos.map((alumno) => ({
-      alumno_id: alumno.id,
-      dia: diaAsistencia,
-      estado: 'A'
-    }));
+    // 2. Crear una asistencia con estado "A" para cada alumno
+    const asistencias = await Promise.all(
+      alumnos.map(async (alumno) => {
+        const diaAsistencia = await obtenerDiaAsistenciaAlumno(alumno.id);
+        return {
+          alumno_id: alumno.id,
+          dia: diaAsistencia,
+          estado: 'A'
+        };
+      })
+    );
 
     // Insertar todas las asistencias de una vez
     await AsistenciasModel.bulkCreate(asistencias); // Inserta todas las asistencias al mismo tiempo
 
-    console.log(`Asistencias para el día ${diaAsistencia} creadas con éxito.`);
+    console.log('Asistencias creadas con éxito para todos los alumnos.');
   } catch (error) {
     console.error('Error al crear asistencias automáticas:', error);
   }
 };
 
+// Configuración del cron job
 cron.schedule(
   '0 7 * * 1-5',
   async () => {
     try {
-      // Usamos moment para asegurarnos de que se ejecute en la zona horaria deseada
       const currentTime = moment()
         .tz('America/Argentina/Buenos_Aires')
         .format('HH:mm');
@@ -986,9 +988,10 @@ cron.schedule(
     }
   },
   {
-    timezone: 'America/Argentina/Buenos_Aires'
+    timezone: 'America/Argentina/Buenos_Aires' // Configura la zona horaria para Buenos Aires
   }
 );
+
 
 if (!PORT) {
   console.error('El puerto no está definido en el archivo de configuración.');
