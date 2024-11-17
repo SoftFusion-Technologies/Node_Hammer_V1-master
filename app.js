@@ -934,6 +934,7 @@ app.get('/integrantes-congelados/:id_conv', async (req, res) => {
     res.status(500).json({ error: 'Error ejecutando la consulta' });
   }
 });
+
 // Función para obtener el día de asistencia actual para cada alumno
 const obtenerDiaAsistenciaAlumno = async (alumnoId) => {
   const ultimaAsistencia = await AsistenciasModel.findOne({
@@ -992,6 +993,259 @@ cron.schedule(
   }
 );
 
+
+// ALERTAS - AGENDAS - R9 - BENJAMIN ORELLANA - INICIO 17-NOV-24
+// Función para generar alertas en la tabla 'agendas' en la celda 1
+const genAlertAgendN1 = async () => {
+  try {
+    const hoy = new Date();
+    const fechaAyer = new Date(hoy);
+    fechaAyer.setDate(hoy.getDate() - 1);
+    const fechaAyerISO = fechaAyer.toISOString().split('T')[0];
+    console.log(`Fecha de ayer en formato ISO: ${fechaAyerISO}`);
+
+    // obtenemos los alumnos creados el dia anterior
+    const [alumnos] = await pool.execute(
+      `SELECT id FROM alumnos WHERE DATE(fecha_creacion) = ?`,
+      [fechaAyerISO]
+    );
+
+    for (const alumno of alumnos) {
+      // Verificamos si ya existe la alerta para este alumno y agenda_num = 1
+      const [alertasExistentes] = await pool.execute(
+        `SELECT id FROM agendas WHERE alumno_id = ? AND agenda_num = 1`,
+        [alumno.id]
+      );
+
+      if (alertasExistentes.length === 0) {
+        // Si no existe, insertamos la nueva alerta
+        console.log(`Insertando alerta para alumno_id: ${alumno.id}`);
+        await pool.execute(
+          `INSERT INTO agendas (alumno_id, agenda_num, contenido)
+                     VALUES (?, 1, 'PENDIENTE')`,
+          [alumno.id]
+        );
+      } else {
+        console.log(
+          `Alerta ya existente para alumno_id: ${alumno.id}, no se crea duplicado.`
+        );
+      }
+    }
+
+    console.log(`Proceso de generación de alertas completado.`);
+  } catch (error) {
+    console.error('Error generando alertas:', error);
+  }
+};
+
+// genAlertAgendN1(); -- se comenta esto, en produccion funciona, para desarrollo se descomenta
+// Configura el cron job para ejecutarse de lunes a viernes
+cron.schedule('0 0 * * *', async () => {
+  console.log('Ejecutando cron de alertas...');
+  await genAlertAgendN1();
+});
+
+// Función para generar alertas en la tabla 'agendas' para la 3ra semana celda 2
+const genAlertAgendN3 = async () => {
+  try {
+    const hoy = new Date();
+    const fechaTresSemanas = new Date(hoy);
+    fechaTresSemanas.setDate(hoy.getDate() - 21); // Tres semanas atrás
+    const fechaTresSemanasISO = fechaTresSemanas.toISOString().split('T')[0];
+    console.log(
+      `Fecha de hace tres semanas en formato ISO: ${fechaTresSemanasISO}`
+    );
+
+    // Obtenemos los alumnos creados hace tres semanas
+    const [alumnos] = await pool.execute(
+      `SELECT id FROM alumnos WHERE DATE(fecha_creacion) = ?`,
+      [fechaTresSemanasISO]
+    );
+
+    for (const alumno of alumnos) {
+      // Verificamos si ya existe la alerta para este alumno y agenda_num = 2
+      const [alertasExistentes] = await pool.execute(
+        `SELECT id FROM agendas WHERE alumno_id = ? AND agenda_num = 2`,
+        [alumno.id]
+      );
+
+      if (alertasExistentes.length === 0) {
+        // Si no existe, inserta la nueva alerta
+        console.log(`Insertando alerta para alumno_id: ${alumno.id}`);
+        await pool.execute(
+          `INSERT INTO agendas (alumno_id, agenda_num, contenido)
+                     VALUES (?, 2, 'PENDIENTE')`,
+          [alumno.id]
+        );
+      } else {
+        console.log(
+          `Alerta ya existente para alumno_id: ${alumno.id}, no se crea duplicado.`
+        );
+      }
+    }
+
+    console.log(
+      `Proceso de generación de alertas de la 3ra semana completado.`
+    );
+  } catch (error) {
+    console.error('Error generando alertas de la 3ra semana:', error);
+  }
+};
+
+// genAlertAgendN3(); -- se comenta esto, en produccion funciona, para desarrollo se descomenta
+// Configura el cron job para ejecutarse diariamente
+cron.schedule('0 0 * * *', async () => {
+  console.log('Ejecutando cron de alertas para la 3ra semana...');
+  await genAlertAgendN3();
+});
+
+const generarAlertaProspecto = async () => {
+  try {
+    // Obtener la fecha de hoy
+    const hoy = new Date();
+    const fechaHoyISO = hoy.toISOString().split('T')[0]; // Solo la fecha (sin hora)
+    console.log(`Fecha de hoy: ${fechaHoyISO}`);
+
+    // Obtener los alumnos que son prospectos
+    const [alumnosProspecto] = await pool.execute(
+      `SELECT id, fecha_creacion, prospecto FROM alumnos WHERE prospecto = 'prospecto'`
+    );
+
+    console.log(`Alumnos prospecto encontrados:`, alumnosProspecto); // Verificamos los alumnos encontrados
+
+    // Si no hay prospectos, no hacer nada
+    if (alumnosProspecto.length === 0) {
+      console.log('No se encontraron alumnos prospecto.');
+      return;
+    }
+
+    // Itera sobre los alumnos prospecto
+    for (const alumno of alumnosProspecto) {
+      // Calculamos el día siguiente a la fecha de creación del alumno
+      const fechaCreacion = new Date(alumno.fecha_creacion);
+      const fechaSiguiente = new Date(fechaCreacion);
+      fechaSiguiente.setDate(fechaCreacion.getDate() + 1); // Día siguiente
+      const fechaSiguienteISO = fechaSiguiente.toISOString().split('T')[0]; // Solo la fecha (sin hora)
+
+      console.log(
+        `Fecha siguiente para alumno_id ${alumno.id}: ${fechaSiguienteISO}`
+      );
+
+      // Verificamos si la fecha siguiente es igual a hoy
+      if (fechaSiguienteISO === fechaHoyISO) {
+        console.log(
+          `Generando alerta para alumno_id ${alumno.id} en la agenda 3`
+        );
+
+        // Verifica si ya existe la agenda con agenda_num = 3 para este alumno
+        const [alertasExistentes] = await pool.execute(
+          `SELECT id FROM agendas WHERE alumno_id = ? AND agenda_num = 3`,
+          [alumno.id]
+        );
+
+        console.log(
+          `Alertas existentes para alumno_id ${alumno.id}:`,
+          alertasExistentes
+        );
+
+        if (alertasExistentes.length > 0) {
+          // Si existe, actualiza el contenido de la agenda
+          console.log(
+            `Actualizando alerta para agenda_num 3 para alumno_id: ${alumno.id}`
+          );
+
+          const [result] = await pool.execute(
+            `UPDATE agendas SET contenido = 'PENDIENTE' WHERE alumno_id = ? AND agenda_num = 3`,
+            [alumno.id]
+          );
+
+          console.log(`Resultado de la actualización:`, result);
+        } else {
+          // Si no existe, inserta la nueva alerta para la agenda 3
+          console.log(
+            `Insertando alerta para agenda_num 3 para alumno_id: ${alumno.id}`
+          );
+
+          const [result] = await pool.execute(
+            `INSERT INTO agendas (alumno_id, agenda_num, contenido) VALUES (?, 3, 'PENDIENTE')`,
+            [alumno.id]
+          );
+
+          console.log(`Resultado de la inserción:`, result);
+        }
+      }
+    }
+
+    console.log('Proceso de generación de alerta para prospectos completado.');
+  } catch (error) {
+    console.error('Error generando alerta para prospectos:', error);
+  }
+};
+
+// generarAlertaProspecto(); se comenta
+// Configura el cron job para ejecutarse diariamente
+cron.schedule('0 0 * * *', async () => {
+  console.log('Ejecutando cron de alertas para los inactivos...');
+  await generarAlertaProspecto();
+});
+
+// Función para generar alertas de inactivos (sin asistencia en 5 días)
+const genAlertInactivos = async () => {
+  try {
+    const hoy = new Date();
+    const fechaLimite = new Date(hoy);
+    fechaLimite.setDate(hoy.getDate() - 5); // 5 días atrás
+    const fechaLimiteISO = fechaLimite.toISOString().split('T')[0];
+    console.log(`Fecha límite para inactivos: ${fechaLimiteISO}`);
+
+    // Obtén los alumnos que tienen 5 días consecutivos con estado 'A'
+    const [alumnos] = await pool.execute(
+      `SELECT DISTINCT alumno_id
+       FROM asistencias
+       WHERE estado = 'A'
+       GROUP BY alumno_id
+       HAVING COUNT(DISTINCT dia) >= 5`,
+      [fechaLimiteISO]
+    );
+
+    for (const alumno of alumnos) {
+      // Verifica si ya existe la alerta para este alumno y agenda_num = 4 (Inactivos)
+      const [alertasExistentes] = await pool.execute(
+        `SELECT id FROM agendas WHERE alumno_id = ? AND agenda_num = 4`,
+        [alumno.alumno_id]
+      );
+
+      if (alertasExistentes.length === 0) {
+        // Si no existe, inserta la nueva alerta
+        console.log(
+          `Insertando alerta de inactividad para alumno_id: ${alumno.alumno_id}`
+        );
+        await pool.execute(
+          `INSERT INTO agendas (alumno_id, agenda_num, contenido)
+           VALUES (?, 4, 'PENDIENTE')`,
+          [alumno.alumno_id]
+        );
+      } else {
+        console.log(
+          `Alerta de inactividad ya existente para alumno_id: ${alumno.alumno_id}, no se crea duplicado.`
+        );
+      }
+    }
+
+    console.log('Proceso de generación de alertas para inactivos completado.');
+  } catch (error) {
+    console.error('Error generando alertas para inactivos:', error);
+  }
+};
+
+// genAlertInactivos(); se comenta
+// Configura el cron job para ejecutarse diariamente
+cron.schedule('0 0 * * *', async () => {
+  console.log('Ejecutando cron de alertas para los inactivos...');
+  await genAlertInactivos();
+});
+
+// ALERTAS - AGENDAS - R9 - BENJAMIN ORELLANA - FIN 17-NOV-24
 
 if (!PORT) {
   console.error('El puerto no está definido en el archivo de configuración.');
