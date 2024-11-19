@@ -233,9 +233,15 @@ import {
   CR_Agendas_CTS,
   ER_Agendas_CTS,
   UR_Agendas_CTS,
-  GET_Agenda_CTS
+  GET_Agenda_CTS,
+  CR_ActualizarAgendaEstado_CTS
 } from '../Controllers/CTS_TB_Agendas.js';
 // R9- Planilla Instructores  22-10-2024 - Benjamin Orellana - FINAL
+
+import {
+  OBRS_AgendaImagenes_CTS,
+  ER_AgendaImagenes_CTS
+} from '../Controllers/CTS_TB_AgendaImages.js';
 
 // Crea un enrutador de Express
 const router = express.Router();
@@ -687,12 +693,18 @@ router.post('/agendas', CR_Agendas_CTS);
 // Verificar si existe una agenda específica
 router.get('/agendas/:alumno_id/:agenda_num', GET_Agenda_CTS);
 
-
 // Eliminar un registro en Agendas por su ID
 router.delete('/agendas/:id', ER_Agendas_CTS);
 
 // Actualizar un registro en Agendas por su ID
 router.put('/agendas/:id', UR_Agendas_CTS);
+
+// Ruta para actualizar el estado de la agenda
+router.put('/update-agenda-status/:agendaId', CR_ActualizarAgendaEstado_CTS);
+
+// Rutas para Agenda Imagenes (Archivos de la Agenda)
+router.get('/get-agenda-files/:agenda_id', OBRS_AgendaImagenes_CTS);
+router.delete('/delete-agenda-file/:archivoId', ER_AgendaImagenes_CTS); // Eliminar un archivo de la agenda
 
 // R9- Planilla Instructores  22-10-2024 - Benjamin Orellana - FINAL
 // Exporta el enrutador
