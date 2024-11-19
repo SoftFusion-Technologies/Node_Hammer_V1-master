@@ -26,6 +26,8 @@ import { AlumnosModel } from './Models/MD_TB_Alumnos.js';
 import { AsistenciasModel } from './Models/MD_TB_Asistencias.js';
 import moment from 'moment-timezone';
 
+import { login, authenticateToken } from './Security/auth.js'; // Importa las funciones del archivo auth.js
+
 // CONFIGURACION PRODUCCION
 if (process.env.NODE_ENV !== 'production') {
   dotenv.config();
@@ -51,43 +53,12 @@ try {
   console.log(`El error de la conexion es : ${error}`);
 }
 
-app.post('/login', async (req, res) => {
-  const sql =
-    'SELECT * FROM users WHERE email = :email AND password = :password';
-  try {
-    const [results, metadata] = await db.query(sql, {
-      replacements: { email: req.body.email, password: req.body.password }
-    });
-    if (results.length > 0) {
-      const user = results[0];
-      const token = jwt.sign({ id: user.id, level: user.level }, 'softfusion', {
-        expiresIn: '1h'
-      });
-      return res.json({ message: 'Success', token, level: user.level });
-    } else {
-      return res.json('Fail');
-    }
-  } catch (err) {
-    console.log('Error executing query', err);
-    return res.json('Error');
-  }
-});
+// Ruta de login
+app.post('/login', login);
 
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (token == null) return res.sendStatus(401);
-
-  jwt.verify(token, 'softfusion', (err, user) => {
-    if (err) return res.sendStatus(403);
-    req.user = user;
-    next();
-  });
-};
-
+// Ruta protegida
 app.get('/protected', authenticateToken, (req, res) => {
-  res.json({ message: 'Esto es una ruta protegida mi ray' });
+  res.json({ message: 'Esto es una ruta protegida' });
 });
 
 app.get('/', (req, res) => {
@@ -221,7 +192,7 @@ console.log('Current Directory:', CURRENT_DIR);
 const multerUpload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
-      const uploadPath = join(CURRENT_DIR, 'uploads'); // Esto debe ser la carpeta en la raíz del proyecto
+      const uploadPath = join(CURRENT_DIR, 'uploads', 'agendas'); // Esto debe ser la carpeta en la raíz del proyecto
       cb(null, uploadPath); // Asegúrate de que esta ruta sea la correcta
     },
     filename: (req, file, cb) => {
@@ -529,9 +500,6 @@ app.get('/novedadesarch/:novedadId', async (req, res) => {
 });
 
 // R5-SUBIR ARCHIVOS A NOVEDADES - 16-09-2024 - Benjamin Orellana - FINAL
-
-// app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
-app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 
 // Endpoint para obtener vencimientos relacionados con una novedad específica
 app.get('/novedades-vencimientos/:novedadId', async (req, res) => {
@@ -993,7 +961,6 @@ cron.schedule(
   }
 );
 
-
 // ALERTAS - AGENDAS - R9 - BENJAMIN ORELLANA - INICIO 17-NOV-24
 // Función para generar alertas en la tabla 'agendas' en la celda 1
 const genAlertAgendN1 = async () => {
@@ -1038,8 +1005,9 @@ const genAlertAgendN1 = async () => {
   }
 };
 
-// genAlertAgendN1(); -- se comenta esto, en produccion funciona, para desarrollo se descomenta
+// genAlertAgendN1(); // se comenta esto, en produccion funciona, para desarrollo se descomenta
 // Configura el cron job para ejecutarse de lunes a viernes
+
 cron.schedule('0 0 * * *', async () => {
   console.log('Ejecutando cron de alertas...');
   await genAlertAgendN1();
@@ -1246,6 +1214,125 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 // ALERTAS - AGENDAS - R9 - BENJAMIN ORELLANA - FIN 17-NOV-24
+
+// SUBIR IMAGENES A LAS AGENDAS
+
+// Endpoint para obtener las agendas de un alumno por su ID
+app.get('/agendas/:alumnoId', async (req, res) => {
+  const alumnoId = req.params.alumnoId;
+
+  try {
+    // Consulta para obtener las agendas del alumno
+    const agendas = await db.query(
+      'SELECT * FROM agendas WHERE alumno_id = ?',
+      [alumnoId]
+    );
+
+    if (agendas.length === 0) {
+      return res
+        .status(404)
+        .json({ message: 'No se encontraron agendas para este alumno.' });
+    }
+
+    // Enviar las agendas al frontend
+    res.json(agendas);
+  } catch (error) {
+    console.error('Error al obtener las agendas:', error);
+    res.status(500).json({ message: 'Hubo un error al obtener las agendas.' });
+  }
+});
+
+// Ruta para subir imagen
+app.post(
+  '/upload-image', // Endpoint para subir la imagen
+  multerUpload.single('file'), // Usamos multer para manejar la carga del archivo
+  async (req, res) => {
+    // Acceder a los datos del cuerpo y el archivo
+    const { agenda_id, agenda_num, alumno_id } = req.body; // Extraer datos de req.body
+    const file = req.file; // Obtener el archivo subido
+
+    // Verificar que el archivo haya sido cargado
+    if (!file) {
+      return res.status(400).json({ message: 'Archivo no proporcionado' });
+    }
+
+    // Guardar la ruta del archivo
+    const imagePath = `uploads/agendas/${file.filename}`;
+    const fileName = file.originalname; // Nombre original del archivo
+
+    // Verificar que los datos necesarios existan
+    if (!agenda_id || !agenda_num || !alumno_id) {
+      return res.status(400).json({ message: 'Faltan datos necesarios' });
+    }
+
+    try {
+      // Insertar los datos en la tabla agenda_imagenes
+      await pool.query(
+        'INSERT INTO agenda_imagenes (agenda_id, agenda_num, alumno_id, nombre_archivo, ruta_archivo) VALUES (?, ?, ?, ?, ?)',
+        [agenda_id, agenda_num, alumno_id, fileName, imagePath]
+      );
+
+      // Responder con éxito
+      res
+        .status(200)
+        .json({ message: 'Imagen subida y guardada correctamente.' });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Error al guardar la imagen.' });
+    }
+  }
+);
+
+// Ruta para descargar imagen
+app.get('/download-image/:agenda_id', async (req, res) => {
+  const { agenda_id } = req.params;
+
+  try {
+    // Recupera el registro de la base de datos
+    const imageRecord = await pool.query(
+      'SELECT * FROM agenda_imagenes WHERE agenda_id = ?',
+      [agenda_id]
+    );
+
+    console.log('Resultado de la consulta:', imageRecord);
+
+    // Accede a la ruta del archivo desde el registro
+    const imagePath = imageRecord[0][0]?.ruta_archivo;
+    console.log('Ruta de archivo:', imagePath);
+
+    if (!imagePath) {
+      return res.status(400).json({ message: 'Ruta de archivo inválida' });
+    }
+
+    // Construye la ruta completa del archivo (sin duplicar 'uploads/agendas')
+    const filePath = join(CURRENT_DIR, imagePath); // Elimina 'uploads/agendas'
+    console.log('Ruta completa del archivo:', filePath);
+
+    // Verifica si el archivo existe
+    try {
+      await fs.promises.access(filePath);
+    } catch {
+      return res
+        .status(404)
+        .json({ message: 'Archivo no encontrado en el servidor.' });
+    }
+
+    // Configura el tipo de contenido y descarga
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.download(filePath, (err) => {
+      if (err) {
+        console.error('Error al descargar el archivo:', err);
+        res.status(500).json({ message: 'Error al descargar el archivo.' });
+      }
+    });
+  } catch (error) {
+    console.error('Error en el endpoint de descarga:', error);
+    res.status(500).json({ message: 'Error al procesar la solicitud' });
+  }
+});
+
+// app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
+app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 
 if (!PORT) {
   console.error('El puerto no está definido en el archivo de configuración.');

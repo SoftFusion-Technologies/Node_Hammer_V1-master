@@ -49,7 +49,7 @@ export const GET_Agenda_CTS = async (req, res) => {
   try {
     const { alumno_id, agenda_num } = req.params;
     const agenda = await AgendasModel.findOne({
-      where: { alumno_id, agenda_num },
+      where: { alumno_id, agenda_num }
     });
 
     if (agenda) {
@@ -71,18 +71,17 @@ export const CR_Agendas_CTS = async (req, res) => {
     const agendaCreada = await AgendasModel.create({
       alumno_id,
       agenda_num,
-      contenido,
+      contenido
     });
-    
+
     res.status(201).json({
       message: 'Agenda creada correctamente',
-      agenda: agendaCreada,
+      agenda: agendaCreada
     });
   } catch (error) {
     res.status(500).json({ mensajeError: error.message });
   }
 };
-
 
 // Eliminar un registro en Agendas por su ID
 export const ER_Agendas_CTS = async (req, res) => {
@@ -115,3 +114,30 @@ export const UR_Agendas_CTS = async (req, res) => {
     res.status(500).json({ mensajeError: error.message });
   }
 };
+
+// Controlador para actualizar el estado de una agenda específica
+export const CR_ActualizarAgendaEstado_CTS = async (req, res) => {
+  const agendaId = req.params.agendaId;  // Asegúrate de que el parámetro se esté recibiendo
+  const { contenido } = req.body;
+
+  if (!agendaId) {
+    return res.status(400).json({ message: 'El agendaId es necesario' });
+  }
+
+  try {
+    const agenda = await AgendasModel.findByPk(agendaId);
+
+    if (!agenda) {
+      return res.status(404).json({ message: 'Agenda no encontrada' });
+    }
+
+    agenda.contenido = contenido;
+    await agenda.save();
+
+    res.status(200).json({ message: 'Estado de la agenda actualizado correctamente' });
+  } catch (error) {
+    console.error('Error al actualizar la agenda:', error);
+    res.status(500).json({ message: 'Error al actualizar la agenda' });
+  }
+};
+
