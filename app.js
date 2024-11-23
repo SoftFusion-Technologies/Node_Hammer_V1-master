@@ -971,9 +971,11 @@ const genAlertAgendN1 = async () => {
     const fechaAyerISO = fechaAyer.toISOString().split('T')[0];
     console.log(`Fecha de ayer en formato ISO: ${fechaAyerISO}`);
 
-    // obtenemos los alumnos creados el dia anterior
+    // obtenemos los alumnos creados el día anterior y que no sean de prospecto = 'socio'
     const [alumnos] = await pool.execute(
-      `SELECT id FROM alumnos WHERE DATE(fecha_creacion) = ?`,
+      `SELECT id FROM alumnos 
+       WHERE DATE(fecha_creacion) = ? 
+       AND prospecto IN ('nuevo', 'prospecto')`,
       [fechaAyerISO]
     );
 
@@ -1024,10 +1026,12 @@ const genAlertAgendN3 = async () => {
       `Fecha de hace tres semanas en formato ISO: ${fechaTresSemanasISO}`
     );
 
-    // Obtenemos los alumnos creados hace tres semanas
+    // obtenemos los alumnos creados el día anterior y que no sean de prospecto = 'socio'
     const [alumnos] = await pool.execute(
-      `SELECT id FROM alumnos WHERE DATE(fecha_creacion) = ?`,
-      [fechaTresSemanasISO]
+      `SELECT id FROM alumnos 
+       WHERE DATE(fecha_creacion) = ? 
+       AND prospecto IN ('nuevo', 'prospecto')`,
+      [fechaAyerISO]
     );
 
     for (const alumno of alumnos) {
