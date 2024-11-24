@@ -1031,7 +1031,7 @@ const genAlertAgendN3 = async () => {
       `SELECT id FROM alumnos 
        WHERE DATE(fecha_creacion) = ? 
        AND prospecto IN ('nuevo', 'prospecto')`,
-      [fechaAyerISO]
+      [fechaTresSemanasISO]
     );
 
     for (const alumno of alumnos) {
