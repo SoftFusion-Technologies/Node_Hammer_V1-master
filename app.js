@@ -1335,6 +1335,31 @@ app.get('/download-image/:agenda_id', async (req, res) => {
   }
 });
 
+// Endpoint para obtener asistencias por día
+app.get('/asistencia/:dia', async (req, res) => {
+  const { dia } = req.params;
+
+  try {
+    // Obtener todas las asistencias para ese día específico
+    const registros = await AsistenciasModel.findAll({
+      where: {
+        dia: parseInt(dia) // Convertimos el dia a int
+      }
+    });
+
+    // Si no hay registros para el día solicitado
+    if (registros.length === 0) {
+      return res.json({ mensaje: `No hay registros para el día ${dia}` });
+    }
+
+    // Devolver los registros encontrados
+    res.json(registros);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ mensajeError: error.message });
+  }
+});
+
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 
