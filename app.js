@@ -1217,6 +1217,58 @@ cron.schedule('0 0 * * *', async () => {
   await genAlertInactivos();
 });
 
+const actualizarProspectosANuevo = async () => {
+  try {
+    // Consulta para obtener alumnos con 2 o más asistencias consecutivas
+    const [alumnosConAsistencias] = await pool.execute(`
+      SELECT a.id AS alumno_id, COUNT(*) AS asistencias_consecutivas
+      FROM asistencias AS asis
+      JOIN alumnos AS a ON asis.alumno_id = a.id
+      WHERE asis.estado = 'P' AND a.prospecto = 'prospecto'
+      GROUP BY asis.alumno_id
+      HAVING asistencias_consecutivas >= 2
+    `);
+
+    // Si no hay alumnos con asistencias suficientes, no hacer nada
+    if (alumnosConAsistencias.length === 0) {
+      console.log('No se encontraron alumnos para convertir a "nuevo".');
+      return;
+    }
+
+    for (const { alumno_id } of alumnosConAsistencias) {
+      console.log(`Actualizando alumno_id: ${alumno_id} a "nuevo"`);
+
+      // Actualizar el alumno a "nuevo" y agregarle "c"
+      const [resultUpdate] = await pool.execute(
+        `UPDATE alumnos 
+         SET prospecto = 'nuevo', c = 'c', fecha_creacion = CURDATE()
+         WHERE id = ? AND prospecto = 'prospecto'`,
+        [alumno_id]
+      );
+
+      console.log(
+        `Alumno ${alumno_id} actualizado a "nuevo". Resultado:`,
+        resultUpdate
+      );
+
+      // Generar las agendas necesarias (llamadas a funciones)
+      await genAlertAgendN1(); // Alerta para la próxima semana
+      await genAlertAgendN3(); // Alerta para la tercera semana
+    }
+
+    console.log('Proceso de verificación y actualización completado.');
+  } catch (error) {
+    console.error('Error verificando asistencias:', error);
+  }
+};
+
+// actualizarProspectosANuevo();
+cron.schedule('0 0 * * *', async () => {
+  console.log('Ejecutando cron de alertas para la actualizacion...');
+  await actualizarProspectosANuevo();
+});
+
+
 // ALERTAS - AGENDAS - R9 - BENJAMIN ORELLANA - FIN 17-NOV-24
 
 // SUBIR IMAGENES A LAS AGENDAS
