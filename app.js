@@ -1268,7 +1268,6 @@ cron.schedule('0 0 * * *', async () => {
   await actualizarProspectosANuevo();
 });
 
-
 // ALERTAS - AGENDAS - R9 - BENJAMIN ORELLANA - FIN 17-NOV-24
 
 // SUBIR IMAGENES A LAS AGENDAS
@@ -1411,6 +1410,40 @@ app.get('/asistencia/:dia', async (req, res) => {
     res.status(500).json({ mensajeError: error.message });
   }
 });
+
+// endpoint que devuelve las agendas pendientes agrupadas por alumno
+app.get('/notificaciones', async (req, res) => {
+  const { user_id } = req.query; // Obtenemos el user_id de los parámetros de consulta
+
+  // Verificamos si el user_id está presente
+  if (!user_id) {
+    return res.status(400).json({ error: 'Falta el id del instructor' });
+  }
+
+  try {
+    const [result] = await pool.query(
+      `SELECT DISTINCT
+          a.alumno_id, 
+          a.agenda_num, 
+          al.nombre AS alumno_nombre
+       FROM 
+          agendas AS a
+       JOIN 
+          alumnos AS al ON a.alumno_id = al.id
+       WHERE 
+          a.contenido = 'PENDIENTE'
+          AND al.user_id = ?
+       ORDER BY 
+          a.alumno_id, a.agenda_num`,
+      [user_id] // Usamos el user_id en la consulta
+    );
+    res.json(result);
+  } catch (error) {
+    console.error('Error obteniendo notificaciones:', error);
+    res.status(500).json({ error: 'Error obteniendo notificaciones' });
+  }
+});
+
 
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
