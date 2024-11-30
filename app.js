@@ -918,26 +918,44 @@ const crearAsistenciasAutomáticas = async () => {
     // 1. Obtener todos los alumnos
     const alumnos = await AlumnosModel.findAll();
 
-    // 2. Crear una asistencia con estado "A" para cada alumno
+    // 2. Crear una asistencia con estado "A" para cada alumno solo si es de lunes a viernes
     const asistencias = await Promise.all(
       alumnos.map(async (alumno) => {
         const diaAsistencia = await obtenerDiaAsistenciaAlumno(alumno.id);
-        return {
-          alumno_id: alumno.id,
-          dia: diaAsistencia,
-          estado: 'A'
-        };
+
+        // Obtener el día de la semana (0: Domingo, 1: Lunes, ..., 6: Sábado)
+        const fechaAsistencia = new Date();
+        const diaSemana = fechaAsistencia.getDay(); // Devuelve un número del 0 (domingo) al 6 (sábado)
+
+        // Solo crear asistencia si es de lunes a viernes (1 a 5)
+        if (diaSemana >= 1 && diaSemana <= 5) {
+          return {
+            alumno_id: alumno.id,
+            dia: diaAsistencia,
+            estado: 'A'
+          };
+        }
+
+        // Si es fin de semana (sábado o domingo), no se crea asistencia
+        return null; // No retornamos nada si es fin de semana
       })
     );
 
-    // Insertar todas las asistencias de una vez
-    await AsistenciasModel.bulkCreate(asistencias); // Inserta todas las asistencias al mismo tiempo
+    // Filtrar los valores nulos (para los fines de semana) y crear las asistencias
+    const asistenciasFiltradas = asistencias.filter((asistencia) => asistencia !== null);
 
-    console.log('Asistencias creadas con éxito para todos los alumnos.');
+    if (asistenciasFiltradas.length > 0) {
+      // Insertar todas las asistencias de una vez
+      await AsistenciasModel.bulkCreate(asistenciasFiltradas);
+      console.log('Asistencias creadas con éxito para todos los alumnos (lunes a viernes).');
+    } else {
+      console.log('No se crearon asistencias, ya que es fin de semana.');
+    }
   } catch (error) {
     console.error('Error al crear asistencias automáticas:', error);
   }
 };
+
 
 // Configuración del cron job
 cron.schedule(
@@ -1444,6 +1462,292 @@ app.get('/notificaciones', async (req, res) => {
   }
 });
 
+/*
+ * MODULO ESTADISTICAS
+ */
+
+// Endpoint que devuelve el total de alumnos con más de 6 "P" por profesor
+app.get(
+  '/estadisticas/profesores-con-alumnos-mas-de-seis-p',
+  async (req, res) => {
+    try {
+      // Consulta para obtener el total de alumnos con más de 6 "P" por profesor
+      const [result] = await pool.query(
+        `SELECT 
+          u.id AS profesor_id,
+          u.name AS profesor_nombre,
+          COUNT(DISTINCT al.id) AS totalalumnos
+       FROM 
+          users AS u
+       JOIN 
+          alumnos AS al ON u.id = al.user_id
+       JOIN 
+          asistencias AS a ON al.id = a.alumno_id
+       WHERE 
+          a.estado = 'P'
+       GROUP BY 
+          u.id, u.name
+       HAVING 
+          COUNT(CASE WHEN a.estado = 'P' THEN a.id END) > 6`
+      );
+
+      // Enviar la respuesta con los resultados
+      res.json(result);
+    } catch (error) {
+      console.error('Error obteniendo estadísticas de profesores:', error);
+      res
+        .status(500)
+        .json({ error: 'Error obteniendo estadísticas de profesores' });
+    }
+  }
+);
+
+// Endpoint que devuelve el total de asistencias por profesor
+app.get('/estadisticas/asistencias-por-profe', async (req, res) => {
+  try {
+    // Consulta para obtener el total de asistencias por profesor
+    const [result] = await pool.query(
+      `SELECT 
+          u.id AS profesor_id,
+          u.name AS profesor_nombre,
+          COUNT(a.id) AS total_asistencias
+       FROM 
+          users AS u
+       JOIN 
+          alumnos AS al ON u.id = al.user_id
+       JOIN 
+          asistencias AS a ON al.id = a.alumno_id
+       WHERE 
+          a.estado = 'P'
+       GROUP BY 
+          u.id, u.name
+       ORDER BY 
+          total_asistencias DESC`
+    );
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error obteniendo estadísticas de asistencias:', error);
+    res
+      .status(500)
+      .json({ error: 'Error obteniendo estadísticas de asistencias' });
+  }
+});
+
+// Endpoint que devuelve el Nuevos del Mes por Profe
+
+app.get('/estadisticas/nuevos-del-mes', async (req, res) => {
+  try {
+    const [result] = await pool.query(`
+      SELECT 
+        u.id AS profesor_id,
+        u.name AS profesor_nombre,
+        COUNT(a.id) AS nuevos_del_mes
+      FROM 
+        users AS u
+      JOIN 
+        alumnos AS a ON u.id = a.user_id
+      WHERE 
+        a.prospecto = 'nuevo' 
+        AND MONTH(a.fecha_creacion) = MONTH(CURRENT_DATE())
+        AND YEAR(a.fecha_creacion) = YEAR(CURRENT_DATE())
+      GROUP BY 
+        u.id, u.name
+      ORDER BY 
+        nuevos_del_mes DESC
+    `);
+    res.json(result);
+  } catch (error) {
+    console.error('Error obteniendo nuevos del mes:', error);
+    res.status(500).json({ error: 'Error obteniendo nuevos del mes' });
+  }
+});
+
+// proscpectos del mes
+app.get('/estadisticas/prospectos-del-mes', async (req, res) => {
+  try {
+    const [result] = await pool.query(`
+      SELECT 
+        u.id AS profesor_id,
+        u.name AS profesor_nombre,
+        COUNT(ap.id) AS prospectos_del_mes
+      FROM 
+        users AS u
+      JOIN 
+        alumnos_prospecto AS ap ON u.id = ap.user_id
+      WHERE 
+        ap.prospecto = 'prospecto' 
+        AND MONTH(ap.fecha_creacion) = MONTH(CURRENT_DATE())
+        AND YEAR(ap.fecha_creacion) = YEAR(CURRENT_DATE())
+      GROUP BY 
+        u.id, u.name
+      ORDER BY 
+        prospectos_del_mes DESC
+    `);
+    res.json(result);
+  } catch (error) {
+    console.error('Error obteniendo prospectos del mes:', error);
+    res.status(500).json({ error: 'Error obteniendo prospectos del mes' });
+  }
+});
+
+app.get('/estadisticas/convertidos', async (req, res) => {
+  try {
+    const [resultados] = await db.query(`
+      SELECT 
+        a.user_id AS profesor_id, 
+        u.name AS profesor_nombre, 
+        COUNT(*) AS totalConvertidos
+      FROM alumnos a
+      INNER JOIN users u ON a.user_id = u.id
+      WHERE a.c = 'c'
+      GROUP BY a.user_id, u.name
+    `);
+
+    res.status(200).json(resultados);
+  } catch (error) {
+    console.error('Error al obtener estadísticas:', error);
+    res.status(500).json({ error: 'Error al obtener estadísticas' });
+  }
+});
+
+// Nuevo Endpoint: Porcentaje de Conversión
+app.get('/estadisticas/porcentaje-conversion', async (req, res) => {
+  try {
+    const [result] = await db.query(`
+      SELECT 
+        u.id AS profesorId, 
+        u.name AS profesorName,
+        COALESCE(SUM(CASE WHEN ap.prospecto = 'prospecto' THEN 1 ELSE 0 END), 0) AS totalProspectos,
+        COALESCE(SUM(CASE WHEN a.c = 'c' THEN 1 ELSE 0 END), 0) AS totalConvertidos,
+        CASE 
+          WHEN SUM(CASE WHEN ap.prospecto = 'prospecto' THEN 1 ELSE 0 END) = 0 THEN 0
+          ELSE 
+            ROUND(
+              SUM(CASE WHEN a.c = 'c' THEN 1 ELSE 0 END) * 100 /
+              SUM(CASE WHEN ap.prospecto = 'prospecto' THEN 1 ELSE 0 END),
+              2
+            )
+        END AS porcentajeConversion
+      FROM 
+        users AS u
+      LEFT JOIN 
+        alumnos_prospecto AS ap ON u.id = ap.user_id
+      LEFT JOIN 
+        alumnos AS a ON u.id = a.user_id
+      WHERE 
+        MONTH(ap.fecha_creacion) = MONTH(CURRENT_DATE()) 
+        AND YEAR(ap.fecha_creacion) = YEAR(CURRENT_DATE())
+      GROUP BY 
+        u.id, u.name
+    `);
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Error obteniendo porcentaje de conversión:', error);
+    res
+      .status(500)
+      .json({ error: 'Error al calcular el porcentaje de conversión' });
+  }
+});
+
+// Endpoint que devuelve la tasa de asistencia por profesor
+app.get('/estadisticas/tasa-asistencia-por-profe', async (req, res) => {
+  try {
+    // Consulta para obtener el total de asistencias por profesor
+    const [asistencias] = await pool.query(
+      `SELECT 
+          u.id AS profesor_id,
+          u.name AS profesor_nombre,
+          COUNT(a.id) AS total_asistencias
+       FROM 
+          users AS u
+       JOIN 
+          alumnos AS al ON u.id = al.user_id
+       JOIN 
+          asistencias AS a ON al.id = a.alumno_id
+       WHERE 
+          a.estado = 'P'
+       GROUP BY 
+          u.id, u.name`
+    );
+
+    // Consulta para obtener el total de alumnos con más de 6 "P" por profesor
+    const [alumnos] = await pool.query(
+      `SELECT 
+          u.id AS profesor_id,
+          COUNT(DISTINCT al.id) AS totalalumnos
+       FROM 
+          users AS u
+       JOIN 
+          alumnos AS al ON u.id = al.user_id
+       JOIN 
+          asistencias AS a ON al.id = a.alumno_id
+       WHERE 
+          a.estado = 'P'
+       GROUP BY 
+          u.id
+       HAVING 
+          COUNT(CASE WHEN a.estado = 'P' THEN a.id END) > 6`
+    );
+
+    // Crear un objeto para almacenar la tasa de asistencia por profesor
+    const tasaAsistencia = asistencias.map((profesor) => {
+      // Encontrar el total de alumnos para este profesor
+      const profesorAlumnos = alumnos.find(
+        (alumno) => alumno.profesor_id === profesor.profesor_id
+      );
+
+      // Si no se encontró el profesor en los alumnos, la tasa es 0
+      const totalAlumnos = profesorAlumnos ? profesorAlumnos.totalalumnos : 0;
+
+      // Calcular la tasa de asistencia
+      const tasa =
+        totalAlumnos > 0 ? profesor.total_asistencias / totalAlumnos : 0;
+
+      return {
+        profesor_id: profesor.profesor_id,
+        profesor_nombre: profesor.profesor_nombre,
+        tasa_asistencia: tasa
+      };
+    });
+
+    // Enviar la respuesta con las tasas de asistencia
+    res.json(tasaAsistencia);
+  } catch (error) {
+    console.error('Error obteniendo tasas de asistencia:', error);
+    res.status(500).json({ error: 'Error obteniendo tasas de asistencia' });
+  }
+});
+
+app.get('/estadisticas/mensajes-por-profe', async (req, res) => {
+  try {
+    // Consulta para obtener el total de mensajes enviados por cada profesor
+    const [result] = await pool.query(
+      `SELECT 
+          u.id AS profesor_id,
+          u.name AS profesor_nombre,
+          COUNT(ai.id) AS total_mensajes
+       FROM 
+          agenda_imagenes ai
+       JOIN 
+          alumnos al ON ai.alumno_id = al.id
+       JOIN 
+          users u ON al.user_id = u.id
+       GROUP BY 
+          u.id, u.name
+       ORDER BY 
+          total_mensajes DESC`
+    );
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error obteniendo el total de mensajes por profesor:', error);
+    res
+      .status(500)
+      .json({ error: 'Error obteniendo el total de mensajes por profesor' });
+  }
+});
 
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));

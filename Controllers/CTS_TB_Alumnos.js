@@ -18,10 +18,10 @@
 
 // Importa los modelos necesarios desde el archivo de modelos
 import MD_TB_Alumnos from '../Models/MD_TB_Alumnos.js';
+import db from '../DataBase/db.js'; // Importa la conexión a la base de datos
 
 // Asigna los modelos a variables para su uso en los controladores
 const AlumnosModel = MD_TB_Alumnos.AlumnosModel;
-
 
 // Controladores para operaciones CRUD en la tabla 'alumnos'
 
@@ -45,16 +45,49 @@ export const OBR_Alumnos_CTS = async (req, res) => {
   }
 };
 
-// Crear un nuevo registro en Alumnos
 export const CR_Alumnos_CTS = async (req, res) => {
   try {
-    const registro = await AlumnosModel.create(req.body);
+    const { prospecto, ...resto } = req.body; // Desestructuramos el `prospecto` y el resto de los datos
+
+    console.log('Datos recibidos:', req.body); // Verifica los datos recibidos
+    console.log('Prospecto:', prospecto); // Verifica el valor de prospecto
+
+    // Crear registro en la tabla 'alumnos'
+    const alumnoCreado = await AlumnosModel.create(req.body);
+    console.log('Alumno creado en alumnos:', alumnoCreado); // Verifica el alumno creado
+
+    // Si el alumno es de tipo 'prospecto', insertamos en la tabla 'alumnos_prospecto'
+    if (prospecto === 'prospecto') {
+      console.log('Alumno es prospecto, insertando en alumnos_prospecto');
+
+      // Crear el mismo registro en la tabla 'alumnos_prospecto'
+      await db.query(
+        'INSERT INTO alumnos_prospecto (nombre, prospecto, c, email, celular, punto_d, motivo, user_id, fecha_creacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        {
+          replacements: [
+            alumnoCreado.nombre,
+            alumnoCreado.prospecto,
+            alumnoCreado.c,
+            alumnoCreado.email,
+            alumnoCreado.celular,
+            alumnoCreado.punto_d,
+            alumnoCreado.motivo,
+            alumnoCreado.user_id,
+            alumnoCreado.fecha_creacion,
+          ]
+        }
+      );
+      console.log('Alumno insertado en alumnos_prospecto');
+    } else {
+      console.log('Alumno no es prospecto, no se insertó en alumnos_prospecto');
+    }
+
     res.json({ message: 'Registro creado correctamente' });
   } catch (error) {
+    console.error('Error al crear el alumno:', error); // Log del error
     res.json({ mensajeError: error.message });
   }
 };
-
 
 // Eliminar un registro en Alumnos por su ID
 export const ER_Alumnos_CTS = async (req, res) => {
