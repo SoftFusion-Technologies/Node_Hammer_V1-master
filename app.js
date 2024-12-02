@@ -942,12 +942,16 @@ const crearAsistenciasAutomáticas = async () => {
     );
 
     // Filtrar los valores nulos (para los fines de semana) y crear las asistencias
-    const asistenciasFiltradas = asistencias.filter((asistencia) => asistencia !== null);
+    const asistenciasFiltradas = asistencias.filter(
+      (asistencia) => asistencia !== null
+    );
 
     if (asistenciasFiltradas.length > 0) {
       // Insertar todas las asistencias de una vez
       await AsistenciasModel.bulkCreate(asistenciasFiltradas);
-      console.log('Asistencias creadas con éxito para todos los alumnos (lunes a viernes).');
+      console.log(
+        'Asistencias creadas con éxito para todos los alumnos (lunes a viernes).'
+      );
     } else {
       console.log('No se crearon asistencias, ya que es fin de semana.');
     }
@@ -955,7 +959,6 @@ const crearAsistenciasAutomáticas = async () => {
     console.error('Error al crear asistencias automáticas:', error);
   }
 };
-
 
 // Configuración del cron job
 cron.schedule(
@@ -1474,21 +1477,22 @@ app.get(
       // Consulta para obtener el total de alumnos con más de 6 "P" por profesor
       const [result] = await pool.query(
         `SELECT 
-          u.id AS profesor_id,
-          u.name AS profesor_nombre,
-          COUNT(DISTINCT al.id) AS totalalumnos
-       FROM 
-          users AS u
-       JOIN 
-          alumnos AS al ON u.id = al.user_id
-       JOIN 
-          asistencias AS a ON al.id = a.alumno_id
-       WHERE 
-          a.estado = 'P'
-       GROUP BY 
-          u.id, u.name
-       HAVING 
-          COUNT(CASE WHEN a.estado = 'P' THEN a.id END) > 6`
+    u.id AS profesor_id,
+    u.name AS profesor_nombre,
+    COUNT(DISTINCT al.id) AS totalalumnos
+FROM 
+    users AS u
+JOIN 
+    alumnos AS al ON u.id = al.user_id
+JOIN 
+    (SELECT alumno_id
+     FROM asistencias 
+     WHERE estado = 'P'
+     GROUP BY alumno_id
+     HAVING COUNT(alumno_id) > 6) AS a ON al.id = a.alumno_id
+GROUP BY 
+    u.id, u.name;
+`
       );
 
       // Enviar la respuesta con los resultados
@@ -1675,20 +1679,22 @@ app.get('/estadisticas/tasa-asistencia-por-profe', async (req, res) => {
     // Consulta para obtener el total de alumnos con más de 6 "P" por profesor
     const [alumnos] = await pool.query(
       `SELECT 
-          u.id AS profesor_id,
-          COUNT(DISTINCT al.id) AS totalalumnos
-       FROM 
-          users AS u
-       JOIN 
-          alumnos AS al ON u.id = al.user_id
-       JOIN 
-          asistencias AS a ON al.id = a.alumno_id
-       WHERE 
-          a.estado = 'P'
-       GROUP BY 
-          u.id
-       HAVING 
-          COUNT(CASE WHEN a.estado = 'P' THEN a.id END) > 6`
+    u.id AS profesor_id,
+    u.name AS profesor_nombre,
+    COUNT(DISTINCT al.id) AS totalalumnos
+FROM 
+    users AS u
+JOIN 
+    alumnos AS al ON u.id = al.user_id
+JOIN 
+    (SELECT alumno_id
+     FROM asistencias 
+     WHERE estado = 'P'
+     GROUP BY alumno_id
+     HAVING COUNT(alumno_id) > 6) AS a ON al.id = a.alumno_id
+GROUP BY 
+    u.id, u.name;
+`
     );
 
     // Crear un objeto para almacenar la tasa de asistencia por profesor
