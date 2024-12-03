@@ -47,18 +47,15 @@ export const OBR_Asistencias_CTS = async (req, res) => {
 
 // Agregar este nuevo endpoint
 export const GET_Asistencia = async (req, res) => {
-  const { alumno_id, dia } = req.params;
+  const { alumno_id, dia } = req.params; // Deberías acceder a los parámetros de la URL
 
-  // Obtener mes y año actuales
-  const mesActual = moment().month() + 1; // Los meses en Moment van de 0 a 11
-  const anioActual = moment().year();
   try {
     const existingRecord = await AsistenciasModel.findOne({
       where: {
         alumno_id: alumno_id,
         dia: dia,
-        mes: mesActual,
-        anio: anioActual
+        mes: new Date().getMonth() + 1, // Asegúrate de que el mes también esté siendo verificado
+        anio: new Date().getFullYear() // Verifica el año también
       }
     });
 
@@ -86,7 +83,8 @@ export const CR_Asistencias_CTS = async (req, res) => {
       where: {
         alumno_id: alumno_id,
         dia: dia,
-        estado: estado
+        mes: new Date().getMonth() + 1, // Mes actual (ten en cuenta que en JavaScript los meses van de 0 a 11)
+        anio: new Date().getFullYear() // Año actual
       }
     });
 
