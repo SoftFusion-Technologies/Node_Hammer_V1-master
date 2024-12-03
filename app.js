@@ -207,6 +207,7 @@ const multerUpload = multer({
       'image/jpeg',
       'image/png',
       'image/jpg',
+      'image/webp', // Agregar soporte para capturas WebP
       'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // Para .docx
@@ -217,7 +218,7 @@ const multerUpload = multer({
     else cb(new Error(`Solo se permiten ${MIMETYPES.join(', ')}.`));
   },
   limits: {
-    fileSize: 30000000 // Tamaño máximo del archivo (30 MB)
+    fileSize: 70000000 // Tamaño máximo del archivo antes (30 MB) ahora 60
   }
 });
 
@@ -1331,6 +1332,8 @@ app.post(
     if (!file) {
       return res.status(400).json({ message: 'Archivo no proporcionado' });
     }
+
+    console.log(`Tamaño del archivo recibido: ${file.size} bytes`);
 
     // Guardar la ruta del archivo
     const imagePath = `uploads/agendas/${file.filename}`;
