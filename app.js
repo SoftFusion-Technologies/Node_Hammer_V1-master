@@ -913,6 +913,18 @@ const obtenerDiaAsistenciaAlumno = async (alumnoId) => {
   return ultimaAsistencia ? ultimaAsistencia.dia + 1 : 1; // Si no hay asistencia, empieza en el día 1
 };
 
+// Función para eliminar asistencias futuras
+const eliminarAsistenciasFuturas = async () => {
+  const fechaHoy = new Date();
+  const diaHoy = fechaHoy.getDate(); // Obtener el día actual del mes
+  await AsistenciasModel.destroy({
+    where: {
+      dia: { [Op.gt]: diaHoy } // Borrar asistencias con día mayor al actual
+    }
+  });
+  console.log(`Asistencias futuras eliminadas hasta el día ${diaHoy}.`);
+};
+
 // Función para crear asistencias automáticas
 const crearAsistenciasAutomáticas = async () => {
   try {
@@ -920,16 +932,21 @@ const crearAsistenciasAutomáticas = async () => {
     const alumnos = await AlumnosModel.findAll();
 
     // 2. Crear una asistencia con estado "A" para cada alumno solo si es de lunes a viernes
+    const fechaHoy = new Date();
+    const diaHoy = fechaHoy.getDate();
+    const diaSemana = fechaHoy.getDay(); // Devuelve un número del 0 (domingo) al 6 (sábado)
+
+    if (diaSemana < 1 || diaSemana > 5) {
+      console.log('No se crean asistencias los fines de semana.');
+      return;
+    }
+
     const asistencias = await Promise.all(
       alumnos.map(async (alumno) => {
         const diaAsistencia = await obtenerDiaAsistenciaAlumno(alumno.id);
 
-        // Obtener el día de la semana (0: Domingo, 1: Lunes, ..., 6: Sábado)
-        const fechaAsistencia = new Date();
-        const diaSemana = fechaAsistencia.getDay(); // Devuelve un número del 0 (domingo) al 6 (sábado)
-
-        // Solo crear asistencia si es de lunes a viernes (1 a 5)
-        if (diaSemana >= 1 && diaSemana <= 5) {
+        // Crear asistencia solo si coincide con el día actual
+        if (diaAsistencia === diaHoy) {
           return {
             alumno_id: alumno.id,
             dia: diaAsistencia,
@@ -937,12 +954,11 @@ const crearAsistenciasAutomáticas = async () => {
           };
         }
 
-        // Si es fin de semana (sábado o domingo), no se crea asistencia
-        return null; // No retornamos nada si es fin de semana
+        return null; // Ignorar días que no coinciden con el día actual
       })
     );
 
-    // Filtrar los valores nulos (para los fines de semana) y crear las asistencias
+    // Filtrar los valores nulos
     const asistenciasFiltradas = asistencias.filter(
       (asistencia) => asistencia !== null
     );
@@ -951,11 +967,14 @@ const crearAsistenciasAutomáticas = async () => {
       // Insertar todas las asistencias de una vez
       await AsistenciasModel.bulkCreate(asistenciasFiltradas);
       console.log(
-        'Asistencias creadas con éxito para todos los alumnos (lunes a viernes).'
+        'Asistencias creadas con éxito para el día de hoy (lunes a viernes).'
       );
     } else {
-      console.log('No se crearon asistencias, ya que es fin de semana.');
+      console.log('No se crearon asistencias para el día de hoy.');
     }
+
+    // Eliminar asistencias creadas por error para días futuros
+    await eliminarAsistenciasFuturas();
   } catch (error) {
     console.error('Error al crear asistencias automáticas:', error);
   }
@@ -1437,9 +1456,8 @@ app.get('/asistencia/:dia', async (req, res) => {
 
 // endpoint que devuelve las agendas pendientes agrupadas por alumno
 app.get('/notificaciones', async (req, res) => {
-  const { user_id } = req.query; // Obtenemos el user_id de los parámetros de consulta
+  const { user_id } = req.query;
 
-  // Verificamos si el user_id está presente
   if (!user_id) {
     return res.status(400).json({ error: 'Falta el id del instructor' });
   }
@@ -1447,20 +1465,30 @@ app.get('/notificaciones', async (req, res) => {
   try {
     const [result] = await pool.query(
       `SELECT DISTINCT
-          a.alumno_id, 
-          a.agenda_num, 
-          al.nombre AS alumno_nombre
+          a.alumno_id,
+          a.agenda_num,
+          al.nombre AS alumno_nombre,
+          a.contenido AS estado_agenda
        FROM 
           agendas AS a
        JOIN 
           alumnos AS al ON a.alumno_id = al.id
        WHERE 
           a.contenido = 'PENDIENTE'
+          AND NOT EXISTS (
+              SELECT 1 
+              FROM agendas AS sub_a
+              WHERE 
+                  sub_a.alumno_id = a.alumno_id
+                  AND sub_a.agenda_num = a.agenda_num
+                  AND sub_a.contenido IN ('REVISIÓN', 'ENVIADO')
+          )
           AND al.user_id = ?
        ORDER BY 
           a.alumno_id, a.agenda_num`,
-      [user_id] // Usamos el user_id en la consulta
+      [user_id]
     );
+
     res.json(result);
   } catch (error) {
     console.error('Error obteniendo notificaciones:', error);
