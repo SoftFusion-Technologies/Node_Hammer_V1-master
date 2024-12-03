@@ -21,6 +21,7 @@ import MD_TB_Asistencias from '../Models/MD_TB_Asistencias.js';
 
 // Asigna los modelos a variables para su uso en los controladores
 const AsistenciasModel = MD_TB_Asistencias.AsistenciasModel;
+import moment from 'moment'; // Asegúrate de que esta librería esté instalada
 
 // Controladores para operaciones CRUD en la tabla 'asistencias'
 
@@ -48,11 +49,16 @@ export const OBR_Asistencias_CTS = async (req, res) => {
 export const GET_Asistencia = async (req, res) => {
   const { alumno_id, dia } = req.params;
 
+  // Obtener mes y año actuales
+  const mesActual = moment().month() + 1; // Los meses en Moment van de 0 a 11
+  const anioActual = moment().year();
   try {
     const existingRecord = await AsistenciasModel.findOne({
       where: {
         alumno_id: alumno_id,
-        dia: dia
+        dia: dia,
+        mes: mesActual,
+        anio: anioActual
       }
     });
 
