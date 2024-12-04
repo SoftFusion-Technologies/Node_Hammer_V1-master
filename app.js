@@ -919,7 +919,11 @@ const eliminarAsistenciasFuturas = async () => {
   const diaHoy = fechaHoy.getDate(); // Obtener el día actual del mes
   await AsistenciasModel.destroy({
     where: {
-      dia: { [Op.gt]: diaHoy } // Borrar asistencias con día mayor al actual
+      [Op.and]: [
+        { dia: { [Op.gt]: diaHoy } }, // Días mayores al actual
+        { mes: mesHoy }, // Asegurarse de que sea el mismo mes
+        { anio: anioHoy } // Asegurarse de que sea el mismo año
+      ]
     }
   });
   console.log(`Asistencias futuras eliminadas hasta el día ${diaHoy}.`);
@@ -931,49 +935,46 @@ const crearAsistenciasAutomáticas = async () => {
     // 1. Obtener todos los alumnos
     const alumnos = await AlumnosModel.findAll();
 
-    // 2. Crear una asistencia con estado "A" para cada alumno solo si es de lunes a viernes
+    // 2. Crear asistencia solo si es lunes a viernes
     const fechaHoy = new Date();
+    const diaSemana = fechaHoy.getDay(); // Número del día (0 = domingo, 6 = sábado)
     const diaHoy = fechaHoy.getDate();
-    const diaSemana = fechaHoy.getDay(); // Devuelve un número del 0 (domingo) al 6 (sábado)
+    const mesHoy = fechaHoy.getMonth() + 1;
+    const anioHoy = fechaHoy.getFullYear();
 
-    if (diaSemana < 1 || diaSemana > 5) {
+    if (diaSemana === 0 || diaSemana === 6) {
       console.log('No se crean asistencias los fines de semana.');
       return;
     }
 
-    const asistencias = await Promise.all(
-      alumnos.map(async (alumno) => {
-        const diaAsistencia = await obtenerDiaAsistenciaAlumno(alumno.id);
+    // 3. Eliminar asistencias existentes para hoy
+    await AsistenciasModel.destroy({
+      where: {
+        dia: diaHoy,
+        mes: mesHoy,
+        anio: anioHoy,
+        estado: 'A' // Solo eliminar asistencias con estado "Ausente"
+      }
+    });
+    console.log('Asistencias existentes eliminadas.');
+    // 3. Crear asistencias
+    const asistencias = alumnos.map((alumno) => ({
+      alumno_id: alumno.id,
+      dia: diaHoy,
+      mes: mesHoy,
+      anio: anioHoy,
+      estado: 'A' // Estado inicial como "Ausente"
+    }));
 
-        // Crear asistencia solo si coincide con el día actual
-        if (diaAsistencia === diaHoy) {
-          return {
-            alumno_id: alumno.id,
-            dia: diaAsistencia,
-            estado: 'A'
-          };
-        }
-
-        return null; // Ignorar días que no coinciden con el día actual
-      })
-    );
-
-    // Filtrar los valores nulos
-    const asistenciasFiltradas = asistencias.filter(
-      (asistencia) => asistencia !== null
-    );
-
-    if (asistenciasFiltradas.length > 0) {
-      // Insertar todas las asistencias de una vez
-      await AsistenciasModel.bulkCreate(asistenciasFiltradas);
-      console.log(
-        'Asistencias creadas con éxito para el día de hoy (lunes a viernes).'
-      );
+    if (asistencias.length > 0) {
+      // Insertar todas las asistencias
+      await AsistenciasModel.bulkCreate(asistencias);
+      console.log('Asistencias creadas con éxito.');
     } else {
-      console.log('No se crearon asistencias para el día de hoy.');
+      console.log('No se encontraron alumnos para registrar asistencias.');
     }
 
-    // Eliminar asistencias creadas por error para días futuros
+    // 4. Eliminar asistencias futuras
     await eliminarAsistenciasFuturas();
   } catch (error) {
     console.error('Error al crear asistencias automáticas:', error);
@@ -1134,18 +1135,18 @@ const generarAlertaProspecto = async () => {
 
     // Itera sobre los alumnos prospecto
     for (const alumno of alumnosProspecto) {
-      // Calculamos el día siguiente a la fecha de creación del alumno
+      // Calculamos la fecha 7 días después de la fecha de creación del alumno
       const fechaCreacion = new Date(alumno.fecha_creacion);
-      const fechaSiguiente = new Date(fechaCreacion);
-      fechaSiguiente.setDate(fechaCreacion.getDate() + 1); // Día siguiente
-      const fechaSiguienteISO = fechaSiguiente.toISOString().split('T')[0]; // Solo la fecha (sin hora)
+      const fechaSieteDias = new Date(fechaCreacion);
+      fechaSieteDias.setDate(fechaCreacion.getDate() + 7); // 7 días después
+      const fechaSieteDiasISO = fechaSieteDias.toISOString().split('T')[0]; // Solo la fecha (sin hora)
 
       console.log(
-        `Fecha siguiente para alumno_id ${alumno.id}: ${fechaSiguienteISO}`
+        `Fecha para generar alerta (7 días después) para alumno_id ${alumno.id}: ${fechaSieteDiasISO}`
       );
 
-      // Verificamos si la fecha siguiente es igual a hoy
-      if (fechaSiguienteISO === fechaHoyISO) {
+      // Verificamos si la fecha calculada es igual a hoy
+      if (fechaSieteDiasISO === fechaHoyISO) {
         console.log(
           `Generando alerta para alumno_id ${alumno.id} en la agenda 3`
         );
