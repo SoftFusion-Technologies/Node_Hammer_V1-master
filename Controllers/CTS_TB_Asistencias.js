@@ -47,15 +47,15 @@ export const OBR_Asistencias_CTS = async (req, res) => {
 
 // Agregar este nuevo endpoint
 export const GET_Asistencia = async (req, res) => {
-  const { alumno_id, dia } = req.params; // Deberías acceder a los parámetros de la URL
+  const { alumno_id, dia, mes, anio} = req.params; // Deberías acceder a los parámetros de la URL
 
   try {
     const existingRecord = await AsistenciasModel.findOne({
       where: {
         alumno_id: alumno_id,
         dia: dia,
-        mes: new Date().getMonth() + 1, // Asegúrate de que el mes también esté siendo verificado
-        anio: new Date().getFullYear() // Verifica el año también
+        mes: mes,
+        anio: anio
       }
     });
 
@@ -76,7 +76,7 @@ export const GET_Asistencia = async (req, res) => {
 // Crear un nuevo registro en Asistencias
 export const CR_Asistencias_CTS = async (req, res) => {
   try {
-    const { alumno_id, dia, estado } = req.body;
+    const { alumno_id, dia, estado} = req.body;
 
     // Verificar si ya existe un registro con el mismo alumno_id, dia y estado
     const existingRecord = await AsistenciasModel.findOne({
