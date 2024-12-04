@@ -676,7 +676,7 @@ router.delete('/asistencias/:id', ER_Asistencias_CTS);
 router.put('/asistencias/:id', UR_Asistencias_CTS);
 
 // Nueva ruta para verificar asistencia
-router.get('/asistencias/:alumno_id/:dia', GET_Asistencia);
+router.get('/asistencias/:alumno_id/:dia/:mes/:anio', GET_Asistencia);
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de Agendas tb_15
