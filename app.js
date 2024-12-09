@@ -232,7 +232,7 @@ app.post(
       return res.status(400).json({ message: 'Archivo no proporcionado' });
     }
 
-    const imagePath = `uploads/${req.file.filename}`;
+    const imagePath = `uploads/agendas/${req.file.filename}`;
     const fecha = req.body.fecha;
 
     try {
@@ -271,10 +271,11 @@ app.get('/download/:id', async (req, res) => {
       return res.status(404).json({ message: 'Imagen no encontrada.' });
     }
 
-    // Construir la ruta relativa a la carpeta "uploads"
+    // Construir la ruta completa de la imagen
     const imagePath = join(
       CURRENT_DIR,
       'uploads',
+      'agendas',
       rows[0].image_path.split('/').pop()
     );
     console.log('Ruta completa de la imagen:', imagePath);
@@ -326,7 +327,7 @@ app.post(
       return res.status(400).json({ message: 'Archivo no proporcionado' });
     }
 
-    const imagePath = `uploads/${req.file.filename}`;
+    const imagePath = `uploads/agendas/${req.file.filename}`;
     const fecha = req.body.fecha;
 
     try {
@@ -368,6 +369,7 @@ app.get('/downloadfac/:id', async (req, res) => {
     const imagePath = join(
       CURRENT_DIR,
       'uploads',
+      'agendas',
       rows[0].image_path.split('/').pop()
     );
     console.log('Ruta completa de la imagen:', imagePath);
@@ -418,7 +420,8 @@ app.post(
       return res.status(400).json({ message: 'Archivo no proporcionado' });
     }
 
-    const filePath = `uploads/${req.file.filename}`;
+    // Actualizar la ruta para incluir "agendas"
+    const filePath = `uploads/agendas/${req.file.filename}`;
 
     try {
       // Guardar la ruta del archivo en la base de datos
@@ -435,6 +438,7 @@ app.post(
     }
   }
 );
+
 app.get('/download/novedad/:id', async (req, res) => {
   const { id } = req.params;
 
