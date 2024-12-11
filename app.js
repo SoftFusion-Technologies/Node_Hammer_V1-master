@@ -1211,18 +1211,33 @@ cron.schedule('0 0 * * *', async () => {
 const genAlertInactivos = async () => {
   try {
     const hoy = new Date();
+    const diaSemana = hoy.getDay(); // 0: Domingo, 1: Lunes, ..., 4: Jueves, 5: Viernes
+
+    // Solo ejecuta los jueves (4) y viernes (5)
+    if (diaSemana !== 4 && diaSemana !== 5) {
+      console.log('No es jueves ni viernes, el proceso no se ejecuta.');
+      return;
+    }
+
     const fechaLimite = new Date(hoy);
     fechaLimite.setDate(hoy.getDate() - 5); // 5 días atrás
     const fechaLimiteISO = fechaLimite.toISOString().split('T')[0];
     console.log(`Fecha límite para inactivos: ${fechaLimiteISO}`);
 
-    // Obtén los alumnos que tienen 5 días consecutivos con estado 'A'
+    // Obtén los alumnos con 5 días consecutivos de estado 'A'
+    // Y verifica que no tengan un presente ('P') DESPUÉS del periodo evaluado
     const [alumnos] = await pool.execute(
-      `SELECT DISTINCT alumno_id
-       FROM asistencias
-       WHERE estado = 'A'
-       GROUP BY alumno_id
-       HAVING COUNT(DISTINCT dia) >= 5`,
+      `SELECT DISTINCT a.alumno_id
+       FROM asistencias a
+       WHERE a.estado = 'A'
+       AND NOT EXISTS (
+         SELECT 1 FROM asistencias p
+         WHERE p.alumno_id = a.alumno_id
+         AND p.estado = 'P'
+         AND p.dia > ?
+       )
+       GROUP BY a.alumno_id
+       HAVING COUNT(DISTINCT a.dia) >= 5`,
       [fechaLimiteISO]
     );
 
@@ -1256,7 +1271,6 @@ const genAlertInactivos = async () => {
   }
 };
 
-// genAlertInactivos(); se comenta
 // Configura el cron job para ejecutarse diariamente
 cron.schedule('0 0 * * *', async () => {
   console.log('Ejecutando cron de alertas para los inactivos...');
@@ -1544,7 +1558,6 @@ app.get(
     }
   }
 );
-
 
 // Endpoint que devuelve el total de asistencias por profesor
 app.get('/estadisticas/asistencias-por-profe', async (req, res) => {
