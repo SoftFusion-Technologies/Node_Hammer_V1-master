@@ -1510,28 +1510,31 @@ app.get(
   '/estadisticas/profesores-con-alumnos-mas-de-seis-p',
   async (req, res) => {
     try {
-      // Consulta para obtener el total de alumnos con más de 6 "P" por profesor
       const [result] = await pool.query(
         `SELECT 
-    u.id AS profesor_id,
-    u.name AS profesor_nombre,
-    COUNT(DISTINCT al.id) AS totalalumnos
-FROM 
-    users AS u
-JOIN 
-    alumnos AS al ON u.id = al.user_id
-JOIN 
-    (SELECT alumno_id
-     FROM asistencias 
-     WHERE estado = 'P'
-     GROUP BY alumno_id
-     HAVING COUNT(alumno_id) > 6) AS a ON al.id = a.alumno_id
-GROUP BY 
-    u.id, u.name;
-`
+          u.id AS profesor_id,
+          u.name AS profesor_nombre,
+          COUNT(DISTINCT al.id) AS total_alumnos
+       FROM 
+          users AS u
+       JOIN 
+          alumnos AS al ON u.id = al.user_id
+       JOIN 
+          (SELECT alumno_id
+           FROM asistencias 
+           WHERE estado = 'P'
+           GROUP BY alumno_id
+           HAVING COUNT(alumno_id) > 5) AS a ON al.id = a.alumno_id
+       GROUP BY 
+          u.id, u.name
+       ORDER BY 
+          total_alumnos DESC`
       );
 
-      // Enviar la respuesta con los resultados
+      if (!result || result.length === 0) {
+        return res.status(404).json({ message: 'No se encontraron datos' });
+      }
+
       res.json(result);
     } catch (error) {
       console.error('Error obteniendo estadísticas de profesores:', error);
@@ -1541,6 +1544,7 @@ GROUP BY
     }
   }
 );
+
 
 // Endpoint que devuelve el total de asistencias por profesor
 app.get('/estadisticas/asistencias-por-profe', async (req, res) => {
