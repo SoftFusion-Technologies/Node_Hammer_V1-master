@@ -1207,6 +1207,26 @@ cron.schedule('0 0 * * *', async () => {
   await generarAlertaProspecto();
 });
 
+// Registrar la creación de una nueva alerta
+const registrarCreacionAlerta = async (alumno_id, agenda_num) => {
+  try {
+    const hoy = new Date();
+    const mes = hoy.getMonth() + 1;
+    const anio = hoy.getFullYear();
+
+    await pool.execute(
+      `INSERT INTO alertas_creadas (alumno_id, fecha_creacion, agenda_num, mes, anio)
+       VALUES (?, ?, ?, ?, ?)`,
+      [alumno_id, new Date(), agenda_num, mes, anio]
+    );
+    console.log(
+      `Alerta creada y registrada para el alumno_id: ${alumno_id}, mes: ${mes}, año: ${anio}`
+    );
+  } catch (error) {
+    console.error('Error al registrar la creación de la alerta:', error);
+  }
+};
+
 // Función para generar alertas de inactivos (sin asistencia en 5 días)
 const genAlertInactivos = async () => {
   try {
@@ -1231,36 +1251,59 @@ const genAlertInactivos = async () => {
        FROM asistencias a
        WHERE a.estado = 'A'
        AND NOT EXISTS (
-         SELECT 1 FROM asistencias p
-         WHERE p.alumno_id = a.alumno_id
-         AND p.estado = 'P'
-         AND p.dia > ?
-       )
-       GROUP BY a.alumno_id
-       HAVING COUNT(DISTINCT a.dia) >= 5`,
-      [fechaLimiteISO]
+        SELECT 1 
+        FROM asistencias p
+        WHERE p.alumno_id = a.alumno_id
+        AND p.estado = 'P'
+      )
+      GROUP BY a.alumno_id
+      HAVING COUNT(DISTINCT a.dia) >= 5`
     );
 
+    const agenda_num = 4; // Alerta para inactividad
+
     for (const alumno of alumnos) {
-      // Verifica si ya existe la alerta para este alumno y agenda_num = 4 (Inactivos)
+      // Verifica si ya existe la alerta para este alumno y agenda_num = 4 (Inactivos) en el mes y año actual
       const [alertasExistentes] = await pool.execute(
-        `SELECT id FROM agendas WHERE alumno_id = ? AND agenda_num = 4`,
-        [alumno.alumno_id]
+        `SELECT id FROM agendas WHERE alumno_id = ? AND agenda_num = ?`,
+        [alumno.alumno_id, agenda_num]
+      );
+
+      // Verifica si ya existe un registro de creación en alertas_creadas para el mes y año actual
+      const [alertasCreadas] = await pool.execute(
+        `SELECT fecha_creacion, mes, anio 
+         FROM alertas_creadas 
+         WHERE alumno_id = ? AND agenda_num = ? AND mes = ? AND anio = ?`,
+        [alumno.alumno_id, agenda_num, hoy.getMonth() + 1, hoy.getFullYear()]
       );
 
       if (alertasExistentes.length === 0) {
-        // Si no existe, inserta la nueva alerta
+        if (alertasCreadas.length > 0) {
+          console.log(
+            `Ya existe una alerta de inactividad para el alumno_id: ${
+              alumno.alumno_id
+            } en el mes ${
+              hoy.getMonth() + 1
+            } y año ${hoy.getFullYear()}. No se crea una nueva.`
+          );
+          continue; // No creamos la alerta, pasamos al siguiente alumno
+        }
+
+        // Si no existe una alerta para este mes, se crea la alerta
         console.log(
           `Insertando alerta de inactividad para alumno_id: ${alumno.alumno_id}`
         );
         await pool.execute(
           `INSERT INTO agendas (alumno_id, agenda_num, contenido)
-           VALUES (?, 4, 'PENDIENTE')`,
-          [alumno.alumno_id]
+           VALUES (?, ?, 'PENDIENTE')`,
+          [alumno.alumno_id, agenda_num]
         );
+
+        // Registrar la creación de la alerta en la tabla alertas_creadas
+        await registrarCreacionAlerta(alumno.alumno_id, agenda_num);
       } else {
         console.log(
-          `Alerta de inactividad ya existente para alumno_id: ${alumno.alumno_id}, no se crea duplicado.`
+          `Alerta de inactividad ya existente para alumno_id: ${alumno.alumno_id} en el mes y año actual. No se crea una nueva alerta.`
         );
       }
     }
