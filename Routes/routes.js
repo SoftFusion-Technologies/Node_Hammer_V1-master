@@ -243,6 +243,14 @@ import {
   ER_AgendaImagenes_CTS
 } from '../Controllers/CTS_TB_AgendaImages.js';
 
+import {
+  OBRS_AgendaMotivos_CTS,
+  OBR_AgendaMotivos_CTS,
+  CR_AgendaMotivos_CTS,
+  ER_AgendaMotivos_CTS,
+  UR_AgendaMotivos_CTS
+} from '../Controllers/CTS_TB_AgendaMotivos.js';
+
 // Crea un enrutador de Express
 const router = express.Router();
 
@@ -707,5 +715,23 @@ router.get('/get-agenda-files/:agenda_id', OBRS_AgendaImagenes_CTS);
 router.delete('/delete-agenda-file/:archivoId', ER_AgendaImagenes_CTS); // Eliminar un archivo de la agenda
 
 // R9- Planilla Instructores  22-10-2024 - Benjamin Orellana - FINAL
+// ----------------------------------------------------------------
+// Definición de rutas para la tabla agenda_motivos
+// ----------------------------------------------------------------
+
+// Ruta para obtener todos los registros
+router.get('/agenda-motivos', OBRS_AgendaMotivos_CTS);
+
+// Ruta para obtener un registro por ID
+router.get('/agenda-motivos/:id', OBR_AgendaMotivos_CTS);
+
+// Ruta para crear un nuevo registro
+router.post('/agenda-motivos', CR_AgendaMotivos_CTS);
+
+// Ruta para actualizar un registro por ID
+router.put('/agenda-motivos/:id', UR_AgendaMotivos_CTS);
+
+// Ruta para eliminar un registro por ID
+router.delete('/agenda-motivos/:id', ER_AgendaMotivos_CTS);
 // Exporta el enrutador
 export default router;
