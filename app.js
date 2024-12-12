@@ -1416,9 +1416,9 @@ app.post(
 
     console.log(`Tamaño del archivo recibido: ${file.size} bytes`);
 
-    // Guardar la ruta del archivo
-    const imagePath = `uploads/agendas/${file.filename}`;
-    const fileName = file.originalname; // Nombre original del archivo
+    // Al guardar la imagen en el backend
+    const imagePath = `uploads/agendas/${file.filename}`; // `file.filename` contiene el nombre con el timestamp
+    const fileName = file.originalname; // Nombre original del archivo (sin timestamp), si es necesario
 
     // Verificar que los datos necesarios existan
     if (!agenda_id || !agenda_num || !alumno_id) {
@@ -1429,7 +1429,7 @@ app.post(
       // Insertar los datos en la tabla agenda_imagenes
       await pool.query(
         'INSERT INTO agenda_imagenes (agenda_id, agenda_num, alumno_id, nombre_archivo, ruta_archivo) VALUES (?, ?, ?, ?, ?)',
-        [agenda_id, agenda_num, alumno_id, fileName, imagePath]
+        [agenda_id, agenda_num, alumno_id, file.filename, imagePath] // Usa file.filename con el timestamp
       );
 
       // Responder con éxito
@@ -1853,6 +1853,12 @@ app.get('/estadisticas/mensajes-por-profe', async (req, res) => {
 
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
+
+// Servir imágenes estáticas desde la carpeta 'uploads/agendas'
+app.use(
+  '/agendas-images-ver',
+  express.static(join(CURRENT_DIR, 'uploads', 'agendas'))
+);
 
 if (!PORT) {
   console.error('El puerto no está definido en el archivo de configuración.');
