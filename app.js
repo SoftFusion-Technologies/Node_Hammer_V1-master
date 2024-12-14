@@ -1851,12 +1851,114 @@ app.get('/estadisticas/mensajes-por-profe', async (req, res) => {
   }
 });
 
+// Ruta para subir imagen de preguntas frecuentes
+app.post(
+  '/upload-imagen-pregunta', // Endpoint para subir la imagen
+  multerUpload.single('file'), // Usamos multer para manejar la carga del archivo
+  async (req, res) => {
+    const { pregunta_id } = req.body; // Extraer pregunta_id de req.body
+    const file = req.file; // Obtener el archivo subido
+
+    // Verificar que el archivo haya sido cargado
+    if (!file) {
+      return res.status(400).json({ message: 'Archivo no proporcionado' });
+    }
+
+    console.log(`Tamaño del archivo recibido: ${file.size} bytes`);
+
+    // Verificar que el pregunta_id esté presente
+    if (!pregunta_id) {
+      return res
+        .status(400)
+        .json({ message: 'El ID de la pregunta es requerido.' });
+    }
+
+    // Al guardar la imagen en el backend
+    const imagePath = `uploads/agendas/${file.filename}`; // Ruta donde se guarda la imagen (en la carpeta 'agendas')
+    const fileName = file.originalname; // Nombre original del archivo
+
+    try {
+      // Insertar los datos en la tabla imagenes_preguntas_frec
+      await pool.query(
+        'INSERT INTO imagenes_preguntas_frec (pregunta_id, nombre_archivo, ruta_archivo ) VALUES (?, ?, ?)',
+        [pregunta_id, file.filename, imagePath] // Inserta pregunta_id en lugar de descripcion
+      );
+
+      // Responder con éxito
+      res
+        .status(200)
+        .json({ message: 'Imagen subida y guardada correctamente.' });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Error al guardar la imagen.' });
+    }
+  }
+);
+
+// Ruta para descargar imagen por id de la imagen
+app.get('/download-image-pregunta/:id', async (req, res) => {
+  const { id } = req.params; // Obtener el id de la imagen desde los parámetros de la URL
+
+  try {
+    // Recupera el registro de la base de datos
+    const imageRecord = await pool.query(
+      'SELECT * FROM imagenes_preguntas_frec WHERE id = ?',
+      [id]
+    );
+
+    console.log('Resultado de la consulta:', imageRecord);
+
+    // Verifica si existe el registro de la imagen
+    if (imageRecord[0].length === 0) {
+      return res.status(404).json({ message: 'Imagen no encontrada.' });
+    }
+
+    // Accede a la ruta del archivo desde el registro
+    const imagePath = imageRecord[0][0]?.ruta_archivo;
+    console.log('Ruta de archivo:', imagePath);
+
+    if (!imagePath) {
+      return res.status(400).json({ message: 'Ruta de archivo inválida.' });
+    }
+
+    // Construye la ruta completa del archivo
+    const filePath = join(CURRENT_DIR, imagePath); // Asegúrate de que 'uploads/agendas/' esté bien concatenado en la ruta
+    console.log('Ruta completa del archivo:', filePath);
+
+    // Verifica si el archivo existe en el servidor
+    try {
+      await fs.promises.access(filePath);
+    } catch {
+      return res
+        .status(404)
+        .json({ message: 'Archivo no encontrado en el servidor.' });
+    }
+
+    // Configura el tipo de contenido y descarga el archivo
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.download(filePath, (err) => {
+      if (err) {
+        console.error('Error al descargar el archivo:', err);
+        res.status(500).json({ message: 'Error al descargar el archivo.' });
+      }
+    });
+  } catch (error) {
+    console.error('Error en el endpoint de descarga:', error);
+    res.status(500).json({ message: 'Error al procesar la solicitud.' });
+  }
+});
+
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 
 // Servir imágenes estáticas desde la carpeta 'uploads/agendas'
 app.use(
   '/agendas-images-ver',
+  express.static(join(CURRENT_DIR, 'uploads', 'agendas'))
+);
+
+app.use(
+  '/imagenes-preguntas',
   express.static(join(CURRENT_DIR, 'uploads', 'agendas'))
 );
 
