@@ -28,8 +28,12 @@ const AgendaMotivosModel = MD_TB_AgendaMotivos.AgendaMotivosModel;
 
 // Mostrar todos los registros de la tabla agenda_motivos
 export const OBRS_AgendaMotivos_CTS = async (req, res) => {
+  const { agenda_id } = req.params;
   try {
-    const registros = await AgendaMotivosModel.findAll();
+    const registros = await AgendaMotivosModel.findAll({
+      where: { agenda_id }
+    });
+
     res.json(registros);
   } catch (error) {
     res.json({ mensajeError: error.message });
