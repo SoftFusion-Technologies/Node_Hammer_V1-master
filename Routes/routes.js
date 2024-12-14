@@ -251,6 +251,12 @@ import {
   UR_AgendaMotivos_CTS
 } from '../Controllers/CTS_TB_AgendaMotivos.js';
 
+import {
+  OBRS_ImagenesPreguntasFrec_CTS,
+  ER_ImagenesPreguntasFrec_CTS,
+  OBR_ImagenPorPregunta_CTS
+} from '../Controllers/CTS_TB_ImagenesPreguntasFrec.js';
+
 // Crea un enrutador de Express
 const router = express.Router();
 
@@ -733,5 +739,27 @@ router.put('/agenda-motivos/:id', UR_AgendaMotivos_CTS);
 
 // Ruta para eliminar un registro por ID
 router.delete('/agenda-motivos/:id', ER_AgendaMotivos_CTS);
+
+// ----------------------------------------------------------------
+// Rutas para operaciones CRUD en la tabla 'imagenes_preguntas_frec'
+// ----------------------------------------------------------------
+
+// Obtener todos los registros
+router.get(
+  '/imagenes_preguntas_frec/:pregunta_id',
+  OBRS_ImagenesPreguntasFrec_CTS
+);
+
+// Crear un nuevo registro
+
+// Eliminar un registro por ID
+router.delete('/imagenes_preguntas_frec/:id', ER_ImagenesPreguntasFrec_CTS);
+
+// Nueva ruta para obtener la imagen por pregunta_id
+router.get(
+  '/imagenes-preguntas/pregunta/:pregunta_id',
+  OBR_ImagenPorPregunta_CTS
+);
+
 // Exporta el enrutador
 export default router;
