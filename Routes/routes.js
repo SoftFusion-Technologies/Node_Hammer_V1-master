@@ -720,7 +720,7 @@ router.delete('/delete-agenda-file/:archivoId', ER_AgendaImagenes_CTS); // Elimi
 // ----------------------------------------------------------------
 
 // Ruta para obtener todos los registros
-router.get('/agenda-motivos', OBRS_AgendaMotivos_CTS);
+router.get('/agenda-motivos/:agenda_id', OBRS_AgendaMotivos_CTS);
 
 // Ruta para obtener un registro por ID
 router.get('/agenda-motivos/:id', OBR_AgendaMotivos_CTS);
