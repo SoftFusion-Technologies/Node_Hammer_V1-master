@@ -908,15 +908,6 @@ app.get('/integrantes-congelados/:id_conv', async (req, res) => {
   }
 });
 
-// Función para obtener el día de asistencia actual para cada alumno
-const obtenerDiaAsistenciaAlumno = async (alumnoId) => {
-  const ultimaAsistencia = await AsistenciasModel.findOne({
-    where: { alumno_id: alumnoId },
-    order: [['dia', 'DESC']]
-  });
-  return ultimaAsistencia ? ultimaAsistencia.dia + 1 : 1; // Si no hay asistencia, empieza en el día 1
-};
-
 // Función para eliminar asistencias futuras
 const eliminarAsistenciasFuturas = async () => {
   const fechaHoy = new Date();
@@ -1948,6 +1939,84 @@ app.get('/download-image-pregunta/:id', async (req, res) => {
   }
 });
 
+// Función para eliminar alumnos que no han ido al gimnasio desde el 20 en adelante
+const eliminarAlumnosInactivos = async () => {
+  const fechaHoy = new Date();
+  const diaHoy = fechaHoy.getDate(); // Obtener el día actual del mes
+  const mesHoy = fechaHoy.getMonth() + 1;
+  const anioHoy = fechaHoy.getFullYear();
+
+  if (diaHoy < 20) {
+    console.log('No es necesario eliminar alumnos aún.');
+    return;
+  }
+
+  try {
+    // Paso 1: Obtener todos los alumnos que tienen asistencia desde el 20 en adelante
+    const alumnosInactivos = await AlumnosModel.findAll({
+      where: {
+        id: {
+          [Op.in]: db.literal(`
+            (
+              SELECT DISTINCT alumno_id
+              FROM asistencias
+              WHERE (dia >= 20 AND mes = ${mesHoy} AND anio = ${anioHoy}) 
+              AND estado = 'A'
+            )
+          `)
+        }
+      }
+    });
+
+    // Paso 2: Eliminar alumnos que no tienen registro de asistencia como "P" desde el 20 en adelante
+    for (const alumno of alumnosInactivos) {
+      const asistenciasAlumno = await AsistenciasModel.findAll({
+        where: {
+          alumno_id: alumno.id,
+          dia: { [Op.gte]: 20 },
+          mes: mesHoy,
+          anio: anioHoy
+        }
+      });
+
+      // Verificar si el alumno tiene alguna asistencia registrada como "P"
+      const tieneAsistencia = asistenciasAlumno.some(
+        (asistencia) => asistencia.estado === 'P'
+      );
+
+      if (!tieneAsistencia) {
+        // Eliminar el alumno si no tiene asistencia como "P"
+        console.log(`Eliminando alumno con ID: ${alumno.id}`);
+        await AlumnosModel.destroy({
+          where: { id: alumno.id }
+        });
+      }
+    }
+
+    console.log('Proceso de eliminación de alumnos inactivos completado.');
+  } catch (error) {
+    console.error('Error al eliminar alumnos inactivos:', error);
+  }
+};
+
+// Llamar a la función en el momento adecuado, por ejemplo, al inicio de cada día
+eliminarAlumnosInactivos();
+
+// Llamar a la función para eliminar alumnos inactivos a las 00:00 (medianoche) de cada día
+cron.schedule(
+  '0 0 * * *',
+  async () => {
+    try {
+      console.log('Iniciando eliminación de alumnos inactivos...');
+      await eliminarAlumnosInactivos();
+    } catch (error) {
+      console.error('Error en la ejecución del cron job:', error);
+    }
+  },
+  {
+    timezone: 'America/Argentina/Buenos_Aires' // Configura la zona horaria para Buenos Aires
+  }
+);
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 
