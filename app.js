@@ -1705,35 +1705,61 @@ app.get('/estadisticas/convertidos', async (req, res) => {
 // Nuevo Endpoint: Porcentaje de Conversión
 app.get('/estadisticas/porcentaje-conversion', async (req, res) => {
   try {
-    const [result] = await db.query(`
+    // Obtener los prospectos del mes
+    const [prospectos] = await db.query(`
       SELECT 
         u.id AS profesorId, 
         u.name AS profesorName,
-        COALESCE(SUM(CASE WHEN ap.prospecto = 'prospecto' THEN 1 ELSE 0 END), 0) AS totalProspectos,
-        COALESCE(SUM(CASE WHEN a.c = 'c' THEN 1 ELSE 0 END), 0) AS totalConvertidos,
-        CASE 
-          WHEN SUM(CASE WHEN ap.prospecto = 'prospecto' THEN 1 ELSE 0 END) = 0 THEN 0
-          ELSE 
-            ROUND(
-              SUM(CASE WHEN a.c = 'c' THEN 1 ELSE 0 END) * 100 /
-              SUM(CASE WHEN ap.prospecto = 'prospecto' THEN 1 ELSE 0 END),
-              2
-            )
-        END AS porcentajeConversion
+        COUNT(ap.id) AS totalProspectos
       FROM 
         users AS u
-      LEFT JOIN 
+      JOIN 
         alumnos_prospecto AS ap ON u.id = ap.user_id
-      LEFT JOIN 
-        alumnos AS a ON u.id = a.user_id
       WHERE 
-        MONTH(ap.fecha_creacion) = MONTH(CURRENT_DATE()) 
+        ap.prospecto = 'prospecto' 
+        AND MONTH(ap.fecha_creacion) = MONTH(CURRENT_DATE()) 
         AND YEAR(ap.fecha_creacion) = YEAR(CURRENT_DATE())
       GROUP BY 
         u.id, u.name
     `);
 
-    res.status(200).json(result);
+    // Obtener los convertidos del mes
+    const [convertidos] = await db.query(`
+      SELECT 
+        a.user_id AS profesorId, 
+        COUNT(*) AS totalConvertidos
+      FROM 
+        alumnos AS a
+      WHERE 
+        a.c = 'c' 
+        AND MONTH(a.fecha_creacion) = MONTH(CURRENT_DATE()) 
+        AND YEAR(a.fecha_creacion) = YEAR(CURRENT_DATE())
+      GROUP BY 
+        a.user_id
+    `);
+
+    // Combinar los resultados de prospectos y convertidos
+    const resultadoFinal = prospectos.map((profesor) => {
+      const totalProspectos = profesor.totalProspectos;
+      const totalConvertidos =
+        convertidos.find((conv) => conv.profesorId === profesor.profesorId)
+          ?.totalConvertidos || 0;
+
+      const porcentajeConversion =
+        totalProspectos === 0
+          ? 0
+          : ((totalConvertidos / totalProspectos) * 100).toFixed(2);
+
+      return {
+        profesorId: profesor.profesorId,
+        profesorName: profesor.profesorName,
+        totalProspectos,
+        totalConvertidos,
+        porcentajeConversion
+      };
+    });
+
+    res.status(200).json(resultadoFinal);
   } catch (error) {
     console.error('Error obteniendo porcentaje de conversión:', error);
     res
