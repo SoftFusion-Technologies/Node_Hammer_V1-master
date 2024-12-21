@@ -1839,6 +1839,41 @@ GROUP BY
   }
 });
 
+app.get('/estadisticas/retenciones-del-mes', async (req, res) => {
+  try {
+    // 1. Consulta para obtener el nombre del profesor y la cantidad de alumnos retenidos
+    const [retenidos] = await db.query(`
+      SELECT 
+        u.name AS profesor_nombre,  -- Nombre del profesor
+        COUNT(DISTINCT a.id) AS retenidos  -- Número de alumnos retenidos
+      FROM 
+        alumnos AS a
+      LEFT JOIN 
+        asistencias AS asis ON a.id = asis.alumno_id 
+        AND asis.estado = 'P'  -- Solo contamos las asistencias con estado 'P'
+        AND YEAR(asis.dia) = YEAR(CURRENT_DATE())  -- Año actual
+        AND MONTH(asis.dia) = MONTH(CURRENT_DATE())  -- Asistencias en el mes actual
+      LEFT JOIN 
+        users AS u ON a.user_id = u.id  -- Obtener el nombre del profesor
+      WHERE 
+        a.prospecto = 'nuevo'  -- Solo los alumnos nuevos
+        AND YEAR(a.fecha_creacion) = YEAR(CURRENT_DATE())  -- Año actual
+        AND MONTH(a.fecha_creacion) = MONTH(CURRENT_DATE()) - 1  -- Alumnos creados en el mes anterior
+      GROUP BY 
+        u.name;
+    `);
+
+    // 2. Responder con los resultados
+    res.status(200).json(retenidos);
+  } catch (error) {
+    console.error('Error obteniendo estadísticas de retenciones:', error);
+    res
+      .status(500)
+      .json({ error: 'Error al calcular las retenciones del mes' });
+  }
+});
+
+
 app.get('/estadisticas/mensajes-por-profe', async (req, res) => {
   try {
     // Consulta para obtener el total de mensajes enviados por cada profesor
