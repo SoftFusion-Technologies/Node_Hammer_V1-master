@@ -1554,11 +1554,16 @@ app.get('/notificaciones', async (req, res) => {
  * MODULO ESTADISTICAS
  */
 
-// Endpoint que devuelve el total de alumnos con más de 6 "P" por profesor
+// Endpoint que devuelve el total de alumnos con más de 6 "P" por profesor, filtrado por mes y año
 app.get(
   '/estadisticas/profesores-con-alumnos-mas-de-seis-p',
   async (req, res) => {
     try {
+      const currentDate = new Date();
+      const currentMonth = currentDate.getMonth() + 1; // Mes actual si no se especifica
+      const currentYear = currentDate.getFullYear(); // Año actual si no se especifica
+
+      // Consulta SQL para obtener estadísticas filtradas por mes y año
       const [result] = await pool.query(
         `SELECT 
           u.id AS profesor_id,
@@ -1571,19 +1576,24 @@ app.get(
        JOIN 
           (SELECT alumno_id
            FROM asistencias 
-           WHERE estado = 'P'
+           WHERE estado = 'P' AND mes = ? AND anio = ?
            GROUP BY alumno_id
            HAVING COUNT(alumno_id) > 5) AS a ON al.id = a.alumno_id
        GROUP BY 
           u.id, u.name
        ORDER BY 
-          total_alumnos DESC`
+          total_alumnos DESC`,
+        [currentMonth, currentYear]
       );
 
+      // Verificar si hay resultados
       if (!result || result.length === 0) {
-        return res.status(404).json({ message: 'No se encontraron datos' });
+        return res.status(404).json({
+          message: 'No se encontraron datos para el mes y año especificados'
+        });
       }
 
+      // Responder con los datos
       res.json(result);
     } catch (error) {
       console.error('Error obteniendo estadísticas de profesores:', error);
@@ -1597,6 +1607,10 @@ app.get(
 // Endpoint que devuelve el total de asistencias por profesor
 app.get('/estadisticas/asistencias-por-profe', async (req, res) => {
   try {
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth() + 1; // Mes actual
+    const currentYear = currentDate.getFullYear(); // Año actual
+
     // Consulta para obtener el total de asistencias por profesor
     const [result] = await pool.query(
       `SELECT 
@@ -1610,12 +1624,19 @@ app.get('/estadisticas/asistencias-por-profe', async (req, res) => {
        JOIN 
           asistencias AS a ON al.id = a.alumno_id
        WHERE 
-          a.estado = 'P'
+          a.estado = 'P' AND a.mes = ? AND a.anio = ?
        GROUP BY 
           u.id, u.name
        ORDER BY 
-          total_asistencias DESC`
+          total_asistencias DESC`,
+      [currentMonth, currentYear]
     );
+
+    if (!result || result.length === 0) {
+      return res.status(404).json({
+        message: 'No se encontraron asistencias para el mes y año actuales'
+      });
+    }
 
     res.json(result);
   } catch (error) {
@@ -1627,7 +1648,6 @@ app.get('/estadisticas/asistencias-por-profe', async (req, res) => {
 });
 
 // Endpoint que devuelve el Nuevos del Mes por Profe
-
 app.get('/estadisticas/nuevos-del-mes', async (req, res) => {
   try {
     const [result] = await pool.query(`
@@ -1640,14 +1660,20 @@ app.get('/estadisticas/nuevos-del-mes', async (req, res) => {
       JOIN 
         alumnos AS a ON u.id = a.user_id
       WHERE 
-        a.prospecto = 'nuevo' 
-        AND MONTH(a.fecha_creacion) = MONTH(CURRENT_DATE())
-        AND YEAR(a.fecha_creacion) = YEAR(CURRENT_DATE())
+        a.prospecto = 'nuevo'
+        AND a.fecha_creacion >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
       GROUP BY 
         u.id, u.name
       ORDER BY 
         nuevos_del_mes DESC
     `);
+
+    if (!result || result.length === 0) {
+      return res.status(404).json({
+        message: 'No se encontraron nuevos alumnos en los últimos 30 días'
+      });
+    }
+
     res.json(result);
   } catch (error) {
     console.error('Error obteniendo nuevos del mes:', error);
@@ -1668,14 +1694,20 @@ app.get('/estadisticas/prospectos-del-mes', async (req, res) => {
       JOIN 
         alumnos_prospecto AS ap ON u.id = ap.user_id
       WHERE 
-        ap.prospecto = 'prospecto' 
-        AND MONTH(ap.fecha_creacion) = MONTH(CURRENT_DATE())
-        AND YEAR(ap.fecha_creacion) = YEAR(CURRENT_DATE())
+        ap.prospecto = 'prospecto'
+        AND ap.fecha_creacion >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
       GROUP BY 
         u.id, u.name
       ORDER BY 
         prospectos_del_mes DESC
     `);
+
+    if (!result || result.length === 0) {
+      return res.status(404).json({
+        message: 'No se encontraron prospectos en los últimos 30 días'
+      });
+    }
+
     res.json(result);
   } catch (error) {
     console.error('Error obteniendo prospectos del mes:', error);
@@ -1772,6 +1804,10 @@ app.get('/estadisticas/porcentaje-conversion', async (req, res) => {
 // Endpoint que devuelve la tasa de asistencia por profesor
 app.get('/estadisticas/tasa-asistencia-por-profe', async (req, res) => {
   try {
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth() + 1; // Mes actual
+    const currentYear = currentDate.getFullYear(); // Año actual
+
     // Consulta para obtener el total de asistencias por profesor
     const [asistencias] = await pool.query(
       `SELECT 
@@ -1784,10 +1820,13 @@ app.get('/estadisticas/tasa-asistencia-por-profe', async (req, res) => {
           alumnos AS al ON u.id = al.user_id
        JOIN 
           asistencias AS a ON al.id = a.alumno_id
-       WHERE 
+         WHERE 
           a.estado = 'P'
+          AND a.mes = ?
+          AND a.anio = ?
        GROUP BY 
-          u.id, u.name`
+          u.id, u.name`,
+      [currentMonth, currentYear]
     );
 
     // Consulta para obtener el total de alumnos con más de 6 "P" por profesor
@@ -1803,12 +1842,15 @@ JOIN
 JOIN 
     (SELECT alumno_id
      FROM asistencias 
-     WHERE estado = 'P'
+       WHERE estado = 'P' 
+             AND mes = ? 
+             AND anio = ?
      GROUP BY alumno_id
      HAVING COUNT(alumno_id) > 6) AS a ON al.id = a.alumno_id
 GROUP BY 
     u.id, u.name;
-`
+`,
+      [currentMonth, currentYear]
     );
 
     // Crear un objeto para almacenar la tasa de asistencia por profesor
