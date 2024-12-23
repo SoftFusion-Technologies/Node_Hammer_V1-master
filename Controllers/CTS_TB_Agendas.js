@@ -24,10 +24,19 @@ const AgendasModel = MD_TB_Agendas.AgendasModel;
 
 // Controladores para operaciones CRUD en la tabla 'agendas'
 
-// Mostrar todos los registros de la tabla agendas
+// Mostrar todos los registros de la tabla agendas con filtro opcional
 export const OBRS_Agendas_CTS = async (req, res) => {
   try {
-    const registros = await AgendasModel.findAll();
+    const { mes, anio } = req.query;
+
+    const filtros = {};
+    if (mes) filtros.mes = mes;
+    if (anio) filtros.anio = anio;
+
+    const registros = await AgendasModel.findAll({
+      where: filtros
+    });
+
     res.json(registros);
   } catch (error) {
     res.json({ mensajeError: error.message });
@@ -117,7 +126,7 @@ export const UR_Agendas_CTS = async (req, res) => {
 
 // Controlador para actualizar el estado de una agenda específica
 export const CR_ActualizarAgendaEstado_CTS = async (req, res) => {
-  const agendaId = req.params.agendaId;  // Asegúrate de que el parámetro se esté recibiendo
+  const agendaId = req.params.agendaId; // Asegúrate de que el parámetro se esté recibiendo
   const { contenido } = req.body;
 
   if (!agendaId) {
@@ -134,10 +143,11 @@ export const CR_ActualizarAgendaEstado_CTS = async (req, res) => {
     agenda.contenido = contenido;
     await agenda.save();
 
-    res.status(200).json({ message: 'Estado de la agenda actualizado correctamente' });
+    res
+      .status(200)
+      .json({ message: 'Estado de la agenda actualizado correctamente' });
   } catch (error) {
     console.error('Error al actualizar la agenda:', error);
     res.status(500).json({ message: 'Error al actualizar la agenda' });
   }
 };
-

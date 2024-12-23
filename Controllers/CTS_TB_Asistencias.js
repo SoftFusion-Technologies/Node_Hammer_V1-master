@@ -25,10 +25,19 @@ import moment from 'moment'; // Asegúrate de que esta librería esté instalada
 
 // Controladores para operaciones CRUD en la tabla 'asistencias'
 
-// Mostrar todos los registros de la tabla asistencias
+// Mostrar todos los registros de la tabla asistencias con filtro opcional
 export const OBRS_Asistencias_CTS = async (req, res) => {
   try {
-    const registros = await AsistenciasModel.findAll();
+    const { mes, anio } = req.query;
+
+    const filtros = {};
+    if (mes) filtros.mes = mes;
+    if (anio) filtros.anio = anio;
+
+    const registros = await AsistenciasModel.findAll({
+      where: filtros
+    });
+
     res.json(registros);
   } catch (error) {
     res.json({ mensajeError: error.message });
@@ -47,7 +56,7 @@ export const OBR_Asistencias_CTS = async (req, res) => {
 
 // Agregar este nuevo endpoint
 export const GET_Asistencia = async (req, res) => {
-  const { alumno_id, dia, mes, anio} = req.params; // Deberías acceder a los parámetros de la URL
+  const { alumno_id, dia, mes, anio } = req.params; // Deberías acceder a los parámetros de la URL
 
   try {
     const existingRecord = await AsistenciasModel.findOne({
@@ -76,7 +85,7 @@ export const GET_Asistencia = async (req, res) => {
 // Crear un nuevo registro en Asistencias
 export const CR_Asistencias_CTS = async (req, res) => {
   try {
-    const { alumno_id, dia, estado} = req.body;
+    const { alumno_id, dia, estado } = req.body;
 
     // Verificar si ya existe un registro con el mismo alumno_id, dia y estado
     const existingRecord = await AsistenciasModel.findOne({

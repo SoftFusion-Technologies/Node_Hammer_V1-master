@@ -24,6 +24,7 @@ import { PORT } from './DataBase/config.js';
 
 import { AlumnosModel } from './Models/MD_TB_Alumnos.js';
 import { AsistenciasModel } from './Models/MD_TB_Asistencias.js';
+import { AgendasModel } from './Models/MD_TB_Agendas.js';
 import moment from 'moment-timezone';
 
 import { login, authenticateToken } from './Security/auth.js'; // Importa las funciones del archivo auth.js
@@ -1873,7 +1874,6 @@ app.get('/estadisticas/retenciones-del-mes', async (req, res) => {
   }
 });
 
-
 app.get('/estadisticas/mensajes-por-profe', async (req, res) => {
   try {
     // Consulta para obtener el total de mensajes enviados por cada profesor
@@ -2061,7 +2061,7 @@ const eliminarAlumnosInactivos = async () => {
 };
 
 // Llamar a la función en el momento adecuado, por ejemplo, al inicio de cada día
-eliminarAlumnosInactivos();
+// eliminarAlumnosInactivos();
 
 // Llamar a la función para eliminar alumnos inactivos a las 00:00 (medianoche) de cada día
 cron.schedule(
@@ -2078,6 +2078,53 @@ cron.schedule(
     timezone: 'America/Argentina/Buenos_Aires' // Configura la zona horaria para Buenos Aires
   }
 );
+
+// Endpoint para borrado masivo en asistencias
+app.delete('/asistencias_masivo', async (req, res) => {
+  const { mes, anio } = req.query;
+
+  if (!mes || !anio) {
+    return res.status(400).json({ error: 'Mes y año son obligatorios' });
+  }
+
+  try {
+    await AsistenciasModel.destroy({
+      where: {
+        mes,
+        anio
+      }
+    });
+    res.json({
+      message: `Asistencias del mes ${mes} del año ${anio} eliminadas exitosamente`
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Endpoint para borrado masivo en agendas
+app.delete('/agendas_masivo', async (req, res) => {
+  const { mes, anio } = req.query;
+
+  if (!mes || !anio) {
+    return res.status(400).json({ error: 'Mes y año son obligatorios' });
+  }
+
+  try {
+    await AgendasModel.destroy({
+      where: {
+        mes,
+        anio
+      }
+    });
+    res.json({
+      message: `Agendas del mes ${mes} del año ${anio} eliminadas exitosamente`
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 

@@ -38,6 +38,24 @@ export const AgendasModel = db.define(
     contenido: {
       type: DataTypes.TEXT,
       allowNull: true
+    },
+    mes: {
+      type: DataTypes.TINYINT,
+      allowNull: false,
+      validate: {
+        min: 1,
+        max: 12 // Asegura que los meses estén en el rango válido
+      },
+      comment: 'Mes de la asistencia (1-12)'
+    },
+    anio: {
+      type: DataTypes.SMALLINT,
+      allowNull: false,
+      validate: {
+        min: 1900, // Rango mínimo, ajusta según tu caso
+        max: 2100 // Rango máximo, ajusta según tu caso
+      },
+      comment: 'Año de la asistencia (ejemplo: 2024)'
     }
   },
   {
