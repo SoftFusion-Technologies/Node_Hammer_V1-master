@@ -1004,12 +1004,17 @@ cron.schedule(
 const genAlertAgendN1 = async () => {
   try {
     const hoy = new Date();
+    const diaHoy = hoy.getDate();
+    const mesActual = hoy.getMonth() + 1; // Mes actual (0 indexado, por eso +1)
+    const anioActual = hoy.getFullYear();
+
+    console.log(`Fecha actual: ${diaHoy}-${mesActual}-${anioActual}`);
+
+    // Obtener los alumnos creados el día anterior que no sean prospecto = 'socio'
     const fechaAyer = new Date(hoy);
     fechaAyer.setDate(hoy.getDate() - 1);
     const fechaAyerISO = fechaAyer.toISOString().split('T')[0];
-    console.log(`Fecha de ayer en formato ISO: ${fechaAyerISO}`);
 
-    // obtenemos los alumnos creados el día anterior y que no sean de prospecto = 'socio'
     const [alumnos] = await pool.execute(
       `SELECT id FROM alumnos 
        WHERE DATE(fecha_creacion) = ? 
@@ -1018,19 +1023,19 @@ const genAlertAgendN1 = async () => {
     );
 
     for (const alumno of alumnos) {
-      // Verificamos si ya existe la alerta para este alumno y agenda_num = 1
+      // Verificar si ya existe la alerta para este alumno y agenda_num = 1
       const [alertasExistentes] = await pool.execute(
         `SELECT id FROM agendas WHERE alumno_id = ? AND agenda_num = 1`,
         [alumno.id]
       );
 
       if (alertasExistentes.length === 0) {
-        // Si no existe, insertamos la nueva alerta
+        // Insertar nueva alerta con el mes y año actual
         console.log(`Insertando alerta para alumno_id: ${alumno.id}`);
         await pool.execute(
-          `INSERT INTO agendas (alumno_id, agenda_num, contenido)
-                     VALUES (?, 1, 'PENDIENTE')`,
-          [alumno.id]
+          `INSERT INTO agendas (alumno_id, agenda_num, contenido, mes, anio)
+           VALUES (?, 1, 'PENDIENTE', ?, ?)`,
+          [alumno.id, mesActual, anioActual]
         );
       } else {
         console.log(
@@ -1057,14 +1062,21 @@ cron.schedule('0 0 * * *', async () => {
 const genAlertAgendN3 = async () => {
   try {
     const hoy = new Date();
+    const diaHoy = hoy.getDate();
+    const mesActual = hoy.getMonth() + 1; // Mes actual (0 indexado, por eso +1)
+    const anioActual = hoy.getFullYear();
+
+    console.log(`Fecha actual: ${diaHoy}-${mesActual}-${anioActual}`);
+
+    // Fecha de hace tres semanas (solo para referencia, si es necesaria)
     const fechaTresSemanas = new Date(hoy);
-    fechaTresSemanas.setDate(hoy.getDate() - 21); // Tres semanas atrás
+    fechaTresSemanas.setDate(hoy.getDate() - 21);
     const fechaTresSemanasISO = fechaTresSemanas.toISOString().split('T')[0];
     console.log(
       `Fecha de hace tres semanas en formato ISO: ${fechaTresSemanasISO}`
     );
 
-    // obtenemos los alumnos creados el día anterior y que no sean de prospecto = 'socio'
+    // Obtener los alumnos creados hace tres semanas que no sean prospecto = 'socio'
     const [alumnos] = await pool.execute(
       `SELECT id FROM alumnos 
        WHERE DATE(fecha_creacion) = ? 
@@ -1073,19 +1085,19 @@ const genAlertAgendN3 = async () => {
     );
 
     for (const alumno of alumnos) {
-      // Verificamos si ya existe la alerta para este alumno y agenda_num = 2
+      // Verificar si ya existe la alerta para este alumno y agenda_num = 2
       const [alertasExistentes] = await pool.execute(
         `SELECT id FROM agendas WHERE alumno_id = ? AND agenda_num = 2`,
         [alumno.id]
       );
 
       if (alertasExistentes.length === 0) {
-        // Si no existe, inserta la nueva alerta
+        // Insertar nueva alerta con el mes y año actuales
         console.log(`Insertando alerta para alumno_id: ${alumno.id}`);
         await pool.execute(
-          `INSERT INTO agendas (alumno_id, agenda_num, contenido)
-                     VALUES (?, 2, 'PENDIENTE')`,
-          [alumno.id]
+          `INSERT INTO agendas (alumno_id, agenda_num, contenido, mes, anio)
+           VALUES (?, 2, 'PENDIENTE', ?, ?)`,
+          [alumno.id, mesActual, anioActual]
         );
       } else {
         console.log(
@@ -1114,6 +1126,8 @@ const generarAlertaProspecto = async () => {
     // Obtener la fecha de hoy
     const hoy = new Date();
     const fechaHoyISO = hoy.toISOString().split('T')[0]; // Solo la fecha (sin hora)
+    const mesActual = hoy.getMonth() + 1; // Mes actual (0 indexado, por eso +1)
+    const anioActual = hoy.getFullYear(); // Año actual
     console.log(`Fecha de hoy: ${fechaHoyISO}`);
 
     // Obtener los alumnos que son prospectos
@@ -1165,8 +1179,10 @@ const generarAlertaProspecto = async () => {
           );
 
           const [result] = await pool.execute(
-            `UPDATE agendas SET contenido = 'PENDIENTE' WHERE alumno_id = ? AND agenda_num = 3`,
-            [alumno.id]
+            `UPDATE agendas 
+             SET contenido = 'PENDIENTE', mes = ?, anio = ? 
+             WHERE alumno_id = ? AND agenda_num = 3`,
+            [mesActual, anioActual, alumno.id]
           );
 
           console.log(`Resultado de la actualización:`, result);
@@ -1177,8 +1193,9 @@ const generarAlertaProspecto = async () => {
           );
 
           const [result] = await pool.execute(
-            `INSERT INTO agendas (alumno_id, agenda_num, contenido) VALUES (?, 3, 'PENDIENTE')`,
-            [alumno.id]
+            `INSERT INTO agendas (alumno_id, agenda_num, contenido, mes, anio) 
+             VALUES (?, 3, 'PENDIENTE', ?, ?)`,
+            [alumno.id, mesActual, anioActual]
           );
 
           console.log(`Resultado de la inserción:`, result);
@@ -1253,6 +1270,8 @@ const genAlertInactivos = async () => {
     );
 
     const agenda_num = 4; // Alerta para inactividad
+    const mesActual = hoy.getMonth() + 1; // Mes actual (0 indexado, por eso +1)
+    const anioActual = hoy.getFullYear(); // Año actual
 
     for (const alumno of alumnos) {
       // Verifica si ya existe la alerta para este alumno y agenda_num = 4 (Inactivos) en el mes y año actual
@@ -1266,17 +1285,13 @@ const genAlertInactivos = async () => {
         `SELECT fecha_creacion, mes, anio 
          FROM alertas_creadas 
          WHERE alumno_id = ? AND agenda_num = ? AND mes = ? AND anio = ?`,
-        [alumno.alumno_id, agenda_num, hoy.getMonth() + 1, hoy.getFullYear()]
+        [alumno.alumno_id, agenda_num, mesActual, anioActual]
       );
 
       if (alertasExistentes.length === 0) {
         if (alertasCreadas.length > 0) {
           console.log(
-            `Ya existe una alerta de inactividad para el alumno_id: ${
-              alumno.alumno_id
-            } en el mes ${
-              hoy.getMonth() + 1
-            } y año ${hoy.getFullYear()}. No se crea una nueva.`
+            `Ya existe una alerta de inactividad para el alumno_id: ${alumno.alumno_id} en el mes ${mesActual} y año ${anioActual}. No se crea una nueva.`
           );
           continue; // No creamos la alerta, pasamos al siguiente alumno
         }
@@ -1286,16 +1301,16 @@ const genAlertInactivos = async () => {
           `Insertando alerta de inactividad para alumno_id: ${alumno.alumno_id}`
         );
         await pool.execute(
-          `INSERT INTO agendas (alumno_id, agenda_num, contenido)
-           VALUES (?, ?, 'PENDIENTE')`,
-          [alumno.alumno_id, agenda_num]
+          `INSERT INTO agendas (alumno_id, agenda_num, contenido, mes, anio)
+           VALUES (?, ?, 'PENDIENTE', ?, ?)`,
+          [alumno.alumno_id, agenda_num, mesActual, anioActual]
         );
 
         // Registrar la creación de la alerta en la tabla alertas_creadas
         await registrarCreacionAlerta(alumno.alumno_id, agenda_num);
       } else {
         console.log(
-          `Alerta de inactividad ya existente para alumno_id: ${alumno.alumno_id} en el mes y año actual. No se crea una nueva alerta.`
+          `Alerta de inactividad ya existente para alumno_id: ${alumno.alumno_id} en el mes ${mesActual} y año ${anioActual}. No se crea una nueva alerta.`
         );
       }
     }
