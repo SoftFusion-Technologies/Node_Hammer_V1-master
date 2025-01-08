@@ -620,6 +620,37 @@ app.get('/novedades-vencimientos', async (req, res) => {
   }
 });
 
+// Endpoint para eliminar un vencimiento por su ID
+app.delete('/novedades-vencimientos/:id', async (req, res) => {
+  const { id } = req.params; // Obtener el ID del vencimiento de los parámetros de la URL
+
+  try {
+    // Verificar si existe el vencimiento
+    const [existingVencimiento] = await pool.query(
+      `SELECT * FROM novedades_vencimientos WHERE id = ?`,
+      [id]
+    );
+
+    if (existingVencimiento.length === 0) {
+      return res.status(404).json({
+        message: 'El vencimiento no existe.'
+      });
+    }
+
+    // Eliminar el vencimiento de la base de datos
+    await pool.query(`DELETE FROM novedades_vencimientos WHERE id = ?`, [id]);
+
+    res.status(200).json({
+      message: 'Vencimiento eliminado correctamente.'
+    });
+  } catch (error) {
+    console.error('Error al eliminar vencimiento:', error);
+    res.status(500).json({
+      message: 'Error al eliminar el vencimiento.'
+    });
+  }
+});
+
 //R8 - SE AGREGAN FECHAS PARA TRABAJAR EN CONVENIOS INICIO - BENJAMIN ORELLANA */
 import IntegrantesConveModelClon from './Models/MD_TB_IntegrantesConveClon.js';
 import Meses from './Models/MD_TB_Meses.js';
