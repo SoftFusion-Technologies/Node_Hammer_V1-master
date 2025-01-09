@@ -1568,7 +1568,9 @@ app.get('/notificaciones', async (req, res) => {
           a.alumno_id,
           a.agenda_num,
           al.nombre AS alumno_nombre,
-          a.contenido AS estado_agenda
+          a.contenido AS estado_agenda,
+          a.mes,
+          a.anio
        FROM 
           agendas AS a
        JOIN 
