@@ -2090,86 +2090,6 @@ app.get('/download-image-pregunta/:id', async (req, res) => {
   }
 });
 
-// Función para eliminar alumnos que no han ido al gimnasio desde el 20 en adelante
-const eliminarAlumnosInactivos = async () => {
-  const fechaHoy = new Date();
-  const diaHoy = fechaHoy.getDate(); // Obtener el día actual del mes
-  const mesHoy = fechaHoy.getMonth() + 1;
-  const anioHoy = fechaHoy.getFullYear();
-
-  if (diaHoy < 20) {
-    console.log('No es necesario eliminar alumnos aún.');
-    return;
-  }
-
-  try {
-    // Paso 1: Obtener todos los alumnos que tienen asistencia desde el 20 en adelante
-    const alumnosInactivos = await AlumnosModel.findAll({
-      where: {
-        id: {
-          [Op.in]: db.literal(`
-            (
-              SELECT DISTINCT alumno_id
-              FROM asistencias
-              WHERE (dia >= 20 AND mes = ${mesHoy} AND anio = ${anioHoy}) 
-              AND estado = 'A'
-            )
-          `)
-        }
-      }
-    });
-
-    // Paso 2: Eliminar alumnos que no tienen registro de asistencia como "P" desde el 20 en adelante
-    for (const alumno of alumnosInactivos) {
-      const asistenciasAlumno = await AsistenciasModel.findAll({
-        where: {
-          alumno_id: alumno.id,
-          dia: { [Op.gte]: 20 },
-          mes: mesHoy,
-          anio: anioHoy
-        }
-      });
-
-      // Verificar si el alumno tiene alguna asistencia registrada como "P"
-      const tieneAsistencia = asistenciasAlumno.some(
-        (asistencia) => asistencia.estado === 'P'
-      );
-
-      if (!tieneAsistencia) {
-        // Eliminar el alumno si no tiene asistencia como "P"
-        console.log(`Eliminando alumno con ID: ${alumno.id}`);
-        await AlumnosModel.destroy({
-          where: { id: alumno.id }
-        });
-      }
-    }
-
-    console.log('Proceso de eliminación de alumnos inactivos completado.');
-  } catch (error) {
-    console.error('Error al eliminar alumnos inactivos:', error);
-  }
-};
-
-// Llamar a la función en el momento adecuado, por ejemplo, al inicio de cada día
-// eliminarAlumnosInactivos();
-
-// Llamar a la función para eliminar alumnos inactivos a las 00:00 (medianoche) de cada día
-cron.schedule(
-  '0 0 * * *',
-  async () => {
-    try {
-      console.log('Iniciando eliminación de alumnos inactivos...');
-      await eliminarAlumnosInactivos();
-    } catch (error) {
-      console.error('Error en la ejecución del cron job:', error);
-    }
-  },
-  {
-    timezone: 'America/Argentina/Buenos_Aires' // Configura la zona horaria para Buenos Aires
-  }
-);
-
-// Endpoint para borrado masivo en asistencias
 app.delete('/asistencias_masivo', async (req, res) => {
   const { mes, anio } = req.query;
 
@@ -2212,6 +2132,157 @@ app.delete('/agendas_masivo', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+const insertarAlumnosNuevos = async () => {
+  try {
+    // Consulta para obtener todos los alumnos con prospecto 'nuevo'
+    const [alumnosNuevos] = await pool.execute(`
+      SELECT id, nombre, fecha_creacion
+      FROM alumnos
+      WHERE prospecto = 'nuevo'
+    `);
+
+    // Si no hay alumnos nuevos, no hacer nada
+    if (alumnosNuevos.length === 0) {
+      console.log(
+        'No se encontraron alumnos nuevos para insertar en alumnos_nuevos.'
+      );
+      return;
+    }
+
+    for (const alumno of alumnosNuevos) {
+      const { id, fecha_creacion } = alumno;
+
+      // Verificar si el alumno ya existe en la tabla alumnos_nuevos
+      const [existeAlumno] = await pool.execute(
+        `
+        SELECT COUNT(*) AS count
+        FROM alumnos_nuevos
+        WHERE idAlumno = ?
+      `,
+        [id]
+      );
+
+      if (existeAlumno[0].count > 0) {
+        console.log(`El alumno ${id} ya existe en la tabla alumnos_nuevos.`);
+        continue; // Salta la inserción si ya existe
+      }
+
+      // Convertir la fecha de creación a un objeto Date
+      const fechaCreacionDate = new Date(fecha_creacion);
+      const fechaActual = new Date();
+
+      // Verificar si la fecha de creación ya alcanzó un mes de antigüedad
+      const fechaUnMesDespues = new Date(fechaCreacionDate);
+      fechaUnMesDespues.setMonth(fechaUnMesDespues.getMonth() + 1);
+
+      // Si la fecha de creación es exactamente un mes antes de la fecha actual
+      if (
+        fechaUnMesDespues.getFullYear() === fechaActual.getFullYear() &&
+        fechaUnMesDespues.getMonth() === fechaActual.getMonth() &&
+        fechaUnMesDespues.getDate() === fechaActual.getDate()
+      ) {
+        console.log(
+          `Alumno ${id} cumple con el mes exacto, insertando en alumnos_nuevos.`
+        );
+
+        // Calcular fecha de creación para la tabla alumnos_nuevos (el último día del mes anterior)
+        const fechaCreacionNuevo = new Date(
+          fechaUnMesDespues.getFullYear(),
+          fechaUnMesDespues.getMonth(),
+          30
+        );
+
+        // Calcular fecha de eliminación (un mes después de la fecha de creación de alumnos_nuevos)
+        const fechaEliminacion = new Date(
+          fechaUnMesDespues.getFullYear(),
+          fechaUnMesDespues.getMonth() + 1,
+          30
+        );
+
+        console.log(`Insertando alumno_id: ${id} en la tabla alumnos_nuevos`);
+
+        // Insertar en alumnos_nuevos con marca true
+        const [resultInsert] = await pool.execute(
+          `INSERT INTO alumnos_nuevos (idAlumno, marca, fecha_creacion, fecha_eliminacion)
+           VALUES (?, ?, ?, ?)`,
+          [id, true, fechaCreacionNuevo, fechaEliminacion]
+        );
+
+        console.log(
+          `Alumno ${id} insertado en alumnos_nuevos. Resultado:`,
+          resultInsert
+        );
+
+        // **Actualizar el alumno a "socio" en la tabla alumnos**
+        const [resultUpdate] = await pool.execute(
+          `UPDATE alumnos 
+           SET prospecto = 'socio', c = 'c', fecha_creacion = CURDATE()
+           WHERE id = ? AND prospecto = 'nuevo'`,
+          [id]
+        );
+
+        if (resultUpdate.affectedRows > 0) {
+          console.log(`Alumno ${id} actualizado a socio en la tabla alumnos.`);
+        } else {
+          console.log(
+            `No se pudo actualizar el alumno ${id}. Puede que ya no sea "nuevo".`
+          );
+        }
+      } else {
+        console.log(
+          `El alumno ${id} no cumple con la condición de fecha (no ha pasado un mes exacto).`
+        );
+      }
+    }
+
+    console.log('Proceso de inserción de alumnos nuevos completado.');
+  } catch (error) {
+    console.error('Error insertando alumnos nuevos:', error);
+  }
+};
+
+// Ejecutar la inserción de alumnos nuevos
+cron.schedule('* * * * *', async () => {
+  console.log('Ejecutando cron de inserción de alumnos nuevos...');
+  await insertarAlumnosNuevos();
+});
+
+// Función para eliminar los registros con fecha_eliminacion vencida
+const eliminarAlumnosNuevos = async () => {
+  try {
+    const today = moment().startOf('day').toDate();
+
+    // Eliminar registros cuya fecha_eliminacion sea hoy o antes
+    const [resultDelete] = await pool.execute(
+      'DELETE FROM alumnos_nuevos WHERE fecha_eliminacion <= ?',
+      [today]
+    );
+
+    console.log('Eliminación completada correctamente:', resultDelete);
+  } catch (error) {
+    console.error('Error en la tarea de eliminación:', error);
+  }
+};
+
+// Ejecutar la eliminación de registros con fecha_eliminacion vencida cada minuto
+cron.schedule('* * * * *', async () => {
+  console.log('Ejecutando cron de eliminación de registros vencidos...');
+  await eliminarAlumnosNuevos();
+});
+
+// Endpoint para obtener alumnos con marca = 1
+app.get('/alumnos_nuevos', async (req, res) => {
+  try {
+    const [alumnosNuevos] = await pool.execute(
+      `SELECT idAlumno, marca, fecha_creacion, fecha_eliminacion FROM alumnos_nuevos WHERE marca = 1`
+    );
+    res.json(alumnosNuevos); // Devolver los resultados como JSON
+  } catch (error) {
+    console.error('Error al obtener alumnos nuevos:', error);
+    res.status(500).json({ message: 'Error al obtener alumnos nuevos' });
   }
 });
 
