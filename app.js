@@ -23,6 +23,7 @@ import { fileURLToPath } from 'url';
 import { PORT } from './DataBase/config.js';
 
 import { AlumnosModel } from './Models/MD_TB_Alumnos.js';
+import { PostulanteV2Model } from './Models/MD_TB_Postulante_v2.js';
 import { AsistenciasModel } from './Models/MD_TB_Asistencias.js';
 import { AgendasModel } from './Models/MD_TB_Agendas.js';
 import moment from 'moment-timezone';
@@ -189,6 +190,10 @@ const pool = mysql.createPool({
 
 const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
 console.log('Current Directory:', CURRENT_DIR);
+
+// Obtener el directorio actual
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const multerUpload = multer({
   storage: multer.diskStorage({
@@ -1986,7 +1991,6 @@ app.get('/estadisticas/porcentaje-conversion', async (req, res) => {
   }
 });
 
-
 // Endpoint que devuelve la tasa de asistencia por profesor
 app.get('/estadisticas/tasa-asistencia-por-profe', async (req, res) => {
   try {
@@ -2085,7 +2089,6 @@ app.get('/estadisticas/tasa-asistencia-por-profe', async (req, res) => {
   }
 });
 
-
 app.get('/estadisticas/retenciones-del-mes', async (req, res) => {
   try {
     // 1. Consulta para obtener el nombre del profesor y la cantidad de alumnos retenidos
@@ -2119,7 +2122,6 @@ app.get('/estadisticas/retenciones-del-mes', async (req, res) => {
       .json({ error: 'Error al calcular las retenciones del mes' });
   }
 });
-
 
 app.get('/estadisticas/mensajes-por-profe', async (req, res) => {
   try {
@@ -2440,6 +2442,150 @@ app.get('/alumnos_nuevos', async (req, res) => {
   } catch (error) {
     console.error('Error al obtener alumnos nuevos:', error);
     res.status(500).json({ message: 'Error al obtener alumnos nuevos' });
+  }
+});
+
+// NUEVA FORMA DE SUBIR POSTULANTES
+app.post('/postulantes_v2', multerUpload.single('cv'), async (req, res) => {
+  try {
+    const {
+      name,
+      email,
+      celular,
+      edad,
+      puesto,
+      sede,
+      info,
+      redes,
+      observaciones = 'sin valoracion',
+      // valoracion = 0,
+      state,
+      sexo
+    } = req.body;
+
+    const valoracion = req.body.valoracion || 0; // Si no se pasa valor, usar 0
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'El archivo CV es obligatorio' });
+    }
+
+    const cv_url = `uploads/agendas/${req.file.filename}`;
+
+    const nuevoPostulante = await PostulanteV2Model.create({
+      name,
+      email,
+      celular,
+      edad,
+      puesto,
+      sede,
+      info,
+      redes,
+      observaciones,
+      valoracion,
+      state,
+      sexo,
+      cv_url
+    });
+
+    res.status(201).json({
+      message: 'Postulante registrado con éxito',
+      postulante: nuevoPostulante
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al guardar el postulante' });
+  }
+});
+
+// Ruta para obtener todos los postulantes
+app.get('/postulantes_v2', async (req, res) => {
+  try {
+    const postulantes = await PostulanteV2Model.findAll({
+      attributes: [
+        'id',
+        'name',
+        'email',
+        'celular',
+        'edad',
+        'puesto',
+        'sede',
+        'info',
+        'redes',
+        'observaciones',
+        'valoracion',
+        'state',
+        'sexo',
+        'cv_url',
+        'created_at',
+        'updated_at'
+      ]
+    });
+
+    if (!postulantes) {
+      return res.status(404).json({ error: 'No se encontraron postulantes' });
+    }
+
+    res.json(postulantes); // Devolver todos los postulantes
+  } catch (error) {
+    console.error('Error al obtener los postulantes:', error);
+    res.status(500).json({ error: 'Hubo un problema al obtener los postulantes' });
+  }
+});
+
+// Ruta para descargar el CV del postulante
+app.get('/postulantes_v2/:id/cv', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const postulante = await PostulanteV2Model.findOne({
+      where: { id: id },
+      attributes: ['cv_url']
+    });
+
+    if (!postulante || !postulante.cv_url) {
+      return res.status(404).json({ error: 'CV no encontrado' });
+    }
+
+    const cvPath = path.join(__dirname,  postulante.cv_url);
+    console.log(cvPath); // Verifica si la ruta es la correcta
+
+    console.log(cvPath);
+    if (fs.existsSync(cvPath)) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename=${path.basename(cvPath)}`
+      );
+      fs.createReadStream(cvPath).pipe(res);
+    } else {
+      return res
+        .status(404)
+        .json({ error: 'El archivo no existe en el servidor' });
+    }
+  } catch (error) {
+    console.error('Error al obtener el CV:', error);
+    res.status(500).json({ error: 'Hubo un problema al obtener el CV' });
+  }
+});
+
+// Endpoint DELETE para eliminar un postulante
+app.delete('/postulantes_v2/:id', async (req, res) => {
+  const { id } = req.params; // Recibe el ID desde la URL
+
+  try {
+    // Eliminar el postulante de la base de datos
+    const postulante = await PostulanteV2Model.destroy({
+      where: { id: id }
+    });
+
+    if (postulante) {
+      return res.status(200).json({ message: 'Postulante eliminado correctamente.' });
+    } else {
+      return res.status(404).json({ error: 'Postulante no encontrado.' });
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Error al eliminar el postulante.' });
   }
 });
 
