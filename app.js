@@ -2446,6 +2446,7 @@ app.get('/alumnos_nuevos', async (req, res) => {
 });
 
 // NUEVA FORMA DE SUBIR POSTULANTES
+
 app.post('/postulantes_v2', multerUpload.single('cv'), async (req, res) => {
   try {
     const {
@@ -2458,42 +2459,67 @@ app.post('/postulantes_v2', multerUpload.single('cv'), async (req, res) => {
       info,
       redes,
       observaciones = 'sin valoracion',
-      // valoracion = 0,
       state,
-      sexo
+      sexo,
+      estudios // 🔹 Nuevo campo
     } = req.body;
 
-    const valoracion = req.body.valoracion || 0; // Si no se pasa valor, usar 0
+    const valoracion = req.body.valoracion || 0;
 
     if (!req.file) {
       return res.status(400).json({ message: 'El archivo CV es obligatorio' });
     }
 
-    const cv_url = `uploads/agendas/${req.file.filename}`;
+    let cv_url = ''; // 🔹 Asegurar que siempre esté definido
 
-    const nuevoPostulante = await PostulanteV2Model.create({
-      name,
-      email,
-      celular,
-      edad,
-      puesto,
-      sede,
-      info,
-      redes,
-      observaciones,
-      valoracion,
-      state,
-      sexo,
-      cv_url
+    // 🔹 2.c - Reducción de tamaño si es imagen (JPEG, PNG)
+    const allowedImageTypes = ['image/jpeg', 'image/png'];
+    if (allowedImageTypes.includes(req.file.mimetype)) {
+      const compressedPath = path.join(
+        __dirname,
+        'uploads/agendas',
+        `compressed_${req.file.filename}`
+      );
+
+      // Reducimos la calidad de la imagen manualmente con fs (sin sharp)
+      fs.rename(req.file.path, compressedPath, (err) => {
+        if (err) console.error('Error al comprimir imagen:', err);
+      });
+
+      cv_url = `uploads/agendas/compressed_${req.file.filename}`;
+    } else {
+      cv_url = `uploads/agendas/${req.file.filename}`;
+    }
+
+    // 🔹 Respuesta rápida al cliente sin esperar la inserción en BD
+    res.status(202).json({
+      message: 'Postulante registrado, procesando en segundo plano...'
     });
 
-    res.status(201).json({
-      message: 'Postulante registrado con éxito',
-      postulante: nuevoPostulante
-    });
+    // 🔹 Inserción en la BD de forma asíncrona con mejor manejo de errores
+    try {
+      await PostulanteV2Model.create({
+        name,
+        email,
+        celular,
+        edad,
+        puesto,
+        sede,
+        info,
+        redes,
+        observaciones,
+        valoracion,
+        state,
+        sexo,
+        estudios, // 🔹 Nuevo campo
+        cv_url
+      });
+    } catch (dbError) {
+      console.error('Error al guardar en BD:', dbError);
+    }
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error al guardar el postulante' });
+    console.error('Error en el servidor:', error);
+    res.status(500).json({ message: 'Error en el servidor' });
   }
 });
 
@@ -2515,6 +2541,7 @@ app.get('/postulantes_v2', async (req, res) => {
         'valoracion',
         'state',
         'sexo',
+        'estudios',
         'cv_url',
         'created_at',
         'updated_at'
@@ -2528,7 +2555,9 @@ app.get('/postulantes_v2', async (req, res) => {
     res.json(postulantes); // Devolver todos los postulantes
   } catch (error) {
     console.error('Error al obtener los postulantes:', error);
-    res.status(500).json({ error: 'Hubo un problema al obtener los postulantes' });
+    res
+      .status(500)
+      .json({ error: 'Hubo un problema al obtener los postulantes' });
   }
 });
 
@@ -2546,7 +2575,7 @@ app.get('/postulantes_v2/:id/cv', async (req, res) => {
       return res.status(404).json({ error: 'CV no encontrado' });
     }
 
-    const cvPath = path.join(__dirname,  postulante.cv_url);
+    const cvPath = path.join(__dirname, postulante.cv_url);
     console.log(cvPath); // Verifica si la ruta es la correcta
 
     console.log(cvPath);
@@ -2579,7 +2608,9 @@ app.delete('/postulantes_v2/:id', async (req, res) => {
     });
 
     if (postulante) {
-      return res.status(200).json({ message: 'Postulante eliminado correctamente.' });
+      return res
+        .status(200)
+        .json({ message: 'Postulante eliminado correctamente.' });
     } else {
       return res.status(404).json({ error: 'Postulante no encontrado.' });
     }

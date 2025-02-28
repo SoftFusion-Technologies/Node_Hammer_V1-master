@@ -36,7 +36,11 @@ export const PostulanteV2Model = db.define(
     valoracion: { type: DataTypes.INTEGER },
     state: { type: DataTypes.BOOLEAN, defaultValue: true },
     sexo: { type: DataTypes.STRING },
-    cv_url: { type: DataTypes.STRING, allowNull: false }
+    cv_url: { type: DataTypes.STRING, allowNull: false },
+    estudios: {
+      type: DataTypes.STRING,
+      allowNull: true
+    }
   },
   {
     timestamps: true,
