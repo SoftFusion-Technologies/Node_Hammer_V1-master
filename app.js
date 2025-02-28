@@ -2597,6 +2597,87 @@ app.get('/postulantes_v2/:id/cv', async (req, res) => {
   }
 });
 
+app.get('/postulantes_v2/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Buscar postulante por ID
+    const postulante = await PostulanteV2Model.findByPk(id);
+
+    // Si no existe, devolver error
+    if (!postulante) {
+      return res.status(404).json({ message: 'Postulante no encontrado' });
+    }
+
+    // Devolver el postulante encontrado
+    res.status(200).json(postulante);
+  } catch (error) {
+    console.error('Error al obtener el postulante:', error);
+    res.status(500).json({ message: 'Error en el servidor' });
+  }
+});
+
+app.put('/postulantes_v2/:id', multerUpload.single('cv'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Buscar el postulante en la BD
+    const postulante = await PostulanteV2Model.findByPk(id);
+    if (!postulante) {
+      return res.status(404).json({ message: 'Postulante no encontrado' });
+    }
+
+    // Extraer los datos del cuerpo
+    const {
+      name,
+      email,
+      celular,
+      edad,
+      puesto,
+      sede,
+      info,
+      redes,
+      observaciones,
+      valoracion,
+      state,
+      sexo,
+      estudios // Nuevo campo agregado
+    } = req.body;
+
+    let cv_url = postulante.cv_url; // Mantener el CV actual si no se sube uno nuevo
+
+    // Si se sube un nuevo archivo, actualizar la URL
+    if (req.file) {
+      cv_url = `uploads/agendas/${req.file.filename}`;
+    }
+
+    // Actualizar el postulante en la BD
+    await postulante.update({
+      name,
+      email,
+      celular,
+      edad,
+      puesto,
+      sede,
+      info,
+      redes,
+      observaciones,
+      valoracion,
+      state,
+      sexo,
+      estudios, // Guardamos el nuevo campo
+      cv_url
+    });
+
+    res
+      .status(200)
+      .json({ message: 'Postulante actualizado correctamente', postulante });
+  } catch (error) {
+    console.error('Error al actualizar el postulante:', error);
+    res.status(500).json({ message: 'Error en el servidor' });
+  }
+});
+
 // Endpoint DELETE para eliminar un postulante
 app.delete('/postulantes_v2/:id', async (req, res) => {
   const { id } = req.params; // Recibe el ID desde la URL
