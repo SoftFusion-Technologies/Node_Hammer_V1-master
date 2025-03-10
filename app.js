@@ -2446,7 +2446,6 @@ app.get('/alumnos_nuevos', async (req, res) => {
 });
 
 // NUEVA FORMA DE SUBIR POSTULANTES
-
 app.post('/postulantes_v2', multerUpload.single('cv'), async (req, res) => {
   try {
     const {
@@ -2466,29 +2465,27 @@ app.post('/postulantes_v2', multerUpload.single('cv'), async (req, res) => {
 
     const valoracion = req.body.valoracion || 0;
 
-    if (!req.file) {
-      return res.status(400).json({ message: 'El archivo CV es obligatorio' });
-    }
+    let cv_url = null; // 🔹 Asegurar que sea null por defecto
 
-    let cv_url = ''; // 🔹 Asegurar que siempre esté definido
+    // Si se sube un archivo, procesarlo
+    if (req.file) {
+      const allowedImageTypes = ['image/jpeg', 'image/png'];
+      if (allowedImageTypes.includes(req.file.mimetype)) {
+        const compressedPath = path.join(
+          __dirname,
+          'uploads/agendas',
+          `compressed_${req.file.filename}`
+        );
 
-    // 🔹 2.c - Reducción de tamaño si es imagen (JPEG, PNG)
-    const allowedImageTypes = ['image/jpeg', 'image/png'];
-    if (allowedImageTypes.includes(req.file.mimetype)) {
-      const compressedPath = path.join(
-        __dirname,
-        'uploads/agendas',
-        `compressed_${req.file.filename}`
-      );
+        // Reducimos la calidad de la imagen manualmente con fs (sin sharp)
+        fs.rename(req.file.path, compressedPath, (err) => {
+          if (err) console.error('Error al comprimir imagen:', err);
+        });
 
-      // Reducimos la calidad de la imagen manualmente con fs (sin sharp)
-      fs.rename(req.file.path, compressedPath, (err) => {
-        if (err) console.error('Error al comprimir imagen:', err);
-      });
-
-      cv_url = `uploads/agendas/compressed_${req.file.filename}`;
-    } else {
-      cv_url = `uploads/agendas/${req.file.filename}`;
+        cv_url = `uploads/agendas/compressed_${req.file.filename}`;
+      } else {
+        cv_url = `uploads/agendas/${req.file.filename}`;
+      }
     }
 
     // 🔹 Respuesta rápida al cliente sin esperar la inserción en BD
@@ -2522,6 +2519,7 @@ app.post('/postulantes_v2', multerUpload.single('cv'), async (req, res) => {
     res.status(500).json({ message: 'Error en el servidor' });
   }
 });
+
 
 // Ruta para obtener todos los postulantes
 app.get('/postulantes_v2', async (req, res) => {
@@ -2567,24 +2565,40 @@ app.get('/postulantes_v2/:id/cv', async (req, res) => {
 
   try {
     const postulante = await PostulanteV2Model.findOne({
-      where: { id: id },
+      where: { id },
       attributes: ['cv_url']
     });
 
+    // Verificamos si el postulante tiene un CV
     if (!postulante || !postulante.cv_url) {
       return res.status(404).json({ error: 'CV no encontrado' });
     }
 
     const cvPath = path.join(__dirname, postulante.cv_url);
-    console.log(cvPath); // Verifica si la ruta es la correcta
+    console.log('Ruta del CV:', cvPath);
 
-    console.log(cvPath);
+    // Verificamos si el archivo existe
     if (fs.existsSync(cvPath)) {
-      res.setHeader('Content-Type', 'application/pdf');
+      // Determinamos el tipo de archivo
+      const fileExtension = path.extname(cvPath).toLowerCase();
+      let contentType = 'application/octet-stream'; // Tipo genérico
+
+      if (fileExtension === '.pdf') {
+        contentType = 'application/pdf';
+      } else if (fileExtension === '.jpg' || fileExtension === '.jpeg') {
+        contentType = 'image/jpeg';
+      } else if (fileExtension === '.png') {
+        contentType = 'image/png';
+      }
+
+      // Establecemos los encabezados de respuesta
+      res.setHeader('Content-Type', contentType);
       res.setHeader(
         'Content-Disposition',
         `attachment; filename=${path.basename(cvPath)}`
       );
+
+      // Enviamos el archivo al cliente
       fs.createReadStream(cvPath).pipe(res);
     } else {
       return res
@@ -2596,6 +2610,8 @@ app.get('/postulantes_v2/:id/cv', async (req, res) => {
     res.status(500).json({ error: 'Hubo un problema al obtener el CV' });
   }
 });
+
+
 
 app.get('/postulantes_v2/:id', async (req, res) => {
   try {
