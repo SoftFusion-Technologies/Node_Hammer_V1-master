@@ -26,6 +26,12 @@ import { AlumnosModel } from './Models/MD_TB_Alumnos.js';
 import { PostulanteV2Model } from './Models/MD_TB_Postulante_v2.js';
 import { AsistenciasModel } from './Models/MD_TB_Asistencias.js';
 import { AgendasModel } from './Models/MD_TB_Agendas.js';
+
+
+// nueva forma de congelar las  planillas sab 15 de mar
+import { Sequelize } from 'sequelize';
+import { PlanillasCerradasModel } from './Models/MD_TB_PlanillasCerradas.js';
+
 import moment from 'moment-timezone';
 
 import { login, authenticateToken } from './Security/auth.js'; // Importa las funciones del archivo auth.js
@@ -73,6 +79,19 @@ app.get('/', (req, res) => {
     res.end('404 ERROR');
   }
 });
+
+// Función para obtener el mes y año actual y el anterior
+const getMesYAnioActual = () => {
+  const now = new Date();
+  const mesActual = now.getMonth() + 1; // Los meses en JS son 0-11, así que sumamos 1
+  const anioActual = now.getFullYear();
+
+  // Si el mes actual es enero (mes 1), entonces el mes anterior será diciembre (mes 12 del año anterior)
+  const mesAnterior = mesActual === 1 ? 12 : mesActual - 1;
+  const anioAnterior = mesActual === 1 ? anioActual - 1 : anioActual;
+
+  return { mesActual, anioActual, mesAnterior, anioAnterior };
+};
 
 // Ruta para obtener convenio y sus integrantes
 app.get('/admconvenios/:id_conv/integrantes', async (req, res) => {
@@ -2520,7 +2539,6 @@ app.post('/postulantes_v2', multerUpload.single('cv'), async (req, res) => {
   }
 });
 
-
 // Ruta para obtener todos los postulantes
 app.get('/postulantes_v2', async (req, res) => {
   try {
@@ -2610,8 +2628,6 @@ app.get('/postulantes_v2/:id/cv', async (req, res) => {
     res.status(500).json({ error: 'Hubo un problema al obtener el CV' });
   }
 });
-
-
 
 app.get('/postulantes_v2/:id', async (req, res) => {
   try {
@@ -2717,6 +2733,163 @@ app.delete('/postulantes_v2/:id', async (req, res) => {
   }
 });
 
+/**
+ * Cierra el mes anterior bloqueando las agendas de ese período.
+ */
+const cerrarMesAnterior = async () => {
+  try {
+    const now = new Date();
+    const mesActual = now.getMonth() + 1; // Mes actual (1-12)
+    const anioActual = now.getFullYear();
+
+    // El mes a cerrar es siempre el mes anterior al actual
+    let mesCierre = mesActual - 1;
+    let anioCierre = anioActual;
+
+    // Si estamos en enero, el mes anterior es diciembre del año anterior
+    if (mesCierre === 0) {
+      mesCierre = 12;
+      anioCierre -= 1;
+    }
+
+    console.log(`🔒 Cerrando mes ${mesCierre}/${anioCierre}...`);
+
+    // Verificar si ya existe un registro con el mes y año a cerrar
+    const existeCierre = await PlanillasCerradasModel.findOne({
+      where: { mes: mesCierre, anio: anioCierre }
+    });
+
+    if (existeCierre) {
+      console.log(
+        `⚠️ Ya existe un registro de cierre para ${mesCierre}/${anioCierre}. No se inserta.`
+      );
+      return; // No hacer nada si ya existe el registro
+    }
+
+    // Registrar el cierre en `planillas_cerradas` si no existe un registro
+    await PlanillasCerradasModel.create({
+      mes: mesCierre,
+      anio: anioCierre,
+      fecha_cierre: now // Fecha actual de cierre
+    });
+
+    console.log(
+      `📝 Registro agregado en planillas_cerradas para ${mesCierre}/${anioCierre}`
+    );
+  } catch (error) {
+    console.error('❌ Error al cerrar el mes anterior:', error);
+  }
+};
+
+// Función para copiar los alumnos que tienen asistencias después del 20 del mes anterior
+const copiarAlumnosMesAnterior = async () => {
+  console.log('Ejecutando copiar alumnos');
+
+  // Obtener el mes y año actual y el anterior
+  const { mesActual, anioActual, mesAnterior, anioAnterior } =
+    getMesYAnioActual();
+  console.log(`Mes Actual: ${mesActual}, Año Actual: ${anioActual}`);
+  console.log(`Mes Anterior: ${mesAnterior}, Año Anterior: ${anioAnterior}`);
+
+  // Filtrar las asistencias del mes anterior con día superior a 20
+  const asistenciasMesAnterior = await AsistenciasModel.findAll({
+    where: {
+      mes: mesAnterior,
+      anio: anioAnterior,
+      dia: { [Sequelize.Op.gt]: 20 } // Día mayor a 20
+    }
+  });
+
+  console.log(
+    `Asistencias del mes ${mesAnterior}-${anioAnterior} después del día 20:`
+  );
+  console.log(asistenciasMesAnterior);
+
+  // Extraer los IDs de los alumnos que tienen asistencias después del 20
+  const alumnosAcopiar = [
+    ...new Set(asistenciasMesAnterior.map((asistencia) => asistencia.alumno_id))
+  ];
+  console.log('Alumnos a copiar:', alumnosAcopiar);
+
+  // Verificar que no se copien alumnos que ya existan en el mes actual o que ya fueron copiados como socio
+  for (const alumnoId of alumnosAcopiar) {
+    console.log(`Verificando existencia del alumno con ID: ${alumnoId}`);
+
+    const alumno = await AlumnosModel.findOne({
+      where: { id: alumnoId }
+    });
+
+    if (alumno) {
+      console.log(`Alumno encontrado: ${alumno.nombre}`);
+
+      // Verificar si el alumno ya existe en el mes actual (marzo) y si ya está marcado como socio
+      const existeAlumnoEnMesActual = await AlumnosModel.findOne({
+        where: {
+          id: alumnoId,
+          mes: mesActual,
+          anio: anioActual
+        }
+      });
+
+      if (!existeAlumnoEnMesActual) {
+        // Verificar si el alumno ya ha sido copiado como socio en el mes anterior
+        const alumnoSocioEnMesAnterior = await AlumnosModel.findOne({
+          where: {
+            id: alumnoId,
+            mes: mesAnterior, // Verificar en el mes anterior
+            anio: anioAnterior, // Año anterior
+            prospecto: 'socio' // Verificar si ya es socio en el mes anterior
+          }
+        });
+
+        if (alumnoSocioEnMesAnterior) {
+          // Eliminar el campo id del objeto que se va a insertar
+          const { id, ...alumnoSinId } = alumno.dataValues;
+
+          // Crear nuevo registro del alumno para el mes actual
+          await AlumnosModel.create({
+            ...alumnoSinId, // Copiar todos los valores del alumno, excepto el id
+            mes: mesActual, // Nuevo mes
+            anio: anioActual, // Nuevo año
+            prospecto: 'socio' // Actualizar el tipo a "socio"
+          });
+
+          console.log(
+            `Alumno ${alumno.nombre} copiado al mes ${mesActual}-${anioActual} y marcado como socio`
+          );
+        } else {
+          console.log(
+            `El alumno ${alumno.nombre} no tiene el estado 'socio' en el mes ${mesAnterior}-${anioAnterior}, no se copiará como socio`
+          );
+        }
+      } else {
+        console.log(
+          `El alumno ${alumno.nombre} ya existe como socio en el mes ${mesActual}-${anioActual}`
+        );
+      }
+    } else {
+      console.log(`No se encontró el alumno con ID: ${alumnoId}`);
+    }
+  }
+};
+
+
+// Programar la tarea para que se ejecute el día 1 de cada mes a las 00:05
+cron.schedule('5 0 1 * *', async () => {
+  console.log('📅 Es 1° del mes - Ejecutando cierre del mes anterior...');
+  await cerrarMesAnterior();
+  await copiarAlumnosMesAnterior(); // Copiar los alumnos con asistencias después del 20 del mes anterior
+});
+
+const test = async () => {
+  console.log('🔍 Ejecutando prueba de cierre de mes...');
+  await cerrarMesAnterior();
+  await copiarAlumnosMesAnterior(); // Copiar los alumnos con asistencias después del 20 del mes anterior
+
+  console.log('✅ Prueba finalizada.');
+};
+
+test();
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 

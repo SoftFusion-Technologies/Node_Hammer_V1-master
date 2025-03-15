@@ -25,15 +25,26 @@ const AlumnosModel = MD_TB_Alumnos.AlumnosModel;
 
 // Controladores para operaciones CRUD en la tabla 'alumnos'
 
-// Mostrar todos los registros de la tabla alumnos
+// Mostrar todos los registros de la tabla alumnos con filtro opcional por mes y año
 export const OBRS_Alumnos_CTS = async (req, res) => {
   try {
-    const registros = await AlumnosModel.findAll();
+    const { mes, anio } = req.query;
+
+    const filtros = {};
+    if (mes) filtros.mes = mes;
+    if (anio) filtros.anio = anio;
+
+    // Buscar los registros de alumnos con los filtros aplicados
+    const registros = await AlumnosModel.findAll({
+      where: filtros
+    });
+
     res.json(registros);
   } catch (error) {
     res.json({ mensajeError: error.message });
   }
 };
+
 
 // Mostrar un registro específico de Alumnos por su ID
 export const OBR_Alumnos_CTS = async (req, res) => {
