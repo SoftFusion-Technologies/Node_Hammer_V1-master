@@ -34,6 +34,14 @@ export const AlumnosModel = db.define(
       type: DataTypes.DATE,
       allowNull: false,
       defaultValue: DataTypes.NOW
+    },
+    mes: {
+      type: DataTypes.INTEGER,
+      allowNull: false
+    },
+    anio: {
+      type: DataTypes.INTEGER,
+      allowNull: false
     }
   },
   {
