@@ -27,7 +27,6 @@ import { PostulanteV2Model } from './Models/MD_TB_Postulante_v2.js';
 import { AsistenciasModel } from './Models/MD_TB_Asistencias.js';
 import { AgendasModel } from './Models/MD_TB_Agendas.js';
 
-
 // nueva forma de congelar las  planillas sab 15 de mar
 import { Sequelize } from 'sequelize';
 import { PlanillasCerradasModel } from './Models/MD_TB_PlanillasCerradas.js';
@@ -1580,7 +1579,7 @@ app.get('/asistencia/:dia', async (req, res) => {
 
 // endpoint que devuelve las agendas pendientes agrupadas por alumno
 app.get('/notificaciones', async (req, res) => {
-  const { user_id } = req.query;
+  const { user_id, mes, anio } = req.query;
 
   if (!user_id) {
     return res.status(400).json({ error: 'Falta el id del instructor' });
@@ -1610,9 +1609,11 @@ app.get('/notificaciones', async (req, res) => {
                   AND sub_a.contenido IN ('REVISIÓN', 'ENVIADO')
           )
           AND al.user_id = ?
+          AND a.mes = ? 
+          AND a.anio = ?
        ORDER BY 
           a.alumno_id, a.agenda_num`,
-      [user_id]
+      [user_id, mes, anio]
     );
 
     res.json(result);
@@ -2872,7 +2873,6 @@ const copiarAlumnosMesAnterior = async () => {
     }
   }
 };
-
 
 // Programar la tarea para que se ejecute el día 1 de cada mes a las 00:05
 cron.schedule('5 0 1 * *', async () => {
