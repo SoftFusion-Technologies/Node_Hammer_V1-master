@@ -1626,12 +1626,6 @@ app.get('/notificaciones', async (req, res) => {
 /*
  * MODULO ESTADISTICAS
  */
-
-// Endpoint que devuelve el total de alumnos con más de 6 "P" por profesor, filtrado por mes y año
-/*
- * MODULO ESTADISTICAS
- */
-
 // Endpoint que devuelve el total de alumnos con más de 6 "P" por profesor, filtrado por mes y año
 app.get(
   '/estadisticas/profesores-con-alumnos-mas-de-seis-p',
@@ -1693,10 +1687,14 @@ app.get(
       // Responder con los datos
       res.json(result);
     } catch (error) {
-      console.error('Error obteniendo estadísticas de profesores:', error);
-      res
-        .status(500)
-        .json({ error: 'Error obteniendo estadísticas de profesores' });
+      console.error(
+        'Error obteniendo estadísticas de profesores profesores-con-alumnos-mas-de-seis-p:',
+        error
+      );
+      res.status(500).json({
+        error:
+          'Error obteniendo estadísticas de profesores profesores-con-alumnos-mas-de-seis-p'
+      });
     }
   }
 );
@@ -1758,10 +1756,14 @@ app.get('/estadisticas/asistencias-por-profe', async (req, res) => {
     // Responder con los datos
     res.json(result);
   } catch (error) {
-    console.error('Error obteniendo estadísticas de asistencias:', error);
-    res
-      .status(500)
-      .json({ error: 'Error obteniendo estadísticas de asistencias' });
+    console.error(
+      'Error obteniendo estadísticas de asistencias asistencias-por-profe:',
+      error
+    );
+    res.status(500).json({
+      error:
+        'Error obteniendo estadísticas de asistencias asistencias-por-profe'
+    });
   }
 });
 
@@ -1803,8 +1805,8 @@ app.get('/estadisticas/nuevos-del-mes', async (req, res) => {
         alumnos AS a ON u.id = a.user_id
       WHERE 
         a.prospecto = 'nuevo'
-        AND MONTH(a.fecha_creacion) = ? 
-        AND YEAR(a.fecha_creacion) = ?
+        AND a.mes = ?  -- Usar el campo 'mes' directamente
+        AND a.anio = ? -- Usar el campo 'anio' directamente
       GROUP BY 
         u.id, u.name
       ORDER BY 
@@ -1824,8 +1826,10 @@ app.get('/estadisticas/nuevos-del-mes', async (req, res) => {
     // Responder con los datos
     res.json(result);
   } catch (error) {
-    console.error('Error obteniendo nuevos del mes:', error);
-    res.status(500).json({ error: 'Error obteniendo nuevos del mes' });
+    console.error('Error obteniendo nuevos del mes nuevos-del-mes:', error);
+    res
+      .status(500)
+      .json({ error: 'Error obteniendo nuevos del mes nuevos-del-mes' });
   }
 });
 
@@ -1866,8 +1870,8 @@ app.get('/estadisticas/prospectos-del-mes', async (req, res) => {
         alumnos_prospecto AS ap ON u.id = ap.user_id
       WHERE 
         ap.prospecto = 'prospecto'
-        AND MONTH(ap.fecha_creacion) = ? 
-        AND YEAR(ap.fecha_creacion) = ?
+        AND ap.mes = ? 
+        AND ap.anio = ?
       GROUP BY 
         u.id, u.name
       ORDER BY 
@@ -1885,25 +1889,45 @@ app.get('/estadisticas/prospectos-del-mes', async (req, res) => {
     }
 
     // Responder con los datos
-    res.json(result);
+    res.json({
+      message: 'Prospectos encontrados exitosamente',
+      data: result
+    });
   } catch (error) {
-    console.error('Error obteniendo prospectos del mes:', error);
-    res.status(500).json({ error: 'Error obteniendo prospectos del mes' });
+    console.error(
+      'Error obteniendo prospectos del mes prospectos-del-mes:',
+      error
+    );
+    res.status(500).json({
+      error: 'Error obteniendo prospectos del mes prospectos-del-mes'
+    });
   }
 });
 
 app.get('/estadisticas/convertidos', async (req, res) => {
   try {
-    const [resultados] = await db.query(`
-      SELECT 
-        a.user_id AS profesor_id, 
-        u.name AS profesor_nombre, 
-        COUNT(*) AS totalConvertidos
-      FROM alumnos a
-      INNER JOIN users u ON a.user_id = u.id
-      WHERE a.c = 'c'
-      GROUP BY a.user_id, u.name
-    `);
+    // Obtener mes y año de los parámetros de consulta
+    const { mes, anio } = req.query;
+
+    // Validar que los parámetros existen
+    if (!mes || !anio) {
+      return res.status(400).json({ error: 'Mes y año son requeridos' });
+    }
+
+    // Consulta SQL con filtro por mes y año
+    const [resultados] = await pool.query(
+      `SELECT 
+          a.user_id AS profesor_id, 
+          u.name AS profesor_nombre, 
+          COUNT(*) AS totalConvertidos
+       FROM alumnos a
+       INNER JOIN users u ON a.user_id = u.id
+       WHERE a.c = 'c' 
+         AND a.mes = ? 
+         AND a.anio = ?
+       GROUP BY a.user_id, u.name`,
+      [mes, anio]
+    );
 
     res.status(200).json(resultados);
   } catch (error) {
@@ -1911,6 +1935,7 @@ app.get('/estadisticas/convertidos', async (req, res) => {
     res.status(500).json({ error: 'Error al obtener estadísticas' });
   }
 });
+
 
 // Nuevo Endpoint: Porcentaje de Conversión
 app.get('/estadisticas/porcentaje-conversion', async (req, res) => {
@@ -1980,6 +2005,7 @@ app.get('/estadisticas/porcentaje-conversion', async (req, res) => {
         convertidos.find((conv) => conv.profesorId === profesor.profesorId)
           ?.totalConvertidos || 0;
 
+      // Asegurarse de que los convertidos no sean mayores que los prospectos
       const porcentajeConversion =
         totalProspectos === 0
           ? 0
@@ -2145,6 +2171,14 @@ app.get('/estadisticas/retenciones-del-mes', async (req, res) => {
 
 app.get('/estadisticas/mensajes-por-profe', async (req, res) => {
   try {
+    // Obtener los parámetros de la URL
+    const { mes, anio } = req.query;
+
+    // Validar que los parámetros existen
+    if (!mes || !anio) {
+      return res.status(400).json({ error: 'Mes y año son requeridos' });
+    }
+
     // Consulta para obtener el total de mensajes enviados por cada profesor
     const [result] = await pool.query(
       `SELECT 
@@ -2157,10 +2191,14 @@ app.get('/estadisticas/mensajes-por-profe', async (req, res) => {
           alumnos al ON ai.alumno_id = al.id
        JOIN 
           users u ON al.user_id = u.id
+       WHERE 
+          al.mes = ?  -- Filtrar por mes
+          AND al.anio = ?  -- Filtrar por año
        GROUP BY 
           u.id, u.name
        ORDER BY 
-          total_mensajes DESC`
+          total_mensajes DESC`,
+      [mes, anio]
     );
 
     res.json(result);
