@@ -67,13 +67,18 @@ export const CR_Alumnos_CTS = async (req, res) => {
     const alumnoCreado = await AlumnosModel.create(req.body);
     console.log('Alumno creado en alumnos:', alumnoCreado); // Verifica el alumno creado
 
+    // Obtener mes y año actuales
+    const currentDate = new Date();
+    const mesActual = currentDate.getMonth() + 1; // getMonth() devuelve 0-11, sumamos 1 para obtener el rango 1-12
+    const anioActual = currentDate.getFullYear();
+
     // Si el alumno es de tipo 'prospecto', insertamos en la tabla 'alumnos_prospecto'
     if (prospecto === 'prospecto') {
       console.log('Alumno es prospecto, insertando en alumnos_prospecto');
 
-      // Crear el mismo registro en la tabla 'alumnos_prospecto'
+      // Crear el mismo registro en la tabla 'alumnos_prospecto' con los valores de mes y anio actuales
       await db.query(
-        'INSERT INTO alumnos_prospecto (nombre, prospecto, c, email, celular, punto_d, motivo, user_id, fecha_creacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO alumnos_prospecto (nombre, prospecto, c, email, celular, punto_d, motivo, user_id, fecha_creacion, mes, anio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         {
           replacements: [
             alumnoCreado.nombre,
@@ -85,6 +90,8 @@ export const CR_Alumnos_CTS = async (req, res) => {
             alumnoCreado.motivo,
             alumnoCreado.user_id,
             alumnoCreado.fecha_creacion,
+            mesActual, // Pasar el mes actual
+            anioActual // Pasar el año actual
           ]
         }
       );
@@ -99,6 +106,7 @@ export const CR_Alumnos_CTS = async (req, res) => {
     res.json({ mensajeError: error.message });
   }
 };
+
 
 // Eliminar un registro en Alumnos por su ID
 export const ER_Alumnos_CTS = async (req, res) => {
