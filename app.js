@@ -1936,7 +1936,6 @@ app.get('/estadisticas/convertidos', async (req, res) => {
   }
 });
 
-
 // Nuevo Endpoint: Porcentaje de Conversión
 app.get('/estadisticas/porcentaje-conversion', async (req, res) => {
   try {
@@ -2820,7 +2819,7 @@ const cerrarMesAnterior = async () => {
   }
 };
 
-// Función para copiar los alumnos que tienen asistencias después del 20 del mes anterior
+// Función para copiar los alumnos que tienen asistencias después del 20 del mes anterior y estado "P"
 const copiarAlumnosMesAnterior = async () => {
   console.log('Ejecutando copiar alumnos');
 
@@ -2830,27 +2829,28 @@ const copiarAlumnosMesAnterior = async () => {
   console.log(`Mes Actual: ${mesActual}, Año Actual: ${anioActual}`);
   console.log(`Mes Anterior: ${mesAnterior}, Año Anterior: ${anioAnterior}`);
 
-  // Filtrar las asistencias del mes anterior con día superior a 20
+  // Filtrar las asistencias del mes anterior con día superior a 20 y estado "P"
   const asistenciasMesAnterior = await AsistenciasModel.findAll({
     where: {
       mes: mesAnterior,
       anio: anioAnterior,
-      dia: { [Sequelize.Op.gt]: 20 } // Día mayor a 20
+      dia: { [Sequelize.Op.gte]: 20 }, // Día mayor o igual a 20
+      estado: 'P' // Solo asistencias con estado "P"
     }
   });
 
   console.log(
-    `Asistencias del mes ${mesAnterior}-${anioAnterior} después del día 20:`
+    `Asistencias del mes ${mesAnterior}-${anioAnterior} después del día 20 con estado "P":`
   );
   console.log(asistenciasMesAnterior);
 
-  // Extraer los IDs de los alumnos que tienen asistencias después del 20
+  // Extraer los IDs de los alumnos que tienen asistencias después del 20 con estado "P"
   const alumnosAcopiar = [
     ...new Set(asistenciasMesAnterior.map((asistencia) => asistencia.alumno_id))
   ];
   console.log('Alumnos a copiar:', alumnosAcopiar);
 
-  // Verificar que no se copien alumnos que ya existan en el mes actual o que ya fueron copiados como socio
+  // Verificar que no se copien alumnos que ya existan en el mes actual
   for (const alumnoId of alumnosAcopiar) {
     console.log(`Verificando existencia del alumno con ID: ${alumnoId}`);
 
@@ -2861,7 +2861,7 @@ const copiarAlumnosMesAnterior = async () => {
     if (alumno) {
       console.log(`Alumno encontrado: ${alumno.nombre}`);
 
-      // Verificar si el alumno ya existe en el mes actual (marzo) y si ya está marcado como socio
+      // Verificar si el alumno ya existe en el mes actual (marzo)
       const existeAlumnoEnMesActual = await AlumnosModel.findOne({
         where: {
           id: alumnoId,
@@ -2871,39 +2871,33 @@ const copiarAlumnosMesAnterior = async () => {
       });
 
       if (!existeAlumnoEnMesActual) {
-        // Verificar si el alumno ya ha sido copiado como socio en el mes anterior
+        // Verificar si el alumno ya es socio en el mes anterior
         const alumnoSocioEnMesAnterior = await AlumnosModel.findOne({
           where: {
             id: alumnoId,
             mes: mesAnterior, // Verificar en el mes anterior
             anio: anioAnterior, // Año anterior
-            prospecto: 'socio' // Verificar si ya es socio en el mes anterior
+            prospecto: 'socio' // Verificar si ya es socio
           }
         });
 
-        if (alumnoSocioEnMesAnterior) {
-          // Eliminar el campo id del objeto que se va a insertar
-          const { id, ...alumnoSinId } = alumno.dataValues;
+        // Si es socio o nuevo, copiar y marcarlo como socio
+        const { id, ...alumnoSinId } = alumno.dataValues;
 
-          // Crear nuevo registro del alumno para el mes actual
-          await AlumnosModel.create({
-            ...alumnoSinId, // Copiar todos los valores del alumno, excepto el id
-            mes: mesActual, // Nuevo mes
-            anio: anioActual, // Nuevo año
-            prospecto: 'socio' // Actualizar el tipo a "socio"
-          });
+        // Crear nuevo registro del alumno para el mes actual
+        await AlumnosModel.create({
+          ...alumnoSinId, // Copiar todos los valores del alumno, excepto el id
+          mes: mesActual, // Nuevo mes
+          anio: anioActual, // Nuevo año
+          prospecto: 'socio' // Marcar como "socio"
+        });
 
-          console.log(
-            `Alumno ${alumno.nombre} copiado al mes ${mesActual}-${anioActual} y marcado como socio`
-          );
-        } else {
-          console.log(
-            `El alumno ${alumno.nombre} no tiene el estado 'socio' en el mes ${mesAnterior}-${anioAnterior}, no se copiará como socio`
-          );
-        }
+        console.log(
+          `Alumno ${alumno.nombre} copiado al mes ${mesActual}-${anioActual} y marcado como socio`
+        );
       } else {
         console.log(
-          `El alumno ${alumno.nombre} ya existe como socio en el mes ${mesActual}-${anioActual}`
+          `El alumno ${alumno.nombre} ya existe en el mes ${mesActual}-${anioActual}`
         );
       }
     } else {
@@ -2912,17 +2906,39 @@ const copiarAlumnosMesAnterior = async () => {
   }
 };
 
+
+
+const eliminarDuplicados = async () => {
+  console.log('🔍 Eliminando alumnos duplicados...');
+
+  // Eliminar duplicados utilizando pool.query
+  await pool.query(`
+    DELETE a
+    FROM alumnos a
+    JOIN (
+      SELECT nombre, mes, MIN(id) as id_min
+      FROM alumnos
+      GROUP BY nombre, mes
+    ) AS b ON a.nombre = b.nombre AND a.mes = b.mes
+    WHERE a.id > b.id_min;
+  `);
+
+  console.log('✅ Duplicados eliminados correctamente.');
+};
+
 // Programar la tarea para que se ejecute el día 1 de cada mes a las 00:05
 cron.schedule('5 0 1 * *', async () => {
   console.log('📅 Es 1° del mes - Ejecutando cierre del mes anterior...');
   await cerrarMesAnterior();
   await copiarAlumnosMesAnterior(); // Copiar los alumnos con asistencias después del 20 del mes anterior
+  await eliminarDuplicados();
 });
 
 const test = async () => {
   console.log('🔍 Ejecutando prueba de cierre de mes...');
   await cerrarMesAnterior();
   await copiarAlumnosMesAnterior(); // Copiar los alumnos con asistencias después del 20 del mes anterior
+  await eliminarDuplicados();
 
   console.log('✅ Prueba finalizada.');
 };
