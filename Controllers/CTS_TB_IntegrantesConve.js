@@ -120,3 +120,33 @@ export const Autorizar_Integrante_CTS = async (req, res) => {
   }
 };
 // R6-AutorizarIntegrantes - Benjamin Orellana 15-09-24 - Final
+
+// Autorizar todos los integrantes de un convenio específico
+export const Autorizar_Integrantes_Por_Convenio = async (req, res) => {
+  try {
+    const { id_conv } = req.params; // Obtener el ID del convenio desde la URL
+    const estado_autorizacion = 'autorizado';
+
+    // Verificar si existen integrantes en ese convenio
+    const integrantes = await IntegrantesConveModel.findAll({ where: { id_conv } });
+    if (integrantes.length === 0) {
+      return res.status(404).json({ mensajeError: 'No se encontraron integrantes para este convenio' });
+    }
+
+    // Actualizar el estado de autorización
+    await IntegrantesConveModel.update(
+      { estado_autorizacion },
+      { where: { id_conv } }
+    );
+
+    // Obtener los registros actualizados
+    const registrosActualizados = await IntegrantesConveModel.findAll({ where: { id_conv } });
+
+    res.json({
+      message: `Se autorizaron ${registrosActualizados.length} integrantes del convenio ${id_conv}`,
+      registrosActualizados
+    });
+  } catch (error) {
+    res.status(500).json({ mensajeError: error.message });
+  }
+};
