@@ -1064,17 +1064,35 @@ const genAlertAgendN1 = async () => {
 
     console.log(`Fecha actual: ${diaHoy}-${mesActual}-${anioActual}`);
 
-    // Obtener los alumnos creados el día anterior que no sean prospecto = 'socio'
+    // Obtener los alumnos creados el día anterior que no sean prospecto = 'socio' y que tengan el mes y año actuales
     const fechaAyer = new Date(hoy);
     fechaAyer.setDate(hoy.getDate() - 1);
     const fechaAyerISO = fechaAyer.toISOString().split('T')[0];
 
+    console.log(`Fecha de ayer: ${fechaAyerISO}`);
+
     const [alumnos] = await pool.execute(
-      `SELECT id FROM alumnos 
-       WHERE DATE(fecha_creacion) = ? 
-       AND prospecto IN ('nuevo', 'prospecto')`,
-      [fechaAyerISO]
+      `SELECT id, fecha_creacion, prospecto FROM alumnos 
+       WHERE id IN (
+         SELECT MAX(id) 
+         FROM alumnos 
+         WHERE DATE(fecha_creacion) = ? 
+         AND prospecto IN ('nuevo', 'prospecto')
+         AND mes = ?  -- Condición para que el mes sea igual al actual
+         AND anio = ? -- Condición para que el año sea igual al actual
+         GROUP BY nombre
+       )`,
+      [fechaAyerISO, mesActual, anioActual]
     );
+
+    console.log('Alumnos encontrados:', alumnos); // Verifica si se encuentran alumnos
+
+    if (alumnos.length === 0) {
+      console.log(
+        'No se encontraron alumnos que coincidan con la fecha y condiciones.'
+      );
+      return; // Si no hay alumnos, termina la función
+    }
 
     for (const alumno of alumnos) {
       // Verificar si ya existe la alerta para este alumno y agenda_num = 1
@@ -1082,6 +1100,11 @@ const genAlertAgendN1 = async () => {
         `SELECT id FROM agendas WHERE alumno_id = ? AND agenda_num = 1`,
         [alumno.id]
       );
+
+      console.log(
+        `Alertas existentes para alumno_id ${alumno.id}:`,
+        alertasExistentes
+      ); // Verifica si hay alertas existentes
 
       if (alertasExistentes.length === 0) {
         // Insertar nueva alerta con el mes y año actual
@@ -1104,7 +1127,7 @@ const genAlertAgendN1 = async () => {
   }
 };
 
-// genAlertAgendN1(); // se comenta esto, en produccion funciona, para desarrollo se descomenta
+genAlertAgendN1(); // se comenta esto, en produccion funciona, para desarrollo se descomenta
 // Configura el cron job para ejecutarse de lunes a viernes
 
 cron.schedule('0 0 * * *', async () => {
@@ -1122,7 +1145,7 @@ const genAlertAgendN3 = async () => {
 
     console.log(`Fecha actual: ${diaHoy}-${mesActual}-${anioActual}`);
 
-    // Fecha de hace tres semanas (solo para referencia, si es necesaria)
+    // Fecha de hace tres semanas
     const fechaTresSemanas = new Date(hoy);
     fechaTresSemanas.setDate(hoy.getDate() - 21);
     const fechaTresSemanasISO = fechaTresSemanas.toISOString().split('T')[0];
@@ -1130,11 +1153,13 @@ const genAlertAgendN3 = async () => {
       `Fecha de hace tres semanas en formato ISO: ${fechaTresSemanasISO}`
     );
 
-    // Obtener los alumnos creados hace tres semanas que no sean prospecto = 'socio'
+    // Obtener los alumnos creados hace tres semanas (seleccionando el ID más alto por nombre y mes)
     const [alumnos] = await pool.execute(
-      `SELECT id FROM alumnos 
+      `SELECT MAX(id) AS id 
+       FROM alumnos 
        WHERE DATE(fecha_creacion) = ? 
-       AND prospecto IN ('nuevo', 'prospecto')`,
+       AND prospecto IN ('nuevo', 'prospecto') 
+       GROUP BY nombre, mes`,
       [fechaTresSemanasISO]
     );
 
@@ -1184,12 +1209,15 @@ const generarAlertaProspecto = async () => {
     const anioActual = hoy.getFullYear(); // Año actual
     console.log(`Fecha de hoy: ${fechaHoyISO}`);
 
-    // Obtener los alumnos que son prospectos
+    // Obtener los alumnos prospectos con el id más alto por nombre y mes
     const [alumnosProspecto] = await pool.execute(
-      `SELECT id, fecha_creacion, prospecto FROM alumnos WHERE prospecto = 'prospecto'`
+      `SELECT MAX(id) AS id, MAX(fecha_creacion) AS fecha_creacion, prospecto 
+       FROM alumnos 
+       WHERE prospecto = 'prospecto' 
+       GROUP BY nombre, mes`
     );
 
-    console.log(`Alumnos prospecto encontrados:`, alumnosProspecto); // Verificamos los alumnos encontrados
+    console.log(`Alumnos prospecto encontrados:`, alumnosProspecto);
 
     // Si no hay prospectos, no hacer nada
     if (alumnosProspecto.length === 0) {
@@ -1203,7 +1231,7 @@ const generarAlertaProspecto = async () => {
       const fechaCreacion = new Date(alumno.fecha_creacion);
       const fechaSieteDias = new Date(fechaCreacion);
       fechaSieteDias.setDate(fechaCreacion.getDate() + 7); // 7 días después
-      const fechaSieteDiasISO = fechaSieteDias.toISOString().split('T')[0]; // Solo la fecha (sin hora)
+      const fechaSieteDiasISO = fechaSieteDias.toISOString().split('T')[0];
 
       console.log(
         `Fecha para generar alerta (7 días después) para alumno_id ${alumno.id}: ${fechaSieteDiasISO}`
@@ -1232,27 +1260,23 @@ const generarAlertaProspecto = async () => {
             `Actualizando alerta para agenda_num 3 para alumno_id: ${alumno.id}`
           );
 
-          const [result] = await pool.execute(
+          await pool.execute(
             `UPDATE agendas 
              SET contenido = 'PENDIENTE', mes = ?, anio = ? 
              WHERE alumno_id = ? AND agenda_num = 3`,
             [mesActual, anioActual, alumno.id]
           );
-
-          console.log(`Resultado de la actualización:`, result);
         } else {
           // Si no existe, inserta la nueva alerta para la agenda 3
           console.log(
             `Insertando alerta para agenda_num 3 para alumno_id: ${alumno.id}`
           );
 
-          const [result] = await pool.execute(
+          await pool.execute(
             `INSERT INTO agendas (alumno_id, agenda_num, contenido, mes, anio) 
              VALUES (?, 3, 'PENDIENTE', ?, ?)`,
             [alumno.id, mesActual, anioActual]
           );
-
-          console.log(`Resultado de la inserción:`, result);
         }
       }
     }
@@ -1294,7 +1318,7 @@ const registrarCreacionAlerta = async (alumno_id, agenda_num) => {
 const genAlertInactivos = async () => {
   try {
     const hoy = new Date();
-    const diaSemana = hoy.getDay(); // 0: Domingo, 1: Lunes, ..., 4: Jueves, 5: Viernes
+    const diaSemana = hoy.getDay(); // 0: Domingo, 1: Lunes, ..., 5: Viernes
 
     // Solo ejecuta los jueves (4) y viernes (5)
     if (diaSemana !== 4 && diaSemana !== 5) {
@@ -1307,10 +1331,9 @@ const genAlertInactivos = async () => {
     const fechaLimiteISO = fechaLimite.toISOString().split('T')[0];
     console.log(`Fecha límite para inactivos: ${fechaLimiteISO}`);
 
-    // Obtén los alumnos con 5 días consecutivos de estado 'A'
-    // Y verifica que no tengan un presente ('P') DESPUÉS del periodo evaluado
+    // Obtén los alumnos con 5 días consecutivos de estado 'A' con el MAX(id)
     const [alumnos] = await pool.execute(
-      `SELECT DISTINCT a.alumno_id
+      `SELECT MAX(a.id) AS id, a.alumno_id
        FROM asistencias a
        WHERE a.estado = 'A'
        AND NOT EXISTS (
@@ -1318,23 +1341,25 @@ const genAlertInactivos = async () => {
         FROM asistencias p
         WHERE p.alumno_id = a.alumno_id
         AND p.estado = 'P'
+        AND p.dia > ?
       )
       GROUP BY a.alumno_id
-      HAVING COUNT(DISTINCT a.dia) >= 5`
+      HAVING COUNT(DISTINCT a.dia) >= 5`,
+      [fechaLimiteISO]
     );
 
     const agenda_num = 4; // Alerta para inactividad
-    const mesActual = hoy.getMonth() + 1; // Mes actual (0 indexado, por eso +1)
+    const mesActual = hoy.getMonth() + 1; // Mes actual
     const anioActual = hoy.getFullYear(); // Año actual
 
     for (const alumno of alumnos) {
-      // Verifica si ya existe la alerta para este alumno y agenda_num = 4 (Inactivos) en el mes y año actual
+      // Verifica si ya existe la alerta para este alumno
       const [alertasExistentes] = await pool.execute(
         `SELECT id FROM agendas WHERE alumno_id = ? AND agenda_num = ?`,
         [alumno.alumno_id, agenda_num]
       );
 
-      // Verifica si ya existe un registro de creación en alertas_creadas para el mes y año actual
+      // Verifica si ya existe un registro de creación en alertas_creadas
       const [alertasCreadas] = await pool.execute(
         `SELECT fecha_creacion, mes, anio 
          FROM alertas_creadas 
@@ -1347,7 +1372,7 @@ const genAlertInactivos = async () => {
           console.log(
             `Ya existe una alerta de inactividad para el alumno_id: ${alumno.alumno_id} en el mes ${mesActual} y año ${anioActual}. No se crea una nueva.`
           );
-          continue; // No creamos la alerta, pasamos al siguiente alumno
+          continue;
         }
 
         // Si no existe una alerta para este mes, se crea la alerta
@@ -1383,9 +1408,9 @@ cron.schedule('0 0 * * *', async () => {
 
 const actualizarProspectosANuevo = async () => {
   try {
-    // Consulta para obtener alumnos con 2 o más asistencias consecutivas
+    // Consulta para obtener alumnos con 2 o más asistencias consecutivas usando MAX(id)
     const [alumnosConAsistencias] = await pool.execute(`
-      SELECT a.id AS alumno_id, COUNT(*) AS asistencias_consecutivas
+      SELECT MAX(asis.id) AS max_asistencia_id, a.id AS alumno_id, COUNT(*) AS asistencias_consecutivas
       FROM asistencias AS asis
       JOIN alumnos AS a ON asis.alumno_id = a.id
       WHERE asis.estado = 'P' AND a.prospecto = 'prospecto'
@@ -1399,10 +1424,10 @@ const actualizarProspectosANuevo = async () => {
       return;
     }
 
-    for (const { alumno_id } of alumnosConAsistencias) {
+    for (const { alumno_id, max_asistencia_id } of alumnosConAsistencias) {
       console.log(`Actualizando alumno_id: ${alumno_id} a "nuevo"`);
 
-      // Actualizar el alumno a "nuevo" y agregarle "c"
+      // Actualizar el alumno a "nuevo" solo si el id de asistencia es el más alto
       const [resultUpdate] = await pool.execute(
         `UPDATE alumnos 
          SET prospecto = 'nuevo', c = 'c', fecha_creacion = CURDATE()
@@ -1599,7 +1624,14 @@ app.get('/notificaciones', async (req, res) => {
        JOIN 
           alumnos AS al ON a.alumno_id = al.id
        WHERE 
-          a.contenido = 'PENDIENTE'
+          a.id = (
+              SELECT MAX(sub_a.id)
+              FROM agendas AS sub_a
+              WHERE 
+                  sub_a.alumno_id = a.alumno_id
+                  AND sub_a.agenda_num = a.agenda_num
+          )
+          AND a.contenido = 'PENDIENTE'
           AND NOT EXISTS (
               SELECT 1 
               FROM agendas AS sub_a
@@ -1607,6 +1639,13 @@ app.get('/notificaciones', async (req, res) => {
                   sub_a.alumno_id = a.alumno_id
                   AND sub_a.agenda_num = a.agenda_num
                   AND sub_a.contenido IN ('REVISIÓN', 'ENVIADO')
+                  AND sub_a.id = (
+                      SELECT MAX(sub_sub_a.id)
+                      FROM agendas AS sub_sub_a
+                      WHERE 
+                          sub_sub_a.alumno_id = a.alumno_id
+                          AND sub_sub_a.agenda_num = a.agenda_num
+                  )
           )
           AND al.user_id = ?
           AND a.mes = ? 
@@ -2906,8 +2945,6 @@ const copiarAlumnosMesAnterior = async () => {
   }
 };
 
-
-
 const eliminarDuplicados = async () => {
   console.log('🔍 Eliminando alumnos duplicados...');
 
@@ -2916,11 +2953,11 @@ const eliminarDuplicados = async () => {
     DELETE a
     FROM alumnos a
     JOIN (
-      SELECT nombre, mes, MIN(id) as id_min
+      SELECT nombre, mes, MAX(id) as id_max
       FROM alumnos
       GROUP BY nombre, mes
     ) AS b ON a.nombre = b.nombre AND a.mes = b.mes
-    WHERE a.id > b.id_min;
+    WHERE a.id < b.id_max;
   `);
 
   console.log('✅ Duplicados eliminados correctamente.');
