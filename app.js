@@ -964,20 +964,21 @@ app.get('/integrantes-congelados/:id_conv', async (req, res) => {
 });
 
 // Función para eliminar asistencias futuras
-const eliminarAsistenciasFuturas = async () => {
+const eliminarAsistenciasFuturas = async (diaHoy, mesHoy, anioHoy) => {
   const fechaHoy = new Date();
-  const diaHoy = fechaHoy.getDate(); // Obtener el día actual del mes
+  const diaHoyActual = fechaHoy.getDate(); // Obtener el día actual del mes
   await AsistenciasModel.destroy({
     where: {
       [Op.and]: [
-        { dia: { [Op.gt]: diaHoy } }, // Días mayores al actual
+        { dia: { [Op.gt]: diaHoyActual } }, // Días mayores al actual
         { mes: mesHoy }, // Asegurarse de que sea el mismo mes
         { anio: anioHoy } // Asegurarse de que sea el mismo año
       ]
     }
   });
-  console.log(`Asistencias futuras eliminadas hasta el día ${diaHoy}.`);
+  console.log(`Asistencias futuras eliminadas hasta el día ${diaHoyActual}.`);
 };
+
 
 // Función para crear asistencias automáticas
 const crearAsistenciasAutomáticas = async () => {
@@ -985,9 +986,9 @@ const crearAsistenciasAutomáticas = async () => {
     // 1. Obtener todos los alumnos
     const alumnos = await AlumnosModel.findAll();
 
-    // 2. Crear asistencia solo si es lunes a viernes
+    // 2. Verificar si es día hábil (lunes a viernes)
     const fechaHoy = new Date();
-    const diaSemana = fechaHoy.getDay(); // Número del día (0 = domingo, 6 = sábado)
+    const diaSemana = fechaHoy.getDay();
     const diaHoy = fechaHoy.getDate();
     const mesHoy = fechaHoy.getMonth() + 1;
     const anioHoy = fechaHoy.getFullYear();
@@ -997,35 +998,34 @@ const crearAsistenciasAutomáticas = async () => {
       return;
     }
 
-    // 3. Eliminar asistencias existentes para hoy
-    await AsistenciasModel.destroy({
-      where: {
+    // 3. Obtener asistencias ya registradas hoy
+    const asistenciasExistentes = await AsistenciasModel.findAll({
+      where: { dia: diaHoy, mes: mesHoy, anio: anioHoy }
+    });
+
+    // 4. Crear asistencias solo si no existen
+    const asistencias = alumnos
+      .filter(
+        (alumno) =>
+          !asistenciasExistentes.some((a) => a.alumno_id === alumno.id)
+      )
+      .map((alumno) => ({
+        alumno_id: alumno.id,
         dia: diaHoy,
         mes: mesHoy,
         anio: anioHoy,
-        estado: 'A' // Solo eliminar asistencias con estado "Ausente"
-      }
-    });
-    console.log('Asistencias existentes eliminadas.');
-    // 3. Crear asistencias
-    const asistencias = alumnos.map((alumno) => ({
-      alumno_id: alumno.id,
-      dia: diaHoy,
-      mes: mesHoy,
-      anio: anioHoy,
-      estado: 'A' // Estado inicial como "Ausente"
-    }));
+        estado: 'A'
+      }));
 
     if (asistencias.length > 0) {
-      // Insertar todas las asistencias
       await AsistenciasModel.bulkCreate(asistencias);
       console.log('Asistencias creadas con éxito.');
     } else {
-      console.log('No se encontraron alumnos para registrar asistencias.');
+      console.log('Las asistencias ya estaban registradas.');
     }
 
-    // 4. Eliminar asistencias futuras
-    await eliminarAsistenciasFuturas();
+    // 5. Eliminar asistencias futuras
+    await eliminarAsistenciasFuturas(diaHoy, mesHoy, anioHoy);
   } catch (error) {
     console.error('Error al crear asistencias automáticas:', error);
   }
@@ -2928,7 +2928,8 @@ const copiarAlumnosMesAnterior = async () => {
           ...alumnoSinId, // Copiar todos los valores del alumno, excepto el id
           mes: mesActual, // Nuevo mes
           anio: anioActual, // Nuevo año
-          prospecto: 'socio' // Marcar como "socio"
+          prospecto: 'socio', // Marcar como "socio"
+          fecha_creacion: new Date() // Actualizar la fecha de creación al momento de la copia
         });
 
         console.log(
@@ -2981,6 +2982,7 @@ const test = async () => {
 };
 
 test();
+
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 
