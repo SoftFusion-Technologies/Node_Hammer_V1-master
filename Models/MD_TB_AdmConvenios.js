@@ -90,6 +90,12 @@ const AdmConveniosModel = db.define(
     preciofinal_concep: {
       type: DataTypes.STRING,
       allowNull: true
+    },
+    // R9 - Campo para controlar si el convenio está archivado o no - Benjamin Orellana 07/04/2025
+    archivado: {
+      type: DataTypes.TINYINT,
+      allowNull: false,
+      defaultValue: 1
     }
   },
   {
