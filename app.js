@@ -1649,9 +1649,8 @@ app.get('/notificaciones', async (req, res) => {
     return res.status(400).json({ error: 'Falta el id del instructor' });
   }
 
-  // Calcular mes y año actuales
   const hoy = new Date();
-  const mesActual = hoy.getMonth() + 1; // Mes actual (recordá que getMonth() es 0-indexado)
+  const mesActual = hoy.getMonth() + 1;
   const anioActual = hoy.getFullYear();
 
   try {
@@ -1694,9 +1693,11 @@ app.get('/notificaciones', async (req, res) => {
           AND al.user_id = ?
           AND a.mes = ? 
           AND a.anio = ?
+          AND al.mes = ?   -- ✅ Validación del alumno
+          AND al.anio = ?  -- ✅ Validación del alumno
        ORDER BY 
           a.alumno_id, a.agenda_num`,
-      [user_id, mesActual, anioActual]
+      [user_id, mesActual, anioActual, mesActual, anioActual]
     );
 
     res.json(result);
@@ -1705,6 +1706,7 @@ app.get('/notificaciones', async (req, res) => {
     res.status(500).json({ error: 'Error obteniendo notificaciones' });
   }
 });
+
 
 /*
  * MODULO ESTADISTICAS
