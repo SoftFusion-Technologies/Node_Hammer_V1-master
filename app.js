@@ -979,7 +979,6 @@ const eliminarAsistenciasFuturas = async (diaHoy, mesHoy, anioHoy) => {
   console.log(`Asistencias futuras eliminadas hasta el día ${diaHoyActual}.`);
 };
 
-
 // Función para crear asistencias automáticas
 const crearAsistenciasAutomáticas = async () => {
   try {
@@ -1059,55 +1058,67 @@ const genAlertAgendN1 = async () => {
   try {
     const hoy = new Date();
     const diaHoy = hoy.getDate();
-    const mesActual = hoy.getMonth() + 1; // Mes actual (0 indexado, por eso +1)
+    const mesActual = hoy.getMonth() + 1; // Mes actual (0 indexado)
     const anioActual = hoy.getFullYear();
 
     console.log(`Fecha actual: ${diaHoy}-${mesActual}-${anioActual}`);
 
-    // Obtener los alumnos creados el día anterior que no sean prospecto = 'socio' y que tengan el mes y año actuales
-    const fechaAyer = new Date(hoy);
-    fechaAyer.setDate(hoy.getDate() - 1);
-    const fechaAyerISO = fechaAyer.toISOString().split('T')[0];
+    // Rango de fecha: 2 días atrás (desde) hasta ayer (hasta)
+    const fechaInicio = new Date();
+    fechaInicio.setDate(hoy.getDate() - 2);
+    fechaInicio.setHours(0, 0, 0, 0);
 
-    console.log(`Fecha de ayer: ${fechaAyerISO}`);
+    const fechaFin = new Date();
+    fechaFin.setDate(hoy.getDate() - 1);
+    fechaFin.setHours(23, 59, 59, 999);
+
+    const fechaInicioStr = fechaInicio
+      .toISOString()
+      .slice(0, 19)
+      .replace('T', ' ');
+    const fechaFinStr = fechaFin.toISOString().slice(0, 19).replace('T', ' ');
+
+    console.log(`Buscando alumnos entre: ${fechaInicioStr} y ${fechaFinStr}`);
 
     const [alumnos] = await pool.execute(
       `SELECT id, fecha_creacion, prospecto FROM alumnos 
        WHERE id IN (
          SELECT MAX(id) 
          FROM alumnos 
-         WHERE DATE(fecha_creacion) = ? 
-         AND prospecto IN ('nuevo', 'prospecto')
-         AND mes = ?  -- Condición para que el mes sea igual al actual
-         AND anio = ? -- Condición para que el año sea igual al actual
+         WHERE fecha_creacion BETWEEN ? AND ?
+           AND prospecto IN ('nuevo', 'prospecto')
+           AND mes = ? 
+           AND anio = ?
          GROUP BY nombre
        )`,
-      [fechaAyerISO, mesActual, anioActual]
+      [fechaInicioStr, fechaFinStr, mesActual, anioActual]
     );
 
-    console.log('Alumnos encontrados:', alumnos); // Verifica si se encuentran alumnos
+    console.log('Alumnos encontrados:', alumnos);
 
     if (alumnos.length === 0) {
       console.log(
         'No se encontraron alumnos que coincidan con la fecha y condiciones.'
       );
-      return; // Si no hay alumnos, termina la función
+      return;
     }
 
     for (const alumno of alumnos) {
-      // Verificar si ya existe la alerta para este alumno y agenda_num = 1
       const [alertasExistentes] = await pool.execute(
-        `SELECT id FROM agendas WHERE alumno_id = ? AND agenda_num = 1`,
-        [alumno.id]
+        `SELECT id FROM agendas 
+         WHERE alumno_id = ? 
+           AND agenda_num = 1
+           AND mes = ? 
+           AND anio = ?`,
+        [alumno.id, mesActual, anioActual]
       );
 
       console.log(
         `Alertas existentes para alumno_id ${alumno.id}:`,
         alertasExistentes
-      ); // Verifica si hay alertas existentes
+      );
 
       if (alertasExistentes.length === 0) {
-        // Insertar nueva alerta con el mes y año actual
         console.log(`Insertando alerta para alumno_id: ${alumno.id}`);
         await pool.execute(
           `INSERT INTO agendas (alumno_id, agenda_num, contenido, mes, anio)
@@ -1127,7 +1138,7 @@ const genAlertAgendN1 = async () => {
   }
 };
 
-genAlertAgendN1(); // se comenta esto, en produccion funciona, para desarrollo se descomenta
+//genAlertAgendN1(); // se comenta esto, en produccion funciona, para desarrollo se descomenta
 // Configura el cron job para ejecutarse de lunes a viernes
 
 cron.schedule('0 0 * * *', async () => {
@@ -1602,13 +1613,18 @@ app.get('/asistencia/:dia', async (req, res) => {
   }
 });
 
-// endpoint que devuelve las agendas pendientes agrupadas por alumno
+// Endpoint que devuelve las agendas pendientes agrupadas por alumno usando el mes y año actuales
 app.get('/notificaciones', async (req, res) => {
-  const { user_id, mes, anio } = req.query;
+  const { user_id } = req.query;
 
   if (!user_id) {
     return res.status(400).json({ error: 'Falta el id del instructor' });
   }
+
+  // Calcular mes y año actuales
+  const hoy = new Date();
+  const mesActual = hoy.getMonth() + 1; // Mes actual (recordá que getMonth() es 0-indexado)
+  const anioActual = hoy.getFullYear();
 
   try {
     const [result] = await pool.query(
@@ -1652,7 +1668,7 @@ app.get('/notificaciones', async (req, res) => {
           AND a.anio = ?
        ORDER BY 
           a.alumno_id, a.agenda_num`,
-      [user_id, mes, anio]
+      [user_id, mesActual, anioActual]
     );
 
     res.json(result);
@@ -1738,7 +1754,6 @@ app.get(
   }
 );
 
-// Endpoint que devuelve el total de asistencias por profesor
 // Endpoint que devuelve el total de asistencias por profesor filtrado por mes y año
 app.get('/estadisticas/asistencias-por-profe', async (req, res) => {
   try {
@@ -2928,8 +2943,7 @@ const copiarAlumnosMesAnterior = async () => {
           ...alumnoSinId, // Copiar todos los valores del alumno, excepto el id
           mes: mesActual, // Nuevo mes
           anio: anioActual, // Nuevo año
-          prospecto: 'socio', // Marcar como "socio"
-          fecha_creacion: new Date() // Actualizar la fecha de creación al momento de la copia
+          prospecto: 'socio'
         });
 
         console.log(
