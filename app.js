@@ -1369,9 +1369,12 @@ const genAlertInactivos = async () => {
     const [alumnos] = await pool.execute(
       `SELECT MAX(a.id) AS id, a.alumno_id
    FROM asistencias a
+   JOIN alumnos al ON al.id = a.alumno_id
    WHERE a.estado = 'A'
      AND a.mes = ?
      AND a.anio = ?
+     AND MONTH(al.fecha_creacion) = ?
+     AND YEAR(al.fecha_creacion) = ?
      AND NOT EXISTS (
         SELECT 1 
         FROM asistencias p
@@ -1383,7 +1386,15 @@ const genAlertInactivos = async () => {
      )
    GROUP BY a.alumno_id
    HAVING COUNT(DISTINCT a.dia) >= 5`,
-      [mesActual, anioActual, fechaLimiteISO, mesActual, anioActual]
+      [
+        mesActual,
+        anioActual,
+        mesActual,
+        anioActual,
+        fechaLimiteISO,
+        mesActual,
+        anioActual
+      ]
     );
 
     const agenda_num = 4; // Alerta para inactividad
@@ -1435,15 +1446,6 @@ const genAlertInactivos = async () => {
     console.error('Error generando alertas para inactivos:', error);
   }
 };
-
-const test2 = async () => {
-  console.log('🔍 Ejecutando prueba de genAlertInactivos...');
-  await genAlertInactivos();
-
-  console.log('✅ Prueba finalizada. genAlertInactivos');
-};
-
-test2();
 
 // Configura el cron job para ejecutarse diariamente
 cron.schedule('0 0 * * *', async () => {
