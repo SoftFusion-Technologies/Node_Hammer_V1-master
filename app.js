@@ -2409,10 +2409,12 @@ const insertarAlumnosNuevos = async () => {
   try {
     // Consulta para obtener todos los alumnos con prospecto 'nuevo'
     const [alumnosNuevos] = await pool.execute(`
-      SELECT id, nombre, fecha_creacion
-      FROM alumnos
-      WHERE prospecto = 'nuevo'
-    `);
+  SELECT id, nombre, fecha_creacion
+  FROM alumnos
+  WHERE prospecto = 'nuevo'
+    AND mes = MONTH(CURDATE())
+    AND anio = YEAR(CURDATE())
+`);
 
     // Si no hay alumnos nuevos, no hacer nada
     if (alumnosNuevos.length === 0) {
