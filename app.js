@@ -1150,40 +1150,61 @@ cron.schedule('0 0 * * *', async () => {
 const genAlertAgendN3 = async () => {
   try {
     const hoy = new Date();
-    const diaHoy = hoy.getDate();
-    const mesActual = hoy.getMonth() + 1; // Mes actual (0 indexado, por eso +1)
+    const mesActual = hoy.getMonth() + 1;
     const anioActual = hoy.getFullYear();
 
-    console.log(`Fecha actual: ${diaHoy}-${mesActual}-${anioActual}`);
+    // Fecha exacta de hace 21 días (3 semanas)
+    const fechaObjetivo = new Date();
+    fechaObjetivo.setDate(hoy.getDate() - 21);
+    fechaObjetivo.setHours(0, 0, 0, 0); // inicio del día
+    const fechaObjetivoFin = new Date(fechaObjetivo);
+    fechaObjetivoFin.setHours(23, 59, 59, 999); // fin del día
 
-    // Fecha de hace tres semanas
-    const fechaTresSemanas = new Date(hoy);
-    fechaTresSemanas.setDate(hoy.getDate() - 21);
-    const fechaTresSemanasISO = fechaTresSemanas.toISOString().split('T')[0];
+    const fechaInicioStr = fechaObjetivo
+      .toISOString()
+      .slice(0, 19)
+      .replace('T', ' ');
+    const fechaFinStr = fechaObjetivoFin
+      .toISOString()
+      .slice(0, 19)
+      .replace('T', ' ');
+
     console.log(
-      `Fecha de hace tres semanas en formato ISO: ${fechaTresSemanasISO}`
+      `Buscando alumnos creados hace 3 semanas (${fechaInicioStr} - ${fechaFinStr})`
     );
 
-    // Obtener los alumnos creados hace tres semanas (seleccionando el ID más alto por nombre y mes)
     const [alumnos] = await pool.execute(
-      `SELECT MAX(id) AS id 
+      `SELECT id, fecha_creacion, prospecto 
        FROM alumnos 
-       WHERE DATE(fecha_creacion) = ? 
-       AND prospecto IN ('nuevo', 'prospecto') 
-       GROUP BY nombre, mes`,
-      [fechaTresSemanasISO]
+       WHERE id IN (
+         SELECT MAX(id) 
+         FROM alumnos 
+         WHERE fecha_creacion BETWEEN ? AND ?
+           AND prospecto IN ('nuevo', 'prospecto')
+           AND mes = ? 
+           AND anio = ?
+         GROUP BY nombre
+       )`,
+      [fechaInicioStr, fechaFinStr, mesActual, anioActual]
     );
+
+    if (alumnos.length === 0) {
+      console.log('No se encontraron alumnos para generar alertas N3.');
+      return;
+    }
 
     for (const alumno of alumnos) {
-      // Verificar si ya existe la alerta para este alumno y agenda_num = 2
       const [alertasExistentes] = await pool.execute(
-        `SELECT id FROM agendas WHERE alumno_id = ? AND agenda_num = 2`,
-        [alumno.id]
+        `SELECT id FROM agendas 
+         WHERE alumno_id = ? 
+           AND agenda_num = 2 
+           AND mes = ? 
+           AND anio = ?`,
+        [alumno.id, mesActual, anioActual]
       );
 
       if (alertasExistentes.length === 0) {
-        // Insertar nueva alerta con el mes y año actuales
-        console.log(`Insertando alerta para alumno_id: ${alumno.id}`);
+        console.log(`Insertando alerta N3 para alumno_id: ${alumno.id}`);
         await pool.execute(
           `INSERT INTO agendas (alumno_id, agenda_num, contenido, mes, anio)
            VALUES (?, 2, 'PENDIENTE', ?, ?)`,
@@ -1191,16 +1212,14 @@ const genAlertAgendN3 = async () => {
         );
       } else {
         console.log(
-          `Alerta ya existente para alumno_id: ${alumno.id}, no se crea duplicado.`
+          `Ya existe alerta N3 para alumno_id: ${alumno.id}, no se genera duplicado.`
         );
       }
     }
 
-    console.log(
-      `Proceso de generación de alertas de la 3ra semana completado.`
-    );
+    console.log('Proceso de generación de alertas N3 completado.');
   } catch (error) {
-    console.error('Error generando alertas de la 3ra semana:', error);
+    console.error('Error generando alertas N3:', error);
   }
 };
 
@@ -1329,6 +1348,8 @@ const registrarCreacionAlerta = async (alumno_id, agenda_num) => {
 const genAlertInactivos = async () => {
   try {
     const hoy = new Date();
+    const mesActual = hoy.getMonth() + 1; // Mes actual
+    const anioActual = hoy.getFullYear(); // Año actual
     const diaSemana = hoy.getDay(); // 0: Domingo, 1: Lunes, ..., 5: Viernes
 
     // Solo ejecuta los jueves (4) y viernes (5)
@@ -1342,26 +1363,30 @@ const genAlertInactivos = async () => {
     const fechaLimiteISO = fechaLimite.toISOString().split('T')[0];
     console.log(`Fecha límite para inactivos: ${fechaLimiteISO}`);
 
-    // Obtén los alumnos con 5 días consecutivos de estado 'A' con el MAX(id)
+    // Obtén los alumnos con 5 días de estado 'A' dentro del mes y año actual,
+    // y que no tengan presencia ('P') después de la fecha límite
+
     const [alumnos] = await pool.execute(
       `SELECT MAX(a.id) AS id, a.alumno_id
-       FROM asistencias a
-       WHERE a.estado = 'A'
-       AND NOT EXISTS (
+   FROM asistencias a
+   WHERE a.estado = 'A'
+     AND a.mes = ?
+     AND a.anio = ?
+     AND NOT EXISTS (
         SELECT 1 
         FROM asistencias p
         WHERE p.alumno_id = a.alumno_id
-        AND p.estado = 'P'
-        AND p.dia > ?
-      )
-      GROUP BY a.alumno_id
-      HAVING COUNT(DISTINCT a.dia) >= 5`,
-      [fechaLimiteISO]
+          AND p.estado = 'P'
+          AND p.dia > ?
+          AND p.mes = ?
+          AND p.anio = ?
+     )
+   GROUP BY a.alumno_id
+   HAVING COUNT(DISTINCT a.dia) >= 5`,
+      [mesActual, anioActual, fechaLimiteISO, mesActual, anioActual]
     );
 
     const agenda_num = 4; // Alerta para inactividad
-    const mesActual = hoy.getMonth() + 1; // Mes actual
-    const anioActual = hoy.getFullYear(); // Año actual
 
     for (const alumno of alumnos) {
       // Verifica si ya existe la alerta para este alumno
@@ -1410,6 +1435,15 @@ const genAlertInactivos = async () => {
     console.error('Error generando alertas para inactivos:', error);
   }
 };
+
+const test2 = async () => {
+  console.log('🔍 Ejecutando prueba de genAlertInactivos...');
+  await genAlertInactivos();
+
+  console.log('✅ Prueba finalizada. genAlertInactivos');
+};
+
+test2();
 
 // Configura el cron job para ejecutarse diariamente
 cron.schedule('0 0 * * *', async () => {
