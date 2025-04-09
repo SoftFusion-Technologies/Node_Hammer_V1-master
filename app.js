@@ -1235,59 +1235,52 @@ const generarAlertaProspecto = async () => {
     // Obtener la fecha de hoy
     const hoy = new Date();
     const fechaHoyISO = hoy.toISOString().split('T')[0]; // Solo la fecha (sin hora)
-    const mesActual = hoy.getMonth() + 1; // Mes actual (0 indexado, por eso +1)
-    const anioActual = hoy.getFullYear(); // Año actual
+    const mesActual = hoy.getMonth() + 1;
+    const anioActual = hoy.getFullYear();
+
     console.log(`Fecha de hoy: ${fechaHoyISO}`);
 
-    // Obtener los alumnos prospectos con el id más alto por nombre y mes
+    // Obtener prospectos del mes y año actual (id más alto por nombre)
     const [alumnosProspecto] = await pool.execute(
       `SELECT MAX(id) AS id, MAX(fecha_creacion) AS fecha_creacion, prospecto 
        FROM alumnos 
        WHERE prospecto = 'prospecto' 
-       GROUP BY nombre, mes`
+         AND mes = ? AND anio = ?
+       GROUP BY nombre`,
+      [mesActual, anioActual]
     );
 
     console.log(`Alumnos prospecto encontrados:`, alumnosProspecto);
 
-    // Si no hay prospectos, no hacer nada
     if (alumnosProspecto.length === 0) {
       console.log('No se encontraron alumnos prospecto.');
       return;
     }
 
-    // Itera sobre los alumnos prospecto
     for (const alumno of alumnosProspecto) {
-      // Calculamos la fecha 7 días después de la fecha de creación del alumno
       const fechaCreacion = new Date(alumno.fecha_creacion);
       const fechaSieteDias = new Date(fechaCreacion);
-      fechaSieteDias.setDate(fechaCreacion.getDate() + 7); // 7 días después
+      fechaSieteDias.setDate(fechaCreacion.getDate() + 7);
       const fechaSieteDiasISO = fechaSieteDias.toISOString().split('T')[0];
 
       console.log(
         `Fecha para generar alerta (7 días después) para alumno_id ${alumno.id}: ${fechaSieteDiasISO}`
       );
 
-      // Verificamos si la fecha calculada es igual a hoy
       if (fechaSieteDiasISO === fechaHoyISO) {
         console.log(
           `Generando alerta para alumno_id ${alumno.id} en la agenda 3`
         );
 
-        // Verifica si ya existe la agenda con agenda_num = 3 para este alumno
         const [alertasExistentes] = await pool.execute(
-          `SELECT id FROM agendas WHERE alumno_id = ? AND agenda_num = 3`,
-          [alumno.id]
-        );
-
-        console.log(
-          `Alertas existentes para alumno_id ${alumno.id}:`,
-          alertasExistentes
+          `SELECT id FROM agendas 
+           WHERE alumno_id = ? AND agenda_num = 3 AND mes = ? AND anio = ?`,
+          [alumno.id, mesActual, anioActual]
         );
 
         if (alertasExistentes.length > 0) {
-          // Si existe, actualiza el contenido de la agenda
           console.log(
-            `Actualizando alerta para agenda_num 3 para alumno_id: ${alumno.id}`
+            `Actualizando alerta existente para agenda_num 3 para alumno_id: ${alumno.id}`
           );
 
           await pool.execute(
@@ -1297,9 +1290,8 @@ const generarAlertaProspecto = async () => {
             [mesActual, anioActual, alumno.id]
           );
         } else {
-          // Si no existe, inserta la nueva alerta para la agenda 3
           console.log(
-            `Insertando alerta para agenda_num 3 para alumno_id: ${alumno.id}`
+            `Insertando nueva alerta para agenda_num 3 para alumno_id: ${alumno.id}`
           );
 
           await pool.execute(
