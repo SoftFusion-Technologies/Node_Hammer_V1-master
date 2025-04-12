@@ -35,6 +35,8 @@ import moment from 'moment-timezone';
 
 import { login, authenticateToken } from './Security/auth.js'; // Importa las funciones del archivo auth.js
 
+import sharp from 'sharp';
+
 // CONFIGURACION PRODUCCION
 if (process.env.NODE_ENV !== 'production') {
   dotenv.config();
@@ -232,6 +234,8 @@ const multerUpload = multer({
       'image/png',
       'image/jpg',
       'image/webp', // Agregar soporte para capturas WebP
+      'image/heic', // Para iPhone
+      'image/heif', // También para iPhone
       'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // Para .docx
@@ -1526,47 +1530,60 @@ app.get('/agendas/:alumnoId', async (req, res) => {
 });
 
 // Ruta para subir imagen
-app.post(
-  '/upload-image', // Endpoint para subir la imagen
-  multerUpload.single('file'), // Usamos multer para manejar la carga del archivo
-  async (req, res) => {
-    // Acceder a los datos del cuerpo y el archivo
-    const { agenda_id, agenda_num, alumno_id } = req.body; // Extraer datos de req.body
-    const file = req.file; // Obtener el archivo subido
+app.post('/upload-image', multerUpload.single('file'), async (req, res) => {
+  const { agenda_id, agenda_num, alumno_id } = req.body;
+  let file = req.file;
 
-    // Verificar que el archivo haya sido cargado
-    if (!file) {
-      return res.status(400).json({ message: 'Archivo no proporcionado' });
+  if (!file) {
+    return res.status(400).json({ message: 'Archivo no proporcionado' });
+  }
+
+  const fileExtension = path.extname(file.originalname).toLowerCase();
+  const originalPath = file.path; // Ruta donde multer lo guardó
+  let finalPath = originalPath;
+
+  try {
+    // Si es una imagen WebP, la convertimos a JPG
+    if (file.mimetype === 'image/webp') {
+      const jpgFileName = file.filename.replace(/\.webp$/, `.jpg`);
+      const outputPath = path.join(path.dirname(originalPath), jpgFileName);
+
+      await sharp(originalPath)
+        .jpeg({ quality: 90 }) // Convertimos a JPG con buena calidad
+        .toFile(outputPath);
+
+      // Eliminamos el archivo WebP original
+      fs.unlinkSync(originalPath);
+
+      // Actualizamos variables para que el resto funcione igual
+      file.filename = jpgFileName;
+      file.mimetype = 'image/jpeg';
+      finalPath = outputPath;
     }
 
-    console.log(`Tamaño del archivo recibido: ${file.size} bytes`);
-
-    // Al guardar la imagen en el backend
-    const imagePath = `uploads/agendas/${file.filename}`; // `file.filename` contiene el nombre con el timestamp
-    const fileName = file.originalname; // Nombre original del archivo (sin timestamp), si es necesario
-
-    // Verificar que los datos necesarios existan
     if (!agenda_id || !agenda_num || !alumno_id) {
       return res.status(400).json({ message: 'Faltan datos necesarios' });
     }
 
-    try {
-      // Insertar los datos en la tabla agenda_imagenes
-      await pool.query(
-        'INSERT INTO agenda_imagenes (agenda_id, agenda_num, alumno_id, nombre_archivo, ruta_archivo) VALUES (?, ?, ?, ?, ?)',
-        [agenda_id, agenda_num, alumno_id, file.filename, imagePath] // Usa file.filename con el timestamp
-      );
+    await pool.query(
+      'INSERT INTO agenda_imagenes (agenda_id, agenda_num, alumno_id, nombre_archivo, ruta_archivo) VALUES (?, ?, ?, ?, ?)',
+      [
+        agenda_id,
+        agenda_num,
+        alumno_id,
+        file.filename,
+        `uploads/agendas/${file.filename}`
+      ]
+    );
 
-      // Responder con éxito
-      res
-        .status(200)
-        .json({ message: 'Imagen subida y guardada correctamente.' });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: 'Error al guardar la imagen.' });
-    }
+    res
+      .status(200)
+      .json({ message: 'Imagen subida y guardada correctamente.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al guardar la imagen.' });
   }
-);
+});
 
 // Ruta para descargar imagen
 app.get('/download-image/:agenda_id', async (req, res) => {
@@ -1706,7 +1723,6 @@ app.get('/notificaciones', async (req, res) => {
     res.status(500).json({ error: 'Error obteniendo notificaciones' });
   }
 });
-
 
 /*
  * MODULO ESTADISTICAS
