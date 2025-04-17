@@ -96,6 +96,10 @@ const AdmConveniosModel = db.define(
       type: DataTypes.TINYINT,
       allowNull: false,
       defaultValue: 1
+    },
+    agrupador: {
+      type: DataTypes.STRING,
+      allowNull: true
     }
   },
   {
