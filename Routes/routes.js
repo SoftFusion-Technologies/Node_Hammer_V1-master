@@ -784,10 +784,10 @@ router.get(
 
 // Rutas para sedes
 router.get('/sedes', OBRS_Sede_CTS); // Obtener todas las sedes
-router.get('/sede/:id', OBR_Sede_CTS); // Obtener sede por ID
-router.post('/sede', CR_Sede_CTS); // Crear nueva sede
-router.delete('/sede/:id', ER_Sede_CTS); // Eliminar sede por ID
-router.put('/sede/:id', UR_Sede_CTS); // Actualizar sede por ID
+router.get('/sedes/:id', OBR_Sede_CTS); // Obtener sede por ID
+router.post('/sedes', CR_Sede_CTS); // Crear nueva sede
+router.delete('/sedes/:id', ER_Sede_CTS); // Eliminar sede por ID
+router.put('/sedes/:id', UR_Sede_CTS); // Actualizar sede por ID
 
 // Exporta el enrutador
 export default router;
