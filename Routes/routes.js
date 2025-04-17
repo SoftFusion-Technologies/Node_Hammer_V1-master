@@ -258,6 +258,19 @@ import {
   OBR_ImagenPorPregunta_CTS
 } from '../Controllers/CTS_TB_ImagenesPreguntasFrec.js';
 
+/* Nuevo modulo para gestionar las sedes del select
+ * Programador: Benjamin Orellana
+ * Fecha Creación: 17 de Abril 2025
+ */
+
+import {
+  OBRS_Sede_CTS,
+  OBR_Sede_CTS,
+  CR_Sede_CTS,
+  ER_Sede_CTS,
+  UR_Sede_CTS
+} from '../Controllers/CTS_TB_Sedes.js';
+
 // Crea un enrutador de Express
 const router = express.Router();
 
@@ -768,6 +781,13 @@ router.get(
   '/imagenes-preguntas/pregunta/:pregunta_id',
   OBR_ImagenPorPregunta_CTS
 );
+
+// Rutas para sedes
+router.get('/sedes', OBRS_Sede_CTS); // Obtener todas las sedes
+router.get('/sede/:id', OBR_Sede_CTS); // Obtener sede por ID
+router.post('/sede', CR_Sede_CTS); // Crear nueva sede
+router.delete('/sede/:id', ER_Sede_CTS); // Eliminar sede por ID
+router.put('/sede/:id', UR_Sede_CTS); // Actualizar sede por ID
 
 // Exporta el enrutador
 export default router;
