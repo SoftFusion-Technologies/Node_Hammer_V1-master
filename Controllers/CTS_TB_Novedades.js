@@ -48,7 +48,6 @@ export const OBRS_Novedades_CTS = async (req, res) => {
   }
 };
 
-
 // Mostrar un registro específico de NovedadesModel por su ID
 export const OBR_Novedades_CTS = async (req, res) => {
   try {
@@ -62,11 +61,25 @@ export const OBR_Novedades_CTS = async (req, res) => {
 // Crear un nuevo registro en NovedadesModel
 export const CR_Novedades_CTS = async (req, res) => {
   try {
-    const { sede, titulo, mensaje, vencimiento, estado, user } = req.body;
-    const registro = await NovedadesModel.create({ sede, titulo, mensaje, vencimiento, estado });
+    const { sede, titulo, mensaje, vencimiento, estado, user, userName } =
+      req.body;
+
+    const registro = await NovedadesModel.create({
+      sede,
+      titulo,
+      mensaje,
+      vencimiento,
+      estado,
+      userName // ✅ se agrega aquí
+    });
 
     if (user && user.length > 0) {
-      const userPromises = user.map(userId => NovedadUserModel.create({ novedad_id: registro.id, user_id: userId }));
+      const userPromises = user.map((userId) =>
+        NovedadUserModel.create({
+          novedad_id: registro.id,
+          user_id: userId
+        })
+      );
       await Promise.all(userPromises);
     }
 
@@ -91,12 +104,15 @@ export const UR_Novedades_CTS = async (req, res) => {
   try {
     const { id } = req.params;
     const [numRowsUpdated] = await NovedadesModel.update(req.body, {
-      where: { id },
+      where: { id }
     });
 
     if (numRowsUpdated === 1) {
       const registroActualizado = await NovedadesModel.findByPk(id);
-      res.json({ message: 'Registro actualizado correctamente', registroActualizado });
+      res.json({
+        message: 'Registro actualizado correctamente',
+        registroActualizado
+      });
     } else {
       res.status(404).json({ mensajeError: 'Registro no encontrado' });
     }
