@@ -1327,11 +1327,27 @@ const registrarCreacionAlerta = async (alumno_id, agenda_num) => {
     const mes = hoy.getMonth() + 1;
     const anio = hoy.getFullYear();
 
+    // Verificar si ya existe una alerta con esos datos
+    const [result] = await pool.execute(
+      `SELECT id FROM alertas_creadas 
+       WHERE alumno_id = ? AND agenda_num = ? AND mes = ? AND anio = ?`,
+      [alumno_id, agenda_num, mes, anio]
+    );
+
+    if (result.length > 0) {
+      console.log(
+        `Ya existe una alerta para alumno_id: ${alumno_id}, agenda: ${agenda_num}, mes: ${mes}, año: ${anio}`
+      );
+      return; // Salís sin hacer el insert
+    }
+
+    // Si no existe, la insertás
     await pool.execute(
       `INSERT INTO alertas_creadas (alumno_id, fecha_creacion, agenda_num, mes, anio)
        VALUES (?, ?, ?, ?, ?)`,
-      [alumno_id, new Date(), agenda_num, mes, anio]
+      [alumno_id, hoy, agenda_num, mes, anio]
     );
+
     console.log(
       `Alerta creada y registrada para el alumno_id: ${alumno_id}, mes: ${mes}, año: ${anio}`
     );
@@ -1339,6 +1355,7 @@ const registrarCreacionAlerta = async (alumno_id, agenda_num) => {
     console.error('Error al registrar la creación de la alerta:', error);
   }
 };
+
 
 // Función para generar alertas de inactivos (sin asistencia en 5 días)
 const genAlertInactivos = async () => {
