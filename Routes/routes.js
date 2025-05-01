@@ -271,6 +271,20 @@ import {
   UR_Sede_CTS
 } from '../Controllers/CTS_TB_Sedes.js';
 
+/* Nuevo módulo para gestionar las quejas internas
+ * Programador: Benjamin Orellana
+ * Fecha Creación: 30 de Abril 2025
+ */
+
+import {
+  OBRS_Quejas_CTS,
+  OBR_Queja_CTS,
+  CR_Queja_CTS,
+  ER_Queja_CTS,
+  UR_Queja_CTS,
+  MARCAR_Resuelto_Queja_CTS,
+  MARCAR_NoResuelto_Queja_CTS
+} from '../Controllers/CTS_TB_QuejasInternas.js';
 // Crea un enrutador de Express
 const router = express.Router();
 
@@ -789,5 +803,15 @@ router.post('/sedes', CR_Sede_CTS); // Crear nueva sede
 router.delete('/sedes/:id', ER_Sede_CTS); // Eliminar sede por ID
 router.put('/sedes/:id', UR_Sede_CTS); // Actualizar sede por ID
 
+// Rutas básicas CRUD
+router.get('/quejas', OBRS_Quejas_CTS);
+router.get('/quejas/:id', OBR_Queja_CTS);
+router.post('/quejas', CR_Queja_CTS);
+router.put('/quejas/:id', UR_Queja_CTS);
+router.delete('/quejas/:id', ER_Queja_CTS);
+
+// Rutas adicionales para cambiar estado de resolución
+router.put('/quejas/:id/resolver', MARCAR_Resuelto_Queja_CTS);
+router.put('/quejas/:id/no-resuelto', MARCAR_NoResuelto_Queja_CTS);
 // Exporta el enrutador
 export default router;
