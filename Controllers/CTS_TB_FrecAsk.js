@@ -1,4 +1,4 @@
-  /*
+/*
   * Programador: Benjamin Orellana
   * Fecha Cración: 16 /03 / 2024
   * Versión: 1.0
@@ -17,6 +17,8 @@
 import MD_TB_FrecAsk from '../Models/MD_TB_FrecAsk.js';
 
 const FrecAskModel = MD_TB_FrecAsk.FrecAskModel;
+
+import NotificationModel from '../Models/MD_TB_Notifications.js'; // Asegúrate de importar tu modelo de notificación
 
 // ----------------------------------------------------------------
 // Controladores para operaciones CRUD en la tabla 'frec_asks'
@@ -41,13 +43,41 @@ export const OBR_FrecAsk_CTS = async (req, res) => {
   }
 };
 
-// Crear un nuevo registro en FrecAskModel
+// Crear un nuevo registro en FrecAskModel y disparar la notificación
 export const CR_FrecAsk_CTS = async (req, res) => {
+  const { titulo, descripcion, userName } = req.body;
+
   try {
-    const registro = await FrecAskModel.create(req.body);
-    res.json({ message: 'Registro creado correctamente' });
+    // 1. Crear el registro de la pregunta frecuente
+    const registro = await FrecAskModel.create(req.body); // Se utiliza req.body como ya funciona
+
+    // 2. Crear la notificación relacionada usando Sequelize
+    const notiTitle = 'Nueva pregunta frecuente registrada';
+    const notiMessage = `Pregunta frecuente: ${titulo}. Descripción: ${descripcion}`;
+    const module = 'frecuentes'; // El módulo de preguntas frecuentes
+    const reference_id = registro.id; // ID de la nueva pregunta frecuente
+    const seen_by = []; // Lista de usuarios que han visto la notificación (vacío por ahora)
+    const created_by = 'admin'; // Usuario que creó la pregunta frecuente
+
+    // 3. Crear la notificación en la base de datos
+    await NotificationModel.create({
+      title: notiTitle,
+      message: notiMessage,
+      module: module,
+      reference_id: reference_id,
+      seen_by: seen_by,
+      created_by: created_by
+    });
+
+    // Responder con un mensaje de éxito
+    res.json({
+      message:
+        'Pregunta frecuente registrada y notificación enviada correctamente'
+    });
   } catch (error) {
-    res.json({ mensajeError: error.message });
+    // Manejo de errores
+    console.error(error);
+    res.status(500).json({ mensajeError: error.message });
   }
 };
 
@@ -60,7 +90,6 @@ export const ER_FrecAsk_CTS = async (req, res) => {
     res.json({ mensajeError: error.message });
   }
 };
-
 
 // Actualizar un registro en SchedulerTaskModel por su ID
 export const UR_FrecAsk_CTS = async (req, res) => {

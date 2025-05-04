@@ -17,9 +17,11 @@
 
 // Importa el modelo
 import MD_TB_QuejasInternas from '../Models/MD_TB_QuejasInternas.js';
+import NotificationModel from '../Models/MD_TB_Notifications.js';
 
 // Asigna el modelo a una variable
 const QuejasInternasModel = MD_TB_QuejasInternas.QuejasInternasModel;
+
 
 // Obtener todas las quejas
 export const OBRS_Quejas_CTS = async (req, res) => {
@@ -43,13 +45,38 @@ export const OBR_Queja_CTS = async (req, res) => {
   }
 };
 
-// Crear una nueva queja
+// crear una queja y disparar la notificacion
 export const CR_Queja_CTS = async (req, res) => {
+  const { cargado_por, nombre, motivo, sede } = req.body;
+
   try {
-    await QuejasInternasModel.create(req.body);
-    res.json({ message: 'Queja registrada correctamente' });
+    // 1. Crear la queja
+    const nuevaQueja = await QuejasInternasModel.create(req.body);
+
+    // 2. Crear la notificación relacionada usando Sequelize
+    const notiTitle = 'Nueva queja registrada';
+    const notiMessage = `Queja de ${nombre} en ${sede}. Motivo: ${motivo}`;
+    const module = 'quejas';
+    const reference_id = nuevaQueja.id;
+    const seen_by = [];
+    const created_by = cargado_por;
+
+    // Crear la notificación en la base de datos
+    await NotificationModel.create({
+      title: notiTitle,
+      message: notiMessage,
+      module: module,
+      reference_id: reference_id,
+      seen_by: seen_by,
+      created_by: created_by
+    });
+
+    res.json({
+      message: 'Queja registrada y notificación enviada correctamente'
+    });
   } catch (error) {
-    res.json({ mensajeError: error.message });
+    console.error(error);
+    res.status(500).json({ mensajeError: error.message });
   }
 };
 

@@ -3048,17 +3048,148 @@ cron.schedule('5 0 1 * *', async () => {
   await eliminarDuplicados();
 });
 
-const test = async () => {
-  console.log('🔍 Ejecutando prueba de cierre de mes...');
-  await cerrarMesAnterior();
-  await copiarAlumnosMesAnterior(); // Copiar los alumnos con asistencias después del 20 del mes anterior
-  await eliminarDuplicados();
+// const test = async () => {
+//   console.log('🔍 Ejecutando prueba de cierre de mes...');
+//   await cerrarMesAnterior();
+//   await copiarAlumnosMesAnterior(); // Copiar los alumnos con asistencias después del 20 del mes anterior
+//   await eliminarDuplicados();
 
-  console.log('✅ Prueba finalizada.');
-};
+//   console.log('✅ Prueba finalizada.');
+// };
 
-test();
+// test();
 
+// Endpoint para obtener todas las notificaciones con consulta SQL directa
+app.get('/notifications/:userId', async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  console.log('User ID recibido:', userId);
+
+  try {
+    // Solo notificaciones tipo "Nueva novedad registrada" asignadas al usuario
+    const notifications = await db.query(
+      `
+      SELECT n.*, nu_user.leido
+      FROM notifications n
+      LEFT JOIN notifications_users nu_user 
+        ON n.id = nu_user.notification_id AND nu_user.user_id = :userId
+      LEFT JOIN novedades nov ON n.reference_id = nov.id
+      LEFT JOIN novedad_user nu ON nov.id = nu.novedad_id AND nu.user_id = :userId
+      WHERE 
+        (
+          n.title = 'Nueva novedad registrada' AND nu.user_id IS NOT NULL
+        )
+        OR
+        (
+          n.title IN ('Nueva queja registrada', 'Nueva pregunta frecuente registrada', 'Nueva clase de prueba registrada')
+        )
+      ORDER BY n.created_at DESC
+      `,
+      {
+        replacements: { userId },
+        type: db.Sequelize.QueryTypes.SELECT
+      }
+    );
+
+    // Si no hay notificaciones asignadas, devolver vacío
+    if (notifications.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    res.status(200).json(notifications);
+  } catch (error) {
+    console.error('Error al obtener las notificaciones:', error);
+    res.status(500).json({ error: 'Error al obtener notificaciones' });
+  }
+});
+
+// Endpoint para obtener una notificación por ID con consulta SQL directa
+app.get('/notifications/:id', async (req, res) => {
+  const notificationId = req.params.id;
+
+  try {
+    const [rows] = await db.query('SELECT * FROM notifications WHERE id = ?', [
+      notificationId
+    ]);
+
+    if (rows.length === 0) {
+      return res
+        .status(404)
+        .json({ mensajeError: 'No se encontró la notificación.' });
+    }
+
+    res.json(rows[0]); // Devolvemos solo el primer resultado
+  } catch (error) {
+    console.error('Error al obtener la notificación:', error);
+    res
+      .status(500)
+      .json({ mensajeError: 'Hubo un error al obtener la notificación.' });
+  }
+});
+
+// Endpoint para marcar una notificación como leída
+app.post('/notifications/markAsRead', async (req, res) => {
+  console.log(req.body); // Verifica si el user_id y notification_id están llegando correctamente
+  const { notification_id, user_id } = req.body;
+
+  try {
+    // Verificamos si la relación entre la notificación y el usuario existe
+    const [rows] = await db.query(
+      'SELECT * FROM notifications_users WHERE notification_id = :notification_id AND user_id = :user_id',
+      {
+        replacements: { notification_id, user_id }
+      }
+    );
+
+    if (rows.length === 0) {
+      return res
+        .status(404)
+        .json({ mensajeError: 'Notificación no encontrada para este usuario' });
+    }
+
+    // Actualizamos el estado de la notificación a leída (leido = 1)
+    await db.query(
+      'UPDATE notifications_users SET leido = 1 WHERE notification_id = :notification_id AND user_id = :user_id',
+      {
+        replacements: { notification_id, user_id }
+      }
+    );
+
+    // Respondemos con un mensaje de éxito
+    res.json({
+      message: 'Notificación marcada como leída correctamente'
+    });
+  } catch (error) {
+    console.error('Error al marcar la notificación como leída:', error);
+    res.status(500).json({
+      mensajeError: 'Hubo un error al marcar la notificación como leída.'
+    });
+  }
+});
+
+async function deleteOldNotifications() {
+  try {
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+    const result = await NotificationModel.destroy({
+      where: {
+        created_at: {
+          [Op.lte]: oneWeekAgo
+        }
+      }
+    });
+
+    console.log(`${result} notificaciones eliminadas.`);
+  } catch (error) {
+    console.error('Error eliminando notificaciones:', error);
+  }
+}
+
+// Cron: ejecuta cada día a las 00:10
+cron.schedule('10 0 * * *', () => {
+  console.log('Cron job iniciado - eliminando notificaciones viejas...');
+  deleteOldNotifications();
+});
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 
