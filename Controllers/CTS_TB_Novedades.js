@@ -20,6 +20,9 @@ import NovedadesModel from '../Models/MD_TB_Novedades.js';
 import NovedadUserModel from '../Models/MD_TB_NovedadUser.js';
 import UsersModel from '../Models/MD_TB_Users.js';
 
+import NotificationModel from '../Models/MD_TB_Notifications.js'; // Asegúrate de importar tu modelo de notificación
+import NotificationUserModel from '../Models/MD_TB_NotificationsUsers.js'; // Asegúrate de importar tu modelo de notificación
+
 //Asigna los modelos a variables para su uso en los controladores
 //const NovedadesModel = MD_TB_Novedades.NovedadesModel;
 //const NovedadUserModel = MD_TB_NovedadUser.NovedadUserModel;
@@ -58,36 +61,67 @@ export const OBR_Novedades_CTS = async (req, res) => {
   }
 };
 
-// Crear un nuevo registro en NovedadesModel
+// Crear un nuevo registro en NovedadesModel y disparar la notificación
 export const CR_Novedades_CTS = async (req, res) => {
-  try {
-    const { sede, titulo, mensaje, vencimiento, estado, user, userName } =
-      req.body;
+  const { sede, titulo, mensaje, vencimiento, estado, user, userName } = req.body;
 
-    const registro = await NovedadesModel.create({
+  try {
+    // 1. Crear el registro de la novedad
+    const nuevaNovedad = await NovedadesModel.create({
       sede,
       titulo,
       mensaje,
       vencimiento,
       estado,
-      userName // ✅ se agrega aquí
+      userName
     });
 
+    // 2. Crear la notificación relacionada usando Sequelize
+    const notiTitle = 'Nueva novedad registrada';
+    const notiMessage = `Novedad: ${titulo}. Mensaje: ${mensaje}.`;
+    const module = 'novedades';
+    const reference_id = nuevaNovedad.id;
+    const seen_by = []; // Aquí puedes agregar los usuarios que ya han visto la notificación, si es necesario
+    const created_by = userName; // Aquí pasamos el usuario que creó la novedad (userName)
+
+    // Crear la notificación en la base de datos
+    const nuevaNotificacion = await NotificationModel.create({
+      title: notiTitle,
+      message: notiMessage,
+      module: module,
+      reference_id: reference_id,
+      seen_by: seen_by,
+      created_by: created_by // Usuario que creó la novedad
+    });
+
+    // 3. Si se proporcionan usuarios, asociarlos con la novedad y la notificación
     if (user && user.length > 0) {
       const userPromises = user.map((userId) =>
         NovedadUserModel.create({
-          novedad_id: registro.id,
+          novedad_id: nuevaNovedad.id,
           user_id: userId
+        }).then(() => {
+          // Al mismo tiempo que asociamos el usuario a la novedad, creamos la relación con la notificación
+          return NotificationUserModel.create({
+            notification_id: nuevaNotificacion.id,
+            user_id: userId
+          });
         })
       );
       await Promise.all(userPromises);
     }
 
-    res.json({ message: 'Registro creado correctamente' });
+    // Responder con un mensaje de éxito
+    res.json({
+      message: 'Novedad registrada y notificación enviada correctamente'
+    });
   } catch (error) {
-    res.json({ mensajeError: error.message });
+    // Manejo de errores
+    console.error(error);
+    res.status(500).json({ mensajeError: error.message });
   }
 };
+
 
 // Eliminar un registro en NovedadesModel por su ID
 export const ER_Novedades_CTS = async (req, res) => {
