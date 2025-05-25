@@ -57,11 +57,11 @@ const NotificationModel = db.define(
     updated_at: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
-    },
-    is_read: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false
     }
+    // is_read: {
+    //   type: DataTypes.BOOLEAN,
+    //   defaultValue: false
+    // }
   },
   {
     timestamps: false
