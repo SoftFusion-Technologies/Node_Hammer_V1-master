@@ -63,7 +63,8 @@ export const OBR_Novedades_CTS = async (req, res) => {
 
 // Crear un nuevo registro en NovedadesModel y disparar la notificación
 export const CR_Novedades_CTS = async (req, res) => {
-  const { sede, titulo, mensaje, vencimiento, estado, user, userName } = req.body;
+  const { sede, titulo, mensaje, vencimiento, estado, user, userName } =
+    req.body;
 
   try {
     // 1. Crear el registro de la novedad
@@ -78,7 +79,7 @@ export const CR_Novedades_CTS = async (req, res) => {
 
     // 2. Crear la notificación relacionada usando Sequelize
     const notiTitle = 'Nueva novedad registrada';
-    const notiMessage = `Novedad: ${titulo}. Mensaje: ${mensaje}.`;
+    const notiMessage = `Novedad: ${titulo}.`;
     const module = 'novedades';
     const reference_id = nuevaNovedad.id;
     const seen_by = []; // Aquí puedes agregar los usuarios que ya han visto la notificación, si es necesario
@@ -121,7 +122,6 @@ export const CR_Novedades_CTS = async (req, res) => {
     res.status(500).json({ mensajeError: error.message });
   }
 };
-
 
 // Eliminar un registro en NovedadesModel por su ID
 export const ER_Novedades_CTS = async (req, res) => {
