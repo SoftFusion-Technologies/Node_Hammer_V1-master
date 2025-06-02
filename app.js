@@ -1366,25 +1366,23 @@ const filtrarAlumnosCon5AConsecutivas = (asistencias) => {
   }
 
   for (const [alumnoId, registros] of Object.entries(porAlumno)) {
+    // Ordenamos por día para mantener el orden cronológico
+    const ordenados = registros.sort((a, b) => a.dia - b.dia);
+
     let consecutivas = 0;
-    let ultimoDia = null;
 
-    for (const reg of registros) {
+    for (const reg of ordenados) {
       if (reg.estado === 'A') {
-        if (ultimoDia === null || reg.dia === ultimoDia + 1) {
-          consecutivas++;
-        } else {
-          consecutivas = 1;
-        }
-        ultimoDia = reg.dia;
-
+        consecutivas++;
         if (consecutivas >= 5) {
           alumnosConAlerta.add(parseInt(alumnoId));
           break;
         }
+      } else if (reg.estado === 'P') {
+        consecutivas = 0; // reinicia si es presente
       } else {
+        // si es otro estado (opcional), podés elegir ignorar o reiniciar
         consecutivas = 0;
-        ultimoDia = null;
       }
     }
   }
