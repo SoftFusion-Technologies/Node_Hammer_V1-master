@@ -12,12 +12,19 @@ export const login = async (req, res) => {
     const [results, metadata] = await db.query(sql, {
       replacements: { email: email, password: password }
     });
+
     if (results.length > 0) {
       const user = results[0];
       const token = jwt.sign({ id: user.id, level: user.level }, 'softfusion', {
         expiresIn: '1h'
       });
-      return res.json({ message: 'Success', token, level: user.level });
+
+      return res.json({
+        message: 'Success',
+        token,
+        level: user.level,
+        id: user.id // ← se incluye aquí el ID
+      });
     } else {
       return res.json('Fail');
     }

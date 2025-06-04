@@ -278,6 +278,21 @@ import {
   MARCAR_NoResuelto_Queja_CTS
 } from '../Controllers/CTS_TB_QuejasInternas.js';
 
+import {
+  OBRS_UserDailyTasks_CTS,
+  CR_UserDailyTask_CTS,
+  ER_UserDailyTask_CTS,
+  OBRS_TasksByUser_CTS,
+  CR_BulkUserDailyTasks_CTS
+} from '../Controllers/CTS_TB_UserDailyTasks.js';
+
+import {
+  OBRS_TareasDiarias_CTS,
+  CR_TareaDiaria_CTS,
+  ER_TareaDiaria_CTS,
+  OBR_TareaDiaria_CTS,
+  UR_TareaDiaria_CTS
+} from '../Controllers/CTS_TB_DailyTasks.js';
 // Crea un enrutador de Express
 const router = express.Router();
 
@@ -790,6 +805,21 @@ router.delete('/quejas/:id', ER_Queja_CTS);
 // Rutas adicionales para cambiar estado de resolución
 router.put('/quejas/:id/resolver', MARCAR_Resuelto_Queja_CTS);
 router.put('/quejas/:id/no-resuelto', MARCAR_NoResuelto_Queja_CTS);
+
+router.get('/tareasdiarias', OBRS_TareasDiarias_CTS);
+router.get('/tareasdiarias/:id', OBR_TareaDiaria_CTS);
+router.post('/tareasdiarias', CR_TareaDiaria_CTS);
+router.put('/tareasdiarias/:id', UR_TareaDiaria_CTS);
+router.delete('/tareasdiarias/:id', ER_TareaDiaria_CTS);
+
+router.get('/user-daily-tasks', OBRS_UserDailyTasks_CTS);
+router.post('/user-daily-tasks', CR_UserDailyTask_CTS);
+router.delete(
+  '/user-daily-tasks/:user_id/:daily_task_id',
+  ER_UserDailyTask_CTS
+);
+router.get('/user-daily-tasks/user/:user_id', OBRS_TasksByUser_CTS);
+router.post('/user-daily-tasks/bulk', CR_BulkUserDailyTasks_CTS); // <-- NUEVA RUTA
 
 // Exporta el enrutador
 export default router;
