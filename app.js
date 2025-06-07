@@ -26,7 +26,7 @@ import { AlumnosModel } from './Models/MD_TB_Alumnos.js';
 import { PostulanteV2Model } from './Models/MD_TB_Postulante_v2.js';
 import { AsistenciasModel } from './Models/MD_TB_Asistencias.js';
 import { AgendasModel } from './Models/MD_TB_Agendas.js';
-
+import NotificationModel from './Models/MD_TB_Notifications.js';
 // nueva forma de congelar las  planillas sab 15 de mar
 import { Sequelize } from 'sequelize';
 import { PlanillasCerradasModel } from './Models/MD_TB_PlanillasCerradas.js';
@@ -1343,7 +1343,7 @@ const registrarCreacionAlerta = async (alumno_id, agenda_num) => {
 
     // Si no existe, la insertás
     await pool.execute(
-      `INSERT INTO alertas_creadas (alumno_id, fecha_creacion, agenda_num, mes, anio)
+      `INSERT IGNORE INTO alertas_creadas (alumno_id, fecha_creacion, agenda_num, mes, anio)
        VALUES (?, ?, ?, ?, ?)`,
       [alumno_id, hoy, agenda_num, mes, anio]
     );
@@ -1366,9 +1366,7 @@ const filtrarAlumnosCon5AConsecutivas = (asistencias) => {
   }
 
   for (const [alumnoId, registros] of Object.entries(porAlumno)) {
-    // Ordenamos por día para mantener el orden cronológico
     const ordenados = registros.sort((a, b) => a.dia - b.dia);
-
     let consecutivas = 0;
 
     for (const reg of ordenados) {
@@ -1378,10 +1376,7 @@ const filtrarAlumnosCon5AConsecutivas = (asistencias) => {
           alumnosConAlerta.add(parseInt(alumnoId));
           break;
         }
-      } else if (reg.estado === 'P') {
-        consecutivas = 0; // reinicia si es presente
       } else {
-        // si es otro estado (opcional), podés elegir ignorar o reiniciar
         consecutivas = 0;
       }
     }
@@ -1390,51 +1385,27 @@ const filtrarAlumnosCon5AConsecutivas = (asistencias) => {
   return [...alumnosConAlerta];
 };
 
-// Función para generar alertas de inactivos (sin asistencia en 5 días)
 const genAlertInactivos = async () => {
   try {
     const hoy = new Date();
     const mesActual = hoy.getMonth() + 1;
     const anioActual = hoy.getFullYear();
-    const diaSemana = hoy.getDay();
-
-    if (diaSemana !== 4 && diaSemana !== 5) {
-      console.log('No es jueves ni viernes, el proceso no se ejecuta.');
-      return;
-    }
+    const agenda_num = 4; // Alerta de inactividad
 
     const [asistencias] = await pool.execute(
       `SELECT a.alumno_id, a.dia, a.estado
        FROM asistencias a
        JOIN alumnos al ON al.id = a.alumno_id
        WHERE a.mes = ? AND a.anio = ?
-         AND MONTH(al.fecha_creacion) = ?
-         AND YEAR(al.fecha_creacion) = ?
        ORDER BY a.alumno_id, a.dia`,
-      [mesActual, anioActual, mesActual, anioActual]
+      [mesActual, anioActual]
     );
 
     const alumnos = filtrarAlumnosCon5AConsecutivas(asistencias);
 
-    const agenda_num = 4; // Alerta de inactividad
-
     for (const alumno_id of alumnos) {
-      const [alertasExistentes] = await pool.execute(
-        `SELECT id FROM agendas WHERE alumno_id = ? AND agenda_num = ?`,
-        [alumno_id, agenda_num]
-      );
-
-      const [alertasCreadas] = await pool.execute(
-        `SELECT fecha_creacion, mes, anio 
-         FROM alertas_creadas 
-         WHERE alumno_id = ? AND agenda_num = ? AND mes = ? AND anio = ?`,
-        [alumno_id, agenda_num, mesActual, anioActual]
-      );
-
-      if (alertasExistentes.length === 0 && alertasCreadas.length === 0) {
-        console.log(
-          `Insertando alerta de inactividad para alumno_id: ${alumno_id}`
-        );
+      try {
+        // Intentamos insertar directamente (sin consultar antes)
         await pool.execute(
           `INSERT INTO agendas (alumno_id, agenda_num, contenido, mes, anio)
            VALUES (?, ?, 'PENDIENTE', ?, ?)`,
@@ -1442,19 +1413,30 @@ const genAlertInactivos = async () => {
         );
 
         await registrarCreacionAlerta(alumno_id, agenda_num);
-      } else {
+
         console.log(
-          `Ya existe una alerta para alumno_id: ${alumno_id} en el mes ${mesActual}.`
+          `✅ Insertada alerta de inactividad para alumno_id: ${alumno_id}`
         );
+      } catch (error) {
+        // Si hay error de duplicado (código ER_DUP_ENTRY en MySQL), lo ignoramos
+        if (error.code === 'ER_DUP_ENTRY') {
+          console.log(
+            `⚠️ Alerta ya existe para alumno_id: ${alumno_id} en mes ${mesActual} y año ${anioActual}`
+          );
+        } else {
+          // Si otro error, lo lanzamos para manejarlo afuera
+          throw error;
+        }
       }
     }
 
-    console.log('Proceso de generación de alertas para inactivos completado.');
+    console.log(
+      '✅ Proceso de generación de alertas para inactivos completado.'
+    );
   } catch (error) {
-    console.error('Error generando alertas para inactivos:', error);
+    console.error('❌ Error generando alertas para inactivos:', error);
   }
 };
-
 // Configura el cron job para ejecutarse diariamente
 cron.schedule('0 0 * * *', async () => {
   console.log('Ejecutando cron de alertas para los inactivos...');
