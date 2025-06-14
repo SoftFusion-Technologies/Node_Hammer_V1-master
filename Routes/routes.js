@@ -183,7 +183,7 @@ import {
 } from '../Controllers/CTS_TB_FamIntegrante.js';
 
 import importIntegrantes from '../Controllers/importIntegrantes.js';
-
+import RT_Import_Recaptacion from '../Controllers/RT_Import_Recaptacion.js';
 // NUEVA PARTE DE ADMINISTRACION DE PRECIOS PARA CONVENIOS
 
 // R5-SUBIR ARCHIVOS A NOVEDADES - 16-09-2024 - Benjamin Orellana - INICIO
@@ -293,6 +293,15 @@ import {
   OBR_TareaDiaria_CTS,
   UR_TareaDiaria_CTS
 } from '../Controllers/CTS_TB_DailyTasks.js';
+
+import {
+  OBR_Recaptacion_CTS,
+  OBRS_Recaptacion_CTS,
+  CR_Recaptacion_CTS,
+  ER_Recaptacion_CTS,
+  UR_Recaptacion_CTS
+} from '../Controllers/CTS_TB_Recaptacion.js';
+
 // Crea un enrutador de Express
 const router = express.Router();
 
@@ -647,6 +656,7 @@ router.put('/integrantesfam/:id', UR_FamIntegrante_CTS);
 // Define las rutas para cada método del controlador de AdmPrecio
 
 router.use('/integrantesImport', importIntegrantes);
+router.use('/recaptacionImport', RT_Import_Recaptacion);
 
 // R5-SUBIR ARCHIVOS A NOVEDADES - 16-09-2024 - Benjamin Orellana - INICIO
 
@@ -821,5 +831,19 @@ router.delete(
 router.get('/user-daily-tasks/user/:user_id', OBRS_TasksByUser_CTS);
 router.post('/user-daily-tasks/bulk', CR_BulkUserDailyTasks_CTS); // <-- NUEVA RUTA
 
+// Obtener todos los registros (puede filtrar por usuario o ser admin/coordinador)
+router.get('/recaptacion', OBRS_Recaptacion_CTS);
+
+// Obtener un registro específico
+router.get('/recaptacion/:id', OBR_Recaptacion_CTS);
+
+// Crear uno o varios registros nuevos
+router.post('/recaptacion', CR_Recaptacion_CTS);
+
+// Eliminar un registro
+router.delete('/recaptacion/:id', ER_Recaptacion_CTS);
+
+// Actualizar un registro
+router.put('/recaptacion/:id', UR_Recaptacion_CTS);
 // Exporta el enrutador
 export default router;
