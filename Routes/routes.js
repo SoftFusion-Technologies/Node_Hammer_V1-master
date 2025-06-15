@@ -303,6 +303,15 @@ import {
   OBRS_ColaboradoresConRecaptacion
 } from '../Controllers/CTS_TB_Recaptacion.js';
 
+import {
+  OBR_VentasProspecto_CTS,
+  OBRS_VentasProspectos_CTS,
+  CR_VentasProspecto_CTS,
+  ER_VentasProspecto_CTS,
+  UR_VentasProspecto_CTS,
+  OBRS_ColaboradoresConVentasProspectos
+} from '../Controllers/CTS_TB_VentasProspectos.js';
+
 // Crea un enrutador de Express
 const router = express.Router();
 
@@ -848,6 +857,24 @@ router.delete('/recaptacion/:id', ER_Recaptacion_CTS);
 router.put('/recaptacion/:id', UR_Recaptacion_CTS);
 
 router.get('/usuarios-con-registros', OBRS_ColaboradoresConRecaptacion);
+
+// Obtener todos los prospectos (con filtros opcionales)
+router.get('/ventas_prospectos', OBRS_VentasProspectos_CTS);
+
+// Obtener un prospecto por ID
+router.get('/ventas_prospectos/:id', OBR_VentasProspecto_CTS);
+
+// Crear un prospecto
+router.post('/ventas_prospectos', CR_VentasProspecto_CTS);
+
+// Actualizar un prospecto
+router.put('/ventas_prospectos/:id', UR_VentasProspecto_CTS);
+
+// Eliminar un prospecto
+router.delete('/ventas_prospectos/:id', ER_VentasProspecto_CTS);
+
+// Obtener lista de usuarios que cargaron prospectos
+router.get('/ventas_prospectos_colaboradores', OBRS_ColaboradoresConVentasProspectos);
 
 // Exporta el enrutador
 export default router;
