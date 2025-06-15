@@ -133,3 +133,38 @@ export const UR_Recaptacion_CTS = async (req, res) => {
     res.status(500).json({ mensajeError: error.message });
   }
 };
+
+// Importar UserModel (asegurate de tenerlo correctamente exportado)
+import UserModel from '../Models/MD_TB_Users.js';
+
+RecaptacionModel.belongsTo(UserModel, {
+  foreignKey: 'usuario_id',
+  as: 'usuario'
+});
+
+// Obtener usuarios con al menos un registro en la tabla de recaptación
+export const OBRS_ColaboradoresConRecaptacion = async (req, res) => {
+  try {
+    const registros = await RecaptacionModel.findAll({
+      attributes: ['usuario_id'],
+      group: ['usuario_id'],
+      include: [
+        {
+          model: UserModel,
+          as: 'usuario',
+          attributes: ['id', 'name']
+        }
+      ]
+    });
+
+    const colaboradores = registros
+      .map((r) => r.usuario)
+      .filter((u) => u); // elimina usuarios nulos
+
+    res.json(colaboradores);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ mensajeError: 'Error al obtener colaboradores', error: error.message });
+  }
+};

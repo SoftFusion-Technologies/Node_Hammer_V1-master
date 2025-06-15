@@ -299,7 +299,8 @@ import {
   OBRS_Recaptacion_CTS,
   CR_Recaptacion_CTS,
   ER_Recaptacion_CTS,
-  UR_Recaptacion_CTS
+  UR_Recaptacion_CTS,
+  OBRS_ColaboradoresConRecaptacion
 } from '../Controllers/CTS_TB_Recaptacion.js';
 
 // Crea un enrutador de Express
@@ -845,5 +846,8 @@ router.delete('/recaptacion/:id', ER_Recaptacion_CTS);
 
 // Actualizar un registro
 router.put('/recaptacion/:id', UR_Recaptacion_CTS);
+
+router.get('/usuarios-con-registros', OBRS_ColaboradoresConRecaptacion);
+
 // Exporta el enrutador
 export default router;
