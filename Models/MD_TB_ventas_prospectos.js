@@ -56,6 +56,7 @@ export const VentasProspectosModel = db.define(
     },
     actividad: {
       type: DataTypes.ENUM(
+        'No especifica',
         'Musculacion',
         'Pilates',
         'Clases grupales',
