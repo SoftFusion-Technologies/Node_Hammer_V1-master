@@ -1547,7 +1547,7 @@ app.post('/upload-image', multerUpload.single('file'), async (req, res) => {
         .toFile(outputPath);
 
       // Eliminamos el archivo WebP original
-      fs.unlinkSync(originalPath);
+      await fs.promises.unlink(originalPath); // no bloquea el event loop
 
       // Actualizamos variables para que el resto funcione igual
       file.filename = jpgFileName;
