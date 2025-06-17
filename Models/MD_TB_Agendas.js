@@ -56,6 +56,13 @@ export const AgendasModel = db.define(
         max: 2100 // Rango máximo, ajusta según tu caso
       },
       comment: 'Año de la asistencia (ejemplo: 2024)'
+    },
+    // Nueva columna fecha_creacion
+    fecha_creacion: {
+      type: DataTypes.DATE,
+      allowNull: true, // Si quieres que sea opcional inicialmente
+      defaultValue: DataTypes.NOW,
+      comment: 'Fecha en la que se creó la agenda'
     }
   },
   {
