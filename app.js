@@ -3165,6 +3165,55 @@ async function deleteOldNotifications() {
   }
 }
 
+app.post('/actualizar-mes', async (req, res) => {
+  try {
+    const { id, mesBusqueda } = req.body;
+    const mesActual = new Date().getMonth() + 1;
+    const anioActual = new Date().getFullYear();
+
+    if (mesBusqueda === mesActual) {
+      return res
+        .status(400)
+        .json({ msg: 'El mes a buscar no puede ser igual al mes actual' });
+    }
+
+    const registro = await AlumnosModel.findOne({
+      where: { id, mes: mesBusqueda }
+    });
+
+    if (!registro) {
+      return res.status(404).json({
+        msg: `No se encontró registro con id ${id} y mes ${mesBusqueda}`
+      });
+    }
+
+    const existeMesActual = await AlumnosModel.findOne({
+      where: {
+        id,
+        mes: mesActual,
+        anio: anioActual
+      }
+    });
+
+    if (existeMesActual) {
+      return res.status(200).json({
+        msg: 'Ya existe registro con ese ID en el mes actual, no se actualizó'
+      });
+    }
+
+    registro.mes = mesActual;
+    registro.anio = anioActual;
+    await registro.save();
+
+    res
+      .status(200)
+      .json({ msg: 'Registro actualizado correctamente', registro });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ msg: 'Error en el servidor', error: error.message });
+  }
+});
+
 // Cron: ejecuta cada día a las 00:10
 cron.schedule('10 0 * * *', () => {
   console.log('Cron job iniciado - eliminando notificaciones viejas...');
