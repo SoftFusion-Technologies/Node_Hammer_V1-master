@@ -76,11 +76,12 @@ export const CR_Agendas_CTS = async (req, res) => {
   try {
     const { alumno_id, agenda_num, contenido } = req.body;
 
-    // Crear el registro en la base de datos
+    // Crear el registro en la base de datos, asignando fecha_creacion a la fecha actual
     const agendaCreada = await AgendasModel.create({
       alumno_id,
       agenda_num,
-      contenido
+      contenido,
+      fecha_creacion: new Date()
     });
 
     res.status(201).json({
