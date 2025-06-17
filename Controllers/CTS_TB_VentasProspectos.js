@@ -58,7 +58,8 @@ export const CR_VentasProspecto_CTS = async (req, res) => {
     canal_contacto,
     contacto,
     actividad,
-    sede
+    sede,
+    observacion
   } = req.body;
 
   if (
@@ -69,11 +70,9 @@ export const CR_VentasProspecto_CTS = async (req, res) => {
     !actividad ||
     !sede
   ) {
-    return res
-      .status(400)
-      .json({
-        mensajeError: 'Faltan datos obligatorios para crear el prospecto'
-      });
+    return res.status(400).json({
+      mensajeError: 'Faltan datos obligatorios para crear el prospecto'
+    });
   }
 
   try {
@@ -98,7 +97,8 @@ export const CR_VentasProspecto_CTS = async (req, res) => {
       actividad,
       sede,
       asesor_nombre: usuario.name,
-      n_contacto_1: 1
+      n_contacto_1: 1,
+      observacion
     });
 
     res.json({
@@ -164,12 +164,10 @@ export const OBRS_ColaboradoresConVentasProspectos = async (req, res) => {
 
     res.json(colaboradores);
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        mensajeError: 'Error al obtener colaboradores',
-        error: error.message
-      });
+    res.status(500).json({
+      mensajeError: 'Error al obtener colaboradores',
+      error: error.message
+    });
   }
 };
 

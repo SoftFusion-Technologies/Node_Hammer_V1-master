@@ -112,6 +112,10 @@ export const VentasProspectosModel = db.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+    observacion: {
+      type: DataTypes.STRING(255),
+      allowNull: true
+    },
     mes: {
       type: DataTypes.VIRTUAL,
       get() {
