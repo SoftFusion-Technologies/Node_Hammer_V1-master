@@ -45,9 +45,14 @@ export const RecaptacionModel = db.define(
         'Inactivo 60 dias',
         'Prospectos inc. Socioplus',
         'Prosp inc Entrenadores',
-        'Leads no convertidos'
+        'Leads no convertidos',
+        'Otro'
       ),
       allowNull: false
+    },
+    detalle_contacto: {
+      type: DataTypes.STRING(255),
+      allowNull: true
     },
     enviado: {
       type: DataTypes.BOOLEAN,
@@ -86,7 +91,6 @@ export const RecaptacionModel = db.define(
     updatedAt: 'updated_at'
   }
 );
-
 
 export default {
   RecaptacionModel
