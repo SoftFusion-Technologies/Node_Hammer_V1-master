@@ -78,6 +78,7 @@ router.post(
               usuario_id: usuario_id,
               nombre: row.Nombre,
               tipo_contacto: row['Tipo de contacto'],
+              detalle_contacto: row['Detalle contacto'] || null,
               enviado: false,
               respondido: false,
               agendado: false,
