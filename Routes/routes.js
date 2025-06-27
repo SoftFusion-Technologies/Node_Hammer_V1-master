@@ -713,7 +713,7 @@ router.get('/alumnos/:id', OBR_Alumnos_CTS);
 router.post('/alumnos', CR_Alumnos_CTS);
 
 // Eliminar un registro en Alumnos por su ID
-router.delete('/alumnos/:id', ER_Alumnos_CTS);
+// router.delete('/alumnos/:id', ER_Alumnos_CTS); SE COMENTA PARA QUE NO SE PUEDA ELIMINAR ALUMNOS
 
 // Actualizar un registro en Alumnos por su ID
 router.put('/alumnos/:id', UR_Alumnos_CTS);
