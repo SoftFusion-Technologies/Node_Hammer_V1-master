@@ -3403,6 +3403,75 @@ app.delete('/dashboard-images/:id', async (req, res) => {
   }
 });
 
+app.get('/stats-ventas', async (req, res) => {
+  try {
+    // 1. Total de ventas
+    const [[{ total_ventas }]] = await pool.query(
+      'SELECT COUNT(*) AS total_ventas FROM ventas_prospectos'
+    );
+
+    // 2. Prospectos
+    const [prospectos] = await pool.query(`
+      SELECT tipo_prospecto AS tipo, COUNT(*) AS cantidad
+      FROM ventas_prospectos
+      GROUP BY tipo_prospecto
+    `);
+
+    // 3. Canales
+    const [canales] = await pool.query(`
+      SELECT canal_contacto AS canal, COUNT(*) AS cantidad
+      FROM ventas_prospectos
+      GROUP BY canal_contacto
+    `);
+
+    // 4. Actividades
+    const [actividades] = await pool.query(`
+      SELECT actividad, COUNT(*) AS cantidad
+      FROM ventas_prospectos
+      GROUP BY actividad
+    `);
+
+    // 5. Contactos 1, 2, 3 (SUM)
+    const [[contactos]] = await pool.query(`
+      SELECT
+        SUM(n_contacto_1) AS total_contacto_1,
+        SUM(n_contacto_2) AS total_contacto_2,
+        SUM(n_contacto_3) AS total_contacto_3
+      FROM ventas_prospectos
+    `);
+
+    // 6. Total clases de prueba (sumando todas)
+    const [[{ total_clases_prueba }]] = await pool.query(`
+      SELECT
+        SUM(CASE WHEN clase_prueba_1_fecha IS NOT NULL THEN 1 ELSE 0 END) +
+        SUM(CASE WHEN clase_prueba_2_fecha IS NOT NULL THEN 1 ELSE 0 END) +
+        SUM(CASE WHEN clase_prueba_3_fecha IS NOT NULL THEN 1 ELSE 0 END)
+        AS total_clases_prueba
+      FROM ventas_prospectos
+    `);
+
+    // 7. Convertidos
+    const [[{ total_convertidos }]] = await pool.query(`
+      SELECT COUNT(*) AS total_convertidos
+      FROM ventas_prospectos
+      WHERE convertido = 1 OR convertido = true
+    `);
+
+    res.json({
+      total_ventas,
+      prospectos,
+      canales,
+      actividades,
+      contactos,
+      total_clases_prueba,
+      total_convertidos
+    });
+  } catch (error) {
+    console.error('Error obteniendo estadísticas:', error);
+    res.status(500).json({ error: 'Error obteniendo estadísticas' });
+  }
+});
+
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 
