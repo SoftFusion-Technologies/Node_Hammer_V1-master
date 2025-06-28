@@ -3327,6 +3327,82 @@ cron.schedule('10 0 * * *', () => {
   deleteOldNotifications();
 });
 
+function cleanFileName(filename) {
+  // Elimina acentos y caracteres especiales, reemplaza espacios por "_"
+  return filename
+    .normalize('NFD') // Separa acentos de las letras
+    .replace(/[\u0300-\u036f]/g, '') // Elimina acentos
+    .replace(/[^a-zA-Z0-9. \-_]/g, '') // Elimina caracteres raros (menos ".", "-", "_", espacio)
+    .replace(/\s+/g, '_'); // Espacios a "_"
+}
+
+app.post(
+  '/upload-dashboard-image',
+  multerUpload.single('file'),
+  async (req, res) => {
+    const { titulo, descripcion, orden } = req.body;
+    let file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ message: 'Archivo no proporcionado' });
+    }
+
+    // --- LIMPIEZA DE NOMBRE ---
+    const ext = path.extname(file.originalname);
+    const base = path.basename(file.originalname, ext);
+    const safeBase = cleanFileName(base);
+    const uniqueName = `${safeBase}-${Date.now()}${ext}`;
+    const finalPath = path.join('uploads', uniqueName);
+
+    // Mover/renombrar el archivo (si el nombre cambia)
+    await fs.promises.rename(file.path, finalPath);
+
+    try {
+      // Insertá en la tabla
+      await pool.query(
+        `INSERT INTO imagenes_dashboard (titulo, descripcion, url, orden, activo) VALUES (?, ?, ?, ?, 1)`,
+        [
+          titulo || null,
+          descripcion || null,
+          `uploads/${uniqueName}`,
+          orden || 1
+        ]
+      );
+
+      res.status(200).json({
+        message: 'Imagen de dashboard subida y guardada correctamente.',
+        url: `uploads/${uniqueName}`,
+        nombre: uniqueName
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Error al guardar la imagen.' });
+    }
+  }
+);
+
+app.get('/dashboard-images', async (req, res) => {
+  try {
+    const [imagenes] = await pool.query(
+      'SELECT * FROM imagenes_dashboard WHERE activo = 1 ORDER BY orden ASC, id ASC'
+    );
+    res.json(imagenes);
+  } catch (e) {
+    res.status(500).json({ error: 'Error trayendo imágenes' });
+  }
+});
+
+app.delete('/dashboard-images/:id', async (req, res) => {
+  try {
+    await pool.query('UPDATE imagenes_dashboard SET activo = 0 WHERE id = ?', [
+      req.params.id
+    ]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Error eliminando imagen' });
+  }
+});
+
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 
