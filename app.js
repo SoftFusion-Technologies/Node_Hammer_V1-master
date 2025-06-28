@@ -36,6 +36,7 @@ import moment from 'moment-timezone';
 import { login, authenticateToken } from './Security/auth.js'; // Importa las funciones del archivo auth.js
 
 import sharp from 'sharp';
+import dayjs from 'dayjs';
 
 // CONFIGURACION PRODUCCION
 if (process.env.NODE_ENV !== 'production') {
@@ -3106,6 +3107,112 @@ app.get('/notifications/:id', async (req, res) => {
   }
 });
 
+app.get('/logs', async (req, res) => {
+  const { user_id, desde, hasta, alumno } = req.query;
+  let sql = `
+    SELECT l.*, 
+      u.name AS nombre_usuario, 
+      a.nombre AS nombre_alumno
+    FROM alumnos_log l
+    LEFT JOIN users u ON l.user_id = u.id
+    LEFT JOIN alumnos a ON l.alumno_id = a.id
+    WHERE 1=1
+  `;
+  const params = [];
+
+  if (user_id) {
+    sql += ' AND l.user_id = ?';
+    params.push(user_id);
+  }
+  if (desde) {
+    sql += ' AND l.fecha_evento >= ?';
+    params.push(desde);
+  }
+  if (hasta) {
+    sql += ' AND l.fecha_evento <= ?';
+    params.push(hasta + ' 23:59:59');
+  }
+  if (alumno) {
+    sql += ` AND (
+      a.nombre LIKE ? 
+      OR JSON_UNQUOTE(JSON_EXTRACT(l.datos_antes, '$.nombre')) LIKE ?
+    )`;
+    params.push('%' + alumno + '%');
+    params.push('%' + alumno + '%');
+  }
+
+  // Dentro del WHERE, después de los filtros
+  sql += ` AND NOT EXISTS (
+  SELECT 1 FROM alumnos a2 
+  WHERE 
+    a2.nombre = JSON_UNQUOTE(JSON_EXTRACT(l.datos_antes, '$.nombre'))
+    AND a2.email = JSON_UNQUOTE(JSON_EXTRACT(l.datos_antes, '$.email'))
+    AND a2.user_id = JSON_UNQUOTE(JSON_EXTRACT(l.datos_antes, '$.user_id'))
+)`;
+
+  try {
+    const [logs] = await pool.query(sql, params);
+    res.json(logs);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al obtener logs' });
+  }
+});
+
+app.post('/logs/:logId/recuperar', async (req, res) => {
+  const { logId } = req.params;
+  let { user_id, email } = req.body;
+  user_id = Number(user_id);
+  if (!user_id || isNaN(user_id)) {
+    return res
+      .status(400)
+      .json({ error: 'user_id no válido para recuperar alumno' });
+  }
+
+  try {
+    const [logs] = await pool.query('SELECT * FROM alumnos_log WHERE id = ?', [
+      logId
+    ]);
+    const log = logs[0];
+    if (!log || !log.datos_antes) {
+      return res.status(404).json({ error: 'Log no encontrado o inválido' });
+    }
+    const datosAntes =
+      typeof log.datos_antes === 'string'
+        ? JSON.parse(log.datos_antes)
+        : log.datos_antes;
+
+    // --- VERIFICAR EXISTENCIA ---
+    const [alumnosExist] = await pool.query(
+      'SELECT * FROM alumnos WHERE nombre = ? AND user_id = ? AND email = ?',
+      [datosAntes.nombre, user_id, email || datosAntes.email]
+    );
+    if (alumnosExist.length > 0) {
+      return res.status(409).json({
+        error: 'El alumno ya existe y no puede ser recuperado de nuevo.'
+      });
+    }
+
+    // --- INSERTAR ALUMNO ---
+    const nuevoAlumno = {
+      ...datosAntes,
+      user_id: user_id,
+      email: email || datosAntes.email,
+      mes: dayjs().month() + 1,
+      anio: dayjs().year(),
+      fecha_creacion: dayjs().format('YYYY-MM-DD HH:mm:ss')
+    };
+    delete nuevoAlumno.id;
+
+    await AlumnosModel.create(nuevoAlumno);
+
+    res.json({ ok: true, alumno: nuevoAlumno });
+  } catch (err) {
+    console.error('Error al recuperar alumno:', err);
+    res.status(500).json({ error: 'Error al recuperar alumno' });
+  }
+});
+
 // Endpoint para marcar una notificación como leída
 app.post('/notifications/markAsRead', async (req, res) => {
   console.log(req.body); // Verifica si el user_id y notification_id están llegando correctamente
@@ -3219,6 +3326,7 @@ cron.schedule('10 0 * * *', () => {
   console.log('Cron job iniciado - eliminando notificaciones viejas...');
   deleteOldNotifications();
 });
+
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 
