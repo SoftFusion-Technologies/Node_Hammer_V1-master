@@ -3405,57 +3405,81 @@ app.delete('/dashboard-images/:id', async (req, res) => {
 
 app.get('/stats-ventas', async (req, res) => {
   try {
+    const { sede } = req.query;
+    let whereSede = '';
+    let paramsSede = [];
+
+    // Normaliza la sede: "barrio sur" => "barriosur", etc.
+    if (sede) {
+      whereSede = 'WHERE LOWER(REPLACE(sede, " ", "")) = ?';
+      paramsSede = [sede.toLowerCase().replace(/\s/g, '')];
+    }
+
     // 1. Total de ventas
     const [[{ total_ventas }]] = await pool.query(
-      'SELECT COUNT(*) AS total_ventas FROM ventas_prospectos'
+      `SELECT COUNT(*) AS total_ventas FROM ventas_prospectos ${whereSede}`,
+      paramsSede
     );
 
     // 2. Prospectos
-    const [prospectos] = await pool.query(`
-      SELECT tipo_prospecto AS tipo, COUNT(*) AS cantidad
-      FROM ventas_prospectos
-      GROUP BY tipo_prospecto
-    `);
+    const [prospectos] = await pool.query(
+      `SELECT tipo_prospecto AS tipo, COUNT(*) AS cantidad
+       FROM ventas_prospectos ${whereSede}
+       GROUP BY tipo_prospecto`,
+      paramsSede
+    );
 
     // 3. Canales
-    const [canales] = await pool.query(`
-      SELECT canal_contacto AS canal, COUNT(*) AS cantidad
-      FROM ventas_prospectos
-      GROUP BY canal_contacto
-    `);
+    const [canales] = await pool.query(
+      `SELECT canal_contacto AS canal, COUNT(*) AS cantidad
+       FROM ventas_prospectos ${whereSede}
+       GROUP BY canal_contacto`,
+      paramsSede
+    );
 
     // 4. Actividades
-    const [actividades] = await pool.query(`
-      SELECT actividad, COUNT(*) AS cantidad
-      FROM ventas_prospectos
-      GROUP BY actividad
-    `);
+    const [actividades] = await pool.query(
+      `SELECT actividad, COUNT(*) AS cantidad
+       FROM ventas_prospectos ${whereSede}
+       GROUP BY actividad`,
+      paramsSede
+    );
 
-    // 5. Contactos 1, 2, 3 (SUM)
-    const [[contactos]] = await pool.query(`
-      SELECT
+    // 5. Contactos (SUM)
+    const [[contactos]] = await pool.query(
+      `SELECT
         SUM(n_contacto_1) AS total_contacto_1,
         SUM(n_contacto_2) AS total_contacto_2,
         SUM(n_contacto_3) AS total_contacto_3
-      FROM ventas_prospectos
-    `);
+       FROM ventas_prospectos ${whereSede}`,
+      paramsSede
+    );
 
     // 6. Total clases de prueba (sumando todas)
-    const [[{ total_clases_prueba }]] = await pool.query(`
-      SELECT
+    const [[{ total_clases_prueba }]] = await pool.query(
+      `SELECT
         SUM(CASE WHEN clase_prueba_1_fecha IS NOT NULL THEN 1 ELSE 0 END) +
         SUM(CASE WHEN clase_prueba_2_fecha IS NOT NULL THEN 1 ELSE 0 END) +
         SUM(CASE WHEN clase_prueba_3_fecha IS NOT NULL THEN 1 ELSE 0 END)
         AS total_clases_prueba
-      FROM ventas_prospectos
-    `);
+       FROM ventas_prospectos ${whereSede}`,
+      paramsSede
+    );
 
     // 7. Convertidos
-    const [[{ total_convertidos }]] = await pool.query(`
+    const convertidosQuery = `
       SELECT COUNT(*) AS total_convertidos
       FROM ventas_prospectos
-      WHERE convertido = 1 OR convertido = true
-    `);
+      ${
+        sede
+          ? 'WHERE LOWER(REPLACE(sede, " ", "")) = ? AND (convertido = 1 OR convertido = true)'
+          : 'WHERE convertido = 1 OR convertido = true'
+      }
+    `;
+    const [[{ total_convertidos }]] = await pool.query(
+      convertidosQuery,
+      paramsSede
+    );
 
     res.json({
       total_ventas,
@@ -3469,6 +3493,161 @@ app.get('/stats-ventas', async (req, res) => {
   } catch (error) {
     console.error('Error obteniendo estadísticas:', error);
     res.status(500).json({ error: 'Error obteniendo estadísticas' });
+  }
+});
+
+
+export async function generarAgendasAutomaticas() {
+  // Día de hoy
+  const today = new Date().toISOString().slice(0, 10);
+
+  // 1. Seguimiento: ventas creadas hace 7 días
+  const [prospectos] = await pool.query(`
+    SELECT * FROM ventas_prospectos
+    WHERE DATE(created_at) = DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+  `);
+
+  for (const p of prospectos) {
+    const [yaTiene] = await pool.query(
+      "SELECT 1 FROM agendas_ventas WHERE prospecto_id=? AND tipo='seguimiento'",
+      [p.id]
+    );
+    if (!yaTiene.length) {
+      await pool.query(
+        `INSERT INTO agendas_ventas (prospecto_id, usuario_id, fecha_agenda, tipo, descripcion)
+         VALUES (?, ?, ?, 'seguimiento', ?)`,
+        [p.id, p.usuario_id, today, 'Recordatorio: 2do contacto automático']
+      );
+    }
+  }
+
+  // 2. Clase de prueba (solo si tiene fecha)
+  const [conClasePrueba] = await pool.query(`
+    SELECT * FROM ventas_prospectos 
+    WHERE clase_prueba_1_fecha IS NOT NULL
+  `);
+
+  for (const p of conClasePrueba) {
+    const fechaClase =
+      p.clase_prueba_1_fecha?.toISOString?.().slice(0, 10) ||
+      (typeof p.clase_prueba_1_fecha === 'string'
+        ? p.clase_prueba_1_fecha.slice(0, 10)
+        : null);
+    if (!fechaClase) continue;
+    const [yaTiene] = await pool.query(
+      "SELECT 1 FROM agendas_ventas WHERE prospecto_id=? AND tipo='clase_prueba' AND fecha_agenda=?",
+      [p.id, fechaClase]
+    );
+    if (!yaTiene.length) {
+      await pool.query(
+        `INSERT INTO agendas_ventas (prospecto_id, usuario_id, fecha_agenda, tipo, descripcion)
+         VALUES (?, ?, ?, 'clase_prueba', ?)`,
+        [
+          p.id,
+          p.usuario_id,
+          fechaClase,
+          'Recordatorio: día de la clase de prueba'
+        ]
+      );
+    }
+  }
+}
+
+cron.schedule('10 0 * * *', async () => {
+  console.log('[CRON] Generando agendas automáticas...');
+  try {
+    await generarAgendasAutomaticas();
+    console.log('[CRON] Agendas generadas OK');
+  } catch (err) {
+    console.error('[CRON] Error:', err);
+  }
+});
+
+// Endpoint para traer agendas con filtro por usuario_id (y fácilmente extensible)
+app.get('/agendas-ventas', async (req, res) => {
+  try {
+    const { usuario_id, desde, hasta, solo_pendientes } = req.query;
+    let sql = `
+      SELECT 
+        a.*, 
+        v.nombre AS prospecto_nombre, 
+        v.sede,
+        v.asesor_nombre
+      FROM agendas_ventas a
+      LEFT JOIN ventas_prospectos v ON a.prospecto_id = v.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (usuario_id) {
+      sql += ' AND a.usuario_id = ?';
+      params.push(usuario_id);
+    }
+    if (desde) {
+      sql += ' AND a.fecha_agenda >= ?';
+      params.push(desde);
+    }
+    if (hasta) {
+      sql += ' AND a.fecha_agenda <= ?';
+      params.push(hasta);
+    }
+    if (solo_pendientes === '1') {
+      sql += ' AND a.resuelta = 0';
+    }
+
+    sql += ' ORDER BY a.fecha_agenda DESC, a.id DESC';
+
+    const [agendas] = await pool.query(sql, params);
+    res.json(agendas);
+  } catch (error) {
+    console.error('Error al traer agendas:', error);
+    res.status(500).json({ error: 'Error al traer agendas de ventas' });
+  }
+});
+
+app.put('/agendas-ventas/:id', async (req, res) => {
+  const { id } = req.params;
+  const { nota_envio } = req.body;
+
+  if (!nota_envio) {
+    return res.status(400).json({ error: 'Falta la nota de envío' });
+  }
+
+  try {
+    const sql = `
+      UPDATE agendas_ventas
+      SET enviada = 1,
+          fecha_envio = NOW(),
+          nota_envio = ?
+      WHERE id = ?
+    `;
+    const [result] = await pool.query(sql, [nota_envio, id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Agenda no encontrada' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error al actualizar agenda:', error);
+    res.status(500).json({ error: 'Error al actualizar la agenda de ventas' });
+  }
+});
+
+app.delete('/agendas-ventas/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [result] = await pool.query(
+      'DELETE FROM agendas_ventas WHERE id = ?',
+      [id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Agenda no encontrada' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error al eliminar agenda:', error);
+    res.status(500).json({ error: 'Error al eliminar agenda de ventas' });
   }
 });
 
