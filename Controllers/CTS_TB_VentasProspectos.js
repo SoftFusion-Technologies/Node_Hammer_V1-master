@@ -56,6 +56,7 @@ export const CR_VentasProspecto_CTS = async (req, res) => {
     dni,
     tipo_prospecto,
     canal_contacto,
+    campania_origen, // <--- AGREGAR AQUÍ
     contacto,
     actividad,
     sede,
@@ -72,6 +73,13 @@ export const CR_VentasProspecto_CTS = async (req, res) => {
   ) {
     return res.status(400).json({
       mensajeError: 'Faltan datos obligatorios para crear el prospecto'
+    });
+  }
+
+  // Validación PRO: si es campaña, debe venir el origen
+  if (canal_contacto === 'Campaña' && !campania_origen) {
+    return res.status(400).json({
+      mensajeError: 'Debe especificar el origen de la campaña'
     });
   }
 
@@ -93,6 +101,7 @@ export const CR_VentasProspecto_CTS = async (req, res) => {
       dni,
       tipo_prospecto,
       canal_contacto,
+      campania_origen: canal_contacto === 'Campaña' ? campania_origen : '', // <--- AGREGAR AQUÍ
       contacto,
       actividad,
       sede,
