@@ -3476,8 +3476,32 @@ app.get('/stats-ventas', async (req, res) => {
           : 'WHERE convertido = 1 OR convertido = true'
       }
     `;
+
     const [[{ total_convertidos }]] = await pool.query(
       convertidosQuery,
+      paramsSede
+    );
+
+    // 8. Campañas desglosadas por origen (filtro sede)
+    const [campaniasPorOrigen] = await pool.query(
+      `SELECT campania_origen AS origen, COUNT(*) AS cantidad
+   FROM ventas_prospectos
+   WHERE canal_contacto = 'Campaña'
+     ${sede ? 'AND LOWER(REPLACE(sede, " ", "")) = ?' : ''}
+   GROUP BY campania_origen`,
+      paramsSede
+    );
+
+    // 9. Conversiones por campaña (origen) (filtro sede)
+    const [campaniasConvertidasPorOrigen] = await pool.query(
+      `SELECT
+      campania_origen AS origen,
+      COUNT(*) AS cantidad_convertidos
+    FROM ventas_prospectos
+    WHERE canal_contacto = 'Campaña'
+      AND (convertido = 1 OR convertido = true)
+      ${sede ? 'AND LOWER(REPLACE(sede, " ", "")) = ?' : ''}
+    GROUP BY campania_origen`,
       paramsSede
     );
 
@@ -3488,14 +3512,15 @@ app.get('/stats-ventas', async (req, res) => {
       actividades,
       contactos,
       total_clases_prueba,
-      total_convertidos
+      total_convertidos,
+      campaniasPorOrigen,
+      campaniasConvertidasPorOrigen
     });
   } catch (error) {
     console.error('Error obteniendo estadísticas:', error);
     res.status(500).json({ error: 'Error obteniendo estadísticas' });
   }
 });
-
 
 export async function generarAgendasAutomaticas() {
   // Día de hoy

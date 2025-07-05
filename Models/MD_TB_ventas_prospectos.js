@@ -129,6 +129,10 @@ export const VentasProspectosModel = db.define(
         const fecha = this.getDataValue('fecha');
         return fecha ? new Date(fecha).getFullYear() : null;
       }
+    },
+    campania_origen: {
+      type: DataTypes.STRING(30),
+      allowNull: true
     }
   },
   {
