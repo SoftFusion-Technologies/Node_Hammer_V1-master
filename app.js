@@ -3253,6 +3253,80 @@ app.post('/notifications/markAsRead', async (req, res) => {
   }
 });
 
+// Notificaciones de clase de prueba para el día
+app.get('/notifications/clases-prueba/:userId', async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
+  try {
+    const [notis] = await pool.query(
+      `
+      SELECT
+        vp.id AS prospecto_id,
+        vp.nombre,
+        vp.contacto,
+        vp.clase_prueba_1_fecha,
+        vp.clase_prueba_2_fecha,
+        vp.clase_prueba_3_fecha,
+        vp.n_contacto_2,
+        vp.usuario_id,
+        u.name AS asesor_nombre
+      FROM ventas_prospectos vp
+      JOIN users u ON u.id = vp.usuario_id
+      WHERE vp.n_contacto_2 = 0
+        AND (
+          DATE(vp.clase_prueba_1_fecha) = CURDATE() OR
+          DATE(vp.clase_prueba_2_fecha) = CURDATE() OR
+          DATE(vp.clase_prueba_3_fecha) = CURDATE()
+        )
+        AND vp.usuario_id = ?
+      ORDER BY vp.nombre
+      `,
+      [userId]
+    );
+    res.json(notis);
+  } catch (error) {
+    console.error('Error obteniendo notificaciones clase de prueba:', error);
+    res
+      .status(500)
+      .json({ error: 'Error obteniendo notificaciones de clase de prueba' });
+  }
+});
+
+// GET /prospectos-alertas
+app.get('/prospectos-alertas', async (req, res) => {
+  const { sede } = req.query;
+  let where = 'WHERE fecha IS NOT NULL';
+  let params = [];
+
+  if (sede) {
+    where += ' AND sede = ?';
+    params.push(sede);
+  }
+
+  const [rows] = await pool.query(
+    `
+    SELECT
+      id,
+      nombre,
+      fecha,
+      n_contacto_2,
+      convertido,
+      DATEDIFF(CURDATE(), fecha) AS dias_desde_alta,
+      CASE
+        WHEN n_contacto_2 = 1 OR convertido = 1 THEN 'ninguno'
+        WHEN DATEDIFF(CURDATE(), fecha) = 7 THEN 'amarillo'
+        WHEN DATEDIFF(CURDATE(), fecha) > 7 THEN 'rojo'
+        ELSE 'ninguno'
+      END AS color_2do_contacto
+    FROM ventas_prospectos
+    ${where}
+    ORDER BY fecha ASC
+  `,
+    params
+  );
+
+  res.json(rows);
+});
+
 async function deleteOldNotifications() {
   try {
     const oneWeekAgo = new Date();
