@@ -23,26 +23,39 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Define el modelo para la tabla 'test_classes' en la base de datos
 export const TestClassModel = db.define(
-  'test_classes', // Nombre de la tabla en la base de datos
+  'test_classes',
   {
-    // Define los campos y sus tipos de datos correspondientes
-    name: { type: DataTypes.STRING, allowNull: false }, // Nombre de la clase de prueba (no nulo)
-    last_name: { type: DataTypes.STRING, allowNull: false }, // Apellido de la clase de prueba (no nulo)
-    dni: { type: DataTypes.STRING, allowNull: false }, // Número de documento de identidad de la clase de prueba (no nulo)
-    celular: { type: DataTypes.STRING, allowNull: false }, // Número de teléfono celular de la clase de prueba (no nulo)
-    sede: { type: DataTypes.STRING, allowNull: false }, // Sede de la empresa para la clase de prueba (no nulo)
-    objetivo: { type: DataTypes.STRING, allowNull: false }, // Objetivo de la clase de prueba (no nulo)
-    user: { type: DataTypes.STRING }, // Usuario asociado a la clase de prueba
-    observaciones: { type: DataTypes.STRING }, // Observaciones sobre la clase de prueba
-    state: { type: DataTypes.STRING, allowNull: false } // Estado de la clase de prueba (no nulo)
+    name: { type: DataTypes.STRING, allowNull: false },
+    last_name: { type: DataTypes.STRING, allowNull: false },
+    dni: { type: DataTypes.STRING, allowNull: false },
+    celular: { type: DataTypes.STRING, allowNull: false },
+    sede: { type: DataTypes.STRING, allowNull: false },
+    objetivo: { type: DataTypes.STRING, allowNull: false },
+    user: { type: DataTypes.STRING },
+    observaciones: { type: DataTypes.STRING },
+    state: { type: DataTypes.STRING, allowNull: false },
+
+    // CAMPOS NUEVOS PARA INTEGRACIÓN CON VENTAS
+    movido_a_ventas: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    usuario_movido_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    fecha_movido: {
+      type: DataTypes.DATE,
+      allowNull: true
+    }
   },
   {
-    timestamps: true, // Habilita la creación automática de los campos createdAt y updatedAt en la tabla
-    createdAt: 'created_at', // Nombre personalizado para el campo de fecha de creación
-    updatedAt: 'updated_at' // Nombre personalizado para el campo de fecha de actualización
+    timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at'
   }
 );
-
 
 export default {
   TestClassModel

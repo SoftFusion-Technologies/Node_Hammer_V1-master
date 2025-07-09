@@ -111,7 +111,8 @@ import {
   OBRS_TestClass_CTS,
   CR_TestClass_CTS,
   ER_TestClass_CTS,
-  UR_TestClass_CTS
+  UR_TestClass_CTS,
+  MOVER_A_VENTAS_CTS
   // Importa los controladores necesarios para la tabla password_reset - tb_13
 } from '../Controllers/CTS_TB_TestClass.js';
 
@@ -522,6 +523,8 @@ router.post('/testclass', CR_TestClass_CTS);
 router.delete('/testclass/:id', ER_TestClass_CTS);
 // Actualizar un registro en TestClass_CTS por su ID
 router.put('/testclass/:id', UR_TestClass_CTS);
+
+router.post('/testclass/mover-a-ventas', MOVER_A_VENTAS_CTS);
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de TextContents_CTS tb_14
