@@ -84,8 +84,6 @@ export const CR_TestClass_CTS = async (req, res) => {
   }
 };
 
-
-
 // Eliminar un registro en TestClassModel por su ID
 export const ER_TestClass_CTS = async (req, res) => {
   try {
@@ -118,3 +116,80 @@ export const UR_TestClass_CTS = async (req, res) => {
   }
 };
 
+import { VentasProspectosModel } from '../Models/MD_TB_ventas_prospectos.js';
+import UserModel from '../Models/MD_TB_Users.js';
+import dayjs from 'dayjs';
+
+export const MOVER_A_VENTAS_CTS = async (req, res) => {
+  try {
+    const { idTestClass, usuario_id } = req.body;
+
+    // Función para normalizar sede
+    const normalizarSede = (sede) => {
+      const s = (sede || '').toLowerCase().trim();
+      if (s === 'monteros' || s === 'concepcion' || s === 'barrio sur')
+        return s;
+      return 'barrio sur';
+    };
+
+    // 1. Traer datos de la clase de prueba
+    const testClass = await TestClassModel.findByPk(idTestClass);
+    if (!testClass)
+      return res.status(404).json({ mensajeError: 'Lead no encontrado' });
+    if (testClass.movido_a_ventas)
+      return res.status(400).json({ mensajeError: 'Lead ya movido' });
+
+    // 2. Buscar asesor (usuario)
+    const usuario = await UserModel.findByPk(usuario_id);
+    if (!usuario)
+      return res.status(400).json({ mensajeError: 'Usuario inválido' });
+
+    // 3. Armar datos para ventas_prospectos
+    const now = dayjs().toISOString();
+
+    const prospectoData = {
+      usuario_id,
+      nombre: `${testClass.name} ${testClass.last_name}`,
+      dni: testClass.dni,
+      tipo_prospecto: 'Nuevo',
+      canal_contacto: 'Pagina Web',
+      contacto: testClass.celular,
+      actividad: 'No especifica',
+      sede: normalizarSede(testClass.sede),
+      fecha: now,
+      asesor_nombre: usuario.name,
+      n_contacto_1: 1,
+      n_contacto_2: 0,
+      n_contacto_3: 0,
+      clase_prueba_1_fecha: null,
+      clase_prueba_1_obs: null,
+      clase_prueba_2_fecha: null,
+      clase_prueba_2_obs: null,
+      clase_prueba_3_fecha: null,
+      clase_prueba_3_obs: null,
+      convertido: false,
+      observacion: 'Lead Movido',
+      campania_origen: null,
+      mes: dayjs().month() + 1,
+      anio: dayjs().year()
+    };
+
+    // 4. Insertar en ventas_prospectos
+    await VentasProspectosModel.create(prospectoData);
+
+    // 5. Actualizar testClass para bloquear botón
+    await TestClassModel.update(
+      {
+        movido_a_ventas: true,
+        usuario_movido_id: usuario_id,
+        fecha_movido: now
+      },
+      { where: { id: idTestClass } }
+    );
+
+    return res.json({ ok: true, message: 'Lead movido correctamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ mensajeError: error.message });
+  }
+};
