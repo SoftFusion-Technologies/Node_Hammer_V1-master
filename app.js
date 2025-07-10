@@ -3750,6 +3750,122 @@ app.delete('/agendas-ventas/:id', async (req, res) => {
   }
 });
 
+app.post(
+  '/promos-mes',
+  multerUpload.single('file'), // el input file del form debe ser name="file"
+  async (req, res) => {
+    const { titulo, descripcion, orden } = req.body;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ message: 'Archivo no proporcionado' });
+    }
+
+    // Limpieza de nombre y guardado seguro
+    const ext = path.extname(file.originalname);
+    const base = path.basename(file.originalname, ext);
+    const safeBase = cleanFileName(base); // tu función de sanitización
+    const uniqueName = `${safeBase}-${Date.now()}${ext}`;
+    const finalPath = path.join('uploads', uniqueName);
+
+    await fs.promises.rename(file.path, finalPath);
+
+    try {
+      await pool.query(
+        `INSERT INTO promos_mes (titulo, descripcion, imagen_url, orden, activa) VALUES (?, ?, ?, ?, 1)`,
+        [
+          titulo || null,
+          descripcion || null,
+          `uploads/${uniqueName}`,
+          orden || 1
+        ]
+      );
+
+      res.status(200).json({
+        message: 'Promo subida correctamente.',
+        url: `uploads/${uniqueName}`,
+        nombre: uniqueName
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Error al guardar la promo.' });
+    }
+  }
+);
+
+app.get('/promos-mes', async (req, res) => {
+  try {
+    const [promos] = await pool.query(
+      'SELECT * FROM promos_mes WHERE activa = 1 ORDER BY orden ASC, id ASC'
+    );
+    res.json(promos);
+  } catch (e) {
+    res.status(500).json({ error: 'Error trayendo promos' });
+  }
+});
+
+app.delete('/promos-mes/:id', async (req, res) => {
+  try {
+    await pool.query('UPDATE promos_mes SET activa = 0 WHERE id = ?', [
+      req.params.id
+    ]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Error eliminando promo' });
+  }
+});
+
+app.put(
+  '/promos-mes/:id',
+  multerUpload.single('file'),
+  async (req, res) => {
+    const { titulo, descripcion, orden } = req.body;
+    let updateFields = [];
+    let updateValues = [];
+
+    if (titulo) {
+      updateFields.push('titulo = ?');
+      updateValues.push(titulo);
+    }
+    if (descripcion) {
+      updateFields.push('descripcion = ?');
+      updateValues.push(descripcion);
+    }
+    if (orden) {
+      updateFields.push('orden = ?');
+      updateValues.push(orden);
+    }
+
+    // Si suben nueva imagen
+    if (req.file) {
+      const ext = path.extname(req.file.originalname);
+      const base = path.basename(req.file.originalname, ext);
+      const safeBase = cleanFileName(base);
+      const uniqueName = `${safeBase}-${Date.now()}${ext}`;
+      const finalPath = path.join('uploads', uniqueName);
+      await fs.promises.rename(req.file.path, finalPath);
+      updateFields.push('imagen_url = ?');
+      updateValues.push(`uploads/${uniqueName}`);
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ message: 'Nada que actualizar' });
+    }
+
+    updateValues.push(req.params.id);
+
+    try {
+      await pool.query(
+        `UPDATE promos_mes SET ${updateFields.join(', ')} WHERE id = ?`,
+        updateValues
+      );
+      res.json({ message: 'Promo actualizada' });
+    } catch (e) {
+      res.status(500).json({ error: 'Error actualizando promo' });
+    }
+  }
+);
+
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 
