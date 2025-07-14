@@ -45,7 +45,7 @@ router.post(
 
       // Validar que existan las columnas esperadas
       const firstRow = data[0];
-      const requiredColumns = ['Nombre', 'Tipo de contacto'];
+      const requiredColumns = ['Nombre', 'Tipo de contacto', 'ID Usuario'];
 
       const missingColumns = requiredColumns.filter(
         (col) => !(col in firstRow)
@@ -60,7 +60,7 @@ router.post(
 
       // Filtrar filas que tengan los datos obligatorios
       const validData = data.filter(
-        (row) => row.Nombre && row['Tipo de contacto']
+        (row) => row.Nombre && row['Tipo de contacto'] && row['ID Usuario']
       );
 
       if (validData.length === 0) {
@@ -75,7 +75,7 @@ router.post(
         for (const row of validData) {
           await RecaptacionModel.create(
             {
-              usuario_id: usuario_id,
+              usuario_id: row['ID Usuario'],
               nombre: row.Nombre,
               tipo_contacto: row['Tipo de contacto'],
               detalle_contacto: row['Detalle contacto'] || null,
