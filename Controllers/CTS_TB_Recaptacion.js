@@ -168,3 +168,44 @@ export const OBRS_ColaboradoresConRecaptacion = async (req, res) => {
       .json({ mensajeError: 'Error al obtener colaboradores', error: error.message });
   }
 };
+
+// Eliminar registros por mes y año (borrado masivo)
+export const ER_RecaptacionMasiva_CTS = async (req, res) => {
+  const { mes, anio } = req.query;
+
+  if (!mes || !anio) {
+    return res.status(400).json({ mensajeError: 'Debe enviar mes y año' });
+  }
+
+  try {
+    const mesInt = parseInt(mes, 10);
+    const anioInt = parseInt(anio, 10);
+
+    const startDate = new Date(anioInt, mesInt - 1, 1);
+    const endDate = new Date(anioInt, mesInt, 1);
+
+    const eliminados = await RecaptacionModel.destroy({
+      where: {
+        fecha: {
+          [Op.gte]: startDate,
+          [Op.lt]: endDate
+        }
+      }
+    });
+
+    if (eliminados === 0) {
+      return res
+        .status(200)
+        .json({
+          vacio: true,
+          message: 'No se encontraron registros para borrar en ese mes y año.'
+        });
+    }
+
+    res.json({
+      message: `Se eliminaron ${eliminados} registros del mes ${mes}/${anio}`
+    });
+  } catch (error) {
+    res.status(500).json({ mensajeError: error.message });
+  }
+};

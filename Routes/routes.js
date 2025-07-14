@@ -301,7 +301,8 @@ import {
   CR_Recaptacion_CTS,
   ER_Recaptacion_CTS,
   UR_Recaptacion_CTS,
-  OBRS_ColaboradoresConRecaptacion
+  OBRS_ColaboradoresConRecaptacion,
+  ER_RecaptacionMasiva_CTS
 } from '../Controllers/CTS_TB_Recaptacion.js';
 
 import {
@@ -860,6 +861,8 @@ router.delete('/recaptacion/:id', ER_Recaptacion_CTS);
 router.put('/recaptacion/:id', UR_Recaptacion_CTS);
 
 router.get('/usuarios-con-registros', OBRS_ColaboradoresConRecaptacion);
+
+router.delete('/recaptacion-masivo', ER_RecaptacionMasiva_CTS);
 
 // Obtener todos los prospectos (con filtros opcionales)
 router.get('/ventas_prospectos', OBRS_VentasProspectos_CTS);
