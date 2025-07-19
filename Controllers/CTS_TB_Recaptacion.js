@@ -209,3 +209,32 @@ export const ER_RecaptacionMasiva_CTS = async (req, res) => {
     res.status(500).json({ mensajeError: error.message });
   }
 };
+
+// Eliminar registros por usuario_id (borrado masivo)
+export const ER_RecaptacionMasivaPorUsuario_CTS = async (req, res) => {
+  const { usuario_id } = req.query;
+
+  if (!usuario_id) {
+    return res.status(400).json({ mensajeError: 'Debe enviar usuario_id' });
+  }
+
+  try {
+    // Elimina todos los registros de ese usuario
+    const eliminados = await RecaptacionModel.destroy({
+      where: { usuario_id }
+    });
+
+    if (eliminados === 0) {
+      return res.status(200).json({
+        vacio: true,
+        message: 'No se encontraron registros para borrar de ese usuario.'
+      });
+    }
+
+    res.json({
+      message: `Se eliminaron ${eliminados} registros del usuario seleccionado.`
+    });
+  } catch (error) {
+    res.status(500).json({ mensajeError: error.message });
+  }
+};

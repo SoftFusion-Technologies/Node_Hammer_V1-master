@@ -302,7 +302,8 @@ import {
   ER_Recaptacion_CTS,
   UR_Recaptacion_CTS,
   OBRS_ColaboradoresConRecaptacion,
-  ER_RecaptacionMasiva_CTS
+  ER_RecaptacionMasiva_CTS,
+  ER_RecaptacionMasivaPorUsuario_CTS
 } from '../Controllers/CTS_TB_Recaptacion.js';
 
 import {
@@ -864,6 +865,12 @@ router.get('/usuarios-con-registros', OBRS_ColaboradoresConRecaptacion);
 
 router.delete('/recaptacion-masivo', ER_RecaptacionMasiva_CTS);
 
+// Ejemplo: DELETE /recaptacion-masiva-usuario?usuario_id=10
+router.delete(
+  '/recaptacion-masiva-usuario',
+  ER_RecaptacionMasivaPorUsuario_CTS
+);
+
 // Obtener todos los prospectos (con filtros opcionales)
 router.get('/ventas_prospectos', OBRS_VentasProspectos_CTS);
 
@@ -880,7 +887,10 @@ router.put('/ventas_prospectos/:id', UR_VentasProspecto_CTS);
 router.delete('/ventas_prospectos/:id', ER_VentasProspecto_CTS);
 
 // Obtener lista de usuarios que cargaron prospectos
-router.get('/ventas_prospectos_colaboradores', OBRS_ColaboradoresConVentasProspectos);
+router.get(
+  '/ventas_prospectos_colaboradores',
+  OBRS_ColaboradoresConVentasProspectos
+);
 
 // Exporta el enrutador
 export default router;
