@@ -892,5 +892,37 @@ router.get(
   OBRS_ColaboradoresConVentasProspectos
 );
 
+import {
+  OBRS_PreguntasIA_CTS,
+  OBR_PreguntaIA_CTS,
+  CR_PreguntaIA_CTS,
+  ER_PreguntaIA_CTS,
+  preguntarIAConContexto
+} from '../Controllers/CTS_TB_PreguntasIA.js';
+
+router.get('/preguntas-ia', OBRS_PreguntasIA_CTS);
+router.get('/pregFuntas-ia/:id', OBR_PreguntaIA_CTS);
+router.post('/preguntas-ia', CR_PreguntaIA_CTS);
+router.delete('/preguntas-ia/:id', ER_PreguntaIA_CTS);
+router.post('/preguntar-ia-con-contexto', preguntarIAConContexto);
+
+import {
+  CR_ChunkIA_CTS,
+  OBRS_ChunksIA_Similares_CTS,
+  crearChunkSiNoExiste,
+  OBRT_ChunksIA_CTS,
+  OBRS_ChunkIA_PorID_CTS,
+  UPD_ChunkIA_CTS,
+  DEL_ChunkIA_CTS
+} from '../Controllers/CTS_TB_ChunksIA.js';
+
+router.post('/chunks-ia', CR_ChunkIA_CTS);
+router.get('/chunks-ia/similar', OBRS_ChunksIA_Similares_CTS);
+router.post('/chunks-ia/crear-si-no-existe', crearChunkSiNoExiste);
+router.get('/chunks-ia', OBRT_ChunksIA_CTS); // Obtener todos
+router.get('/chunks-ia/:id', OBRS_ChunkIA_PorID_CTS); // Obtener por ID
+router.put('/chunks-ia/:id', UPD_ChunkIA_CTS); // Editar
+router.delete('/chunks-ia/:id', DEL_ChunkIA_CTS); // Eliminar
+
 // Exporta el enrutador
 export default router;
