@@ -20,21 +20,34 @@ import { Op } from 'sequelize';
 
 // Obtener todos los registros (puede filtrar por usuario_id o sede)
 export const OBRS_VentasProspectos_CTS = async (req, res) => {
-  const { usuario_id, sede } = req.query;
+  const { usuario_id, sede, mes, anio } = req.query;
 
   try {
     let whereClause = {};
     if (usuario_id) whereClause.usuario_id = usuario_id;
     if (sede) whereClause.sede = sede;
 
+    // Si mes y año están presentes, filtramos por rango de fechas
+    if (mes && anio) {
+      const startDate = new Date(anio, mes - 1, 1); // Primer día del mes
+      const endDate = new Date(anio, mes, 1); // Primer día del mes siguiente
+
+      whereClause.fecha = {
+        [Op.gte]: startDate,
+        [Op.lt]: endDate
+      };
+    }
+
     const registros = await VentasProspectosModel.findAll({
       where: whereClause
     });
+
     res.json(registros);
   } catch (error) {
     res.status(500).json({ mensajeError: error.message });
   }
 };
+
 
 // Obtener un solo prospecto por ID
 export const OBR_VentasProspecto_CTS = async (req, res) => {

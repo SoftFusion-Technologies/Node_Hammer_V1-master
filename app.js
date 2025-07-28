@@ -3479,44 +3479,56 @@ app.delete('/dashboard-images/:id', async (req, res) => {
 
 app.get('/stats-ventas', async (req, res) => {
   try {
-    const { sede } = req.query;
-    let whereSede = '';
-    let paramsSede = [];
+    const { sede, mes, anio } = req.query;
+    let whereClauses = [];
+    let params = [];
 
     // Normaliza la sede: "barrio sur" => "barriosur", etc.
+    // Normaliza la sede y la agrega al filtro
     if (sede) {
-      whereSede = 'WHERE LOWER(REPLACE(sede, " ", "")) = ?';
-      paramsSede = [sede.toLowerCase().replace(/\s/g, '')];
+      whereClauses.push('LOWER(REPLACE(sede, " ", "")) = ?');
+      params.push(sede.toLowerCase().replace(/\s/g, ''));
     }
+    // Filtro por mes y año (rango de fechas)
+    if (mes && anio) {
+      const startDate = new Date(anio, mes - 1, 1);
+      const endDate = new Date(anio, mes, 1);
+      whereClauses.push('fecha >= ? AND fecha < ?');
+      params.push(startDate, endDate);
+    }
+
+    const whereSQL = whereClauses.length
+      ? 'WHERE ' + whereClauses.join(' AND ')
+      : '';
 
     // 1. Total de ventas
     const [[{ total_ventas }]] = await pool.query(
-      `SELECT COUNT(*) AS total_ventas FROM ventas_prospectos ${whereSede}`,
-      paramsSede
+      `SELECT COUNT(*) AS total_ventas FROM ventas_prospectos ${whereSQL}`,
+      params
     );
 
     // 2. Prospectos
     const [prospectos] = await pool.query(
       `SELECT tipo_prospecto AS tipo, COUNT(*) AS cantidad
-       FROM ventas_prospectos ${whereSede}
-       GROUP BY tipo_prospecto`,
-      paramsSede
+   FROM ventas_prospectos ${whereSQL}
+   GROUP BY tipo_prospecto`,
+      params
     );
 
     // 3. Canales
     const [canales] = await pool.query(
       `SELECT canal_contacto AS canal, COUNT(*) AS cantidad
-       FROM ventas_prospectos ${whereSede}
+       FROM ventas_prospectos ${whereSQL}
        GROUP BY canal_contacto`,
-      paramsSede
+      params
     );
 
     // 4. Actividades
     const [actividades] = await pool.query(
       `SELECT actividad, COUNT(*) AS cantidad
-       FROM ventas_prospectos ${whereSede}
+       FROM ventas_prospectos ${whereSQL}
        GROUP BY actividad`,
-      paramsSede
+      params
     );
 
     // 5. Contactos (SUM)
@@ -3525,8 +3537,8 @@ app.get('/stats-ventas', async (req, res) => {
         SUM(n_contacto_1) AS total_contacto_1,
         SUM(n_contacto_2) AS total_contacto_2,
         SUM(n_contacto_3) AS total_contacto_3
-       FROM ventas_prospectos ${whereSede}`,
-      paramsSede
+       FROM ventas_prospectos ${whereSQL}`,
+      params
     );
 
     // 6. Total clases de prueba (sumando todas)
@@ -3536,47 +3548,64 @@ app.get('/stats-ventas', async (req, res) => {
         SUM(CASE WHEN clase_prueba_2_fecha IS NOT NULL THEN 1 ELSE 0 END) +
         SUM(CASE WHEN clase_prueba_3_fecha IS NOT NULL THEN 1 ELSE 0 END)
         AS total_clases_prueba
-       FROM ventas_prospectos ${whereSede}`,
-      paramsSede
+       FROM ventas_prospectos ${whereSQL}`,
+      params
     );
+
+    const whereConvertidos = [...whereClauses];
+    const paramsConvertidos = [...params];
+
+    whereConvertidos.push('(convertido = 1 OR convertido = true)');
 
     // 7. Convertidos
-    const convertidosQuery = `
-      SELECT COUNT(*) AS total_convertidos
-      FROM ventas_prospectos
-      ${
-        sede
-          ? 'WHERE LOWER(REPLACE(sede, " ", "")) = ? AND (convertido = 1 OR convertido = true)'
-          : 'WHERE convertido = 1 OR convertido = true'
-      }
-    `;
+    const convertidosSQL =
+      whereConvertidos.length > 0
+        ? 'WHERE ' + whereConvertidos.join(' AND ')
+        : '';
 
     const [[{ total_convertidos }]] = await pool.query(
-      convertidosQuery,
-      paramsSede
+      `SELECT COUNT(*) AS total_convertidos FROM ventas_prospectos ${convertidosSQL}`,
+      paramsConvertidos
     );
 
+    const whereCampanias = [...whereClauses];
+    const paramsCampanias = [...params];
+
+    whereCampanias.push("canal_contacto = 'Campaña'");
+
     // 8. Campañas desglosadas por origen (filtro sede)
+    const campaniasSQL =
+      whereCampanias.length > 0 ? 'WHERE ' + whereCampanias.join(' AND ') : '';
+
     const [campaniasPorOrigen] = await pool.query(
       `SELECT campania_origen AS origen, COUNT(*) AS cantidad
    FROM ventas_prospectos
-   WHERE canal_contacto = 'Campaña'
-     ${sede ? 'AND LOWER(REPLACE(sede, " ", "")) = ?' : ''}
+   ${campaniasSQL}
    GROUP BY campania_origen`,
-      paramsSede
+      paramsCampanias
     );
 
     // 9. Conversiones por campaña (origen) (filtro sede)
+
+    const whereCampaniasConvertidas = [...whereClauses];
+    const paramsCampaniasConvertidas = [...params];
+
+    whereCampaniasConvertidas.push("canal_contacto = 'Campaña'");
+    whereCampaniasConvertidas.push('(convertido = 1 OR convertido = true)');
+
+    const campaniasConvertidasSQL =
+      whereCampaniasConvertidas.length > 0
+        ? 'WHERE ' + whereCampaniasConvertidas.join(' AND ')
+        : '';
+
     const [campaniasConvertidasPorOrigen] = await pool.query(
       `SELECT
-      campania_origen AS origen,
-      COUNT(*) AS cantidad_convertidos
-    FROM ventas_prospectos
-    WHERE canal_contacto = 'Campaña'
-      AND (convertido = 1 OR convertido = true)
-      ${sede ? 'AND LOWER(REPLACE(sede, " ", "")) = ?' : ''}
-    GROUP BY campania_origen`,
-      paramsSede
+     campania_origen AS origen,
+     COUNT(*) AS cantidad_convertidos
+   FROM ventas_prospectos
+   ${campaniasConvertidasSQL}
+   GROUP BY campania_origen`,
+      paramsCampaniasConvertidas
     );
 
     res.json({
@@ -3815,56 +3844,52 @@ app.delete('/promos-mes/:id', async (req, res) => {
   }
 });
 
-app.put(
-  '/promos-mes/:id',
-  multerUpload.single('file'),
-  async (req, res) => {
-    const { titulo, descripcion, orden } = req.body;
-    let updateFields = [];
-    let updateValues = [];
+app.put('/promos-mes/:id', multerUpload.single('file'), async (req, res) => {
+  const { titulo, descripcion, orden } = req.body;
+  let updateFields = [];
+  let updateValues = [];
 
-    if (titulo) {
-      updateFields.push('titulo = ?');
-      updateValues.push(titulo);
-    }
-    if (descripcion) {
-      updateFields.push('descripcion = ?');
-      updateValues.push(descripcion);
-    }
-    if (orden) {
-      updateFields.push('orden = ?');
-      updateValues.push(orden);
-    }
-
-    // Si suben nueva imagen
-    if (req.file) {
-      const ext = path.extname(req.file.originalname);
-      const base = path.basename(req.file.originalname, ext);
-      const safeBase = cleanFileName(base);
-      const uniqueName = `${safeBase}-${Date.now()}${ext}`;
-      const finalPath = path.join('uploads', uniqueName);
-      await fs.promises.rename(req.file.path, finalPath);
-      updateFields.push('imagen_url = ?');
-      updateValues.push(`uploads/${uniqueName}`);
-    }
-
-    if (updateFields.length === 0) {
-      return res.status(400).json({ message: 'Nada que actualizar' });
-    }
-
-    updateValues.push(req.params.id);
-
-    try {
-      await pool.query(
-        `UPDATE promos_mes SET ${updateFields.join(', ')} WHERE id = ?`,
-        updateValues
-      );
-      res.json({ message: 'Promo actualizada' });
-    } catch (e) {
-      res.status(500).json({ error: 'Error actualizando promo' });
-    }
+  if (titulo) {
+    updateFields.push('titulo = ?');
+    updateValues.push(titulo);
   }
-);
+  if (descripcion) {
+    updateFields.push('descripcion = ?');
+    updateValues.push(descripcion);
+  }
+  if (orden) {
+    updateFields.push('orden = ?');
+    updateValues.push(orden);
+  }
+
+  // Si suben nueva imagen
+  if (req.file) {
+    const ext = path.extname(req.file.originalname);
+    const base = path.basename(req.file.originalname, ext);
+    const safeBase = cleanFileName(base);
+    const uniqueName = `${safeBase}-${Date.now()}${ext}`;
+    const finalPath = path.join('uploads', uniqueName);
+    await fs.promises.rename(req.file.path, finalPath);
+    updateFields.push('imagen_url = ?');
+    updateValues.push(`uploads/${uniqueName}`);
+  }
+
+  if (updateFields.length === 0) {
+    return res.status(400).json({ message: 'Nada que actualizar' });
+  }
+
+  updateValues.push(req.params.id);
+
+  try {
+    await pool.query(
+      `UPDATE promos_mes SET ${updateFields.join(', ')} WHERE id = ?`,
+      updateValues
+    );
+    res.json({ message: 'Promo actualizada' });
+  } catch (e) {
+    res.status(500).json({ error: 'Error actualizando promo' });
+  }
+});
 
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
