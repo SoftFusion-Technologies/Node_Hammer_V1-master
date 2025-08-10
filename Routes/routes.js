@@ -298,6 +298,7 @@ import {
 import {
   OBR_Recaptacion_CTS,
   OBRS_Recaptacion_CTS,
+  CNT_RecaptacionPendientes_CTS,
   CR_Recaptacion_CTS,
   ER_Recaptacion_CTS,
   UR_Recaptacion_CTS,
@@ -848,6 +849,7 @@ router.post('/user-daily-tasks/bulk', CR_BulkUserDailyTasks_CTS); // <-- NUEVA R
 
 // Obtener todos los registros (puede filtrar por usuario o ser admin/coordinador)
 router.get('/recaptacion', OBRS_Recaptacion_CTS);
+router.get('/recaptacion/pendientes/count', CNT_RecaptacionPendientes_CTS);
 
 // Obtener un registro específico
 router.get('/recaptacion/:id', OBR_Recaptacion_CTS);

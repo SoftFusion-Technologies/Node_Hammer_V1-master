@@ -70,6 +70,44 @@ export const OBR_Recaptacion_CTS = async (req, res) => {
   }
 };
 
+// GET /recaptacion/pendientes/count?usuario_id=..&level=..&mes=..&anio=..
+export const CNT_RecaptacionPendientes_CTS = async (req, res) => {
+  try {
+    const { usuario_id, level, mes, anio } = req.query;
+
+    const where = {
+      enviado: false,
+      respondido: false,
+      agendado: false,
+      convertido: false
+    };
+
+    // si no es admin, el conteo es por usuario
+    if (level !== 'admin') {
+      if (!usuario_id) {
+        return res.status(400).json({ mensajeError: 'Debe enviar usuario_id' });
+      }
+      where.usuario_id = usuario_id;
+    } else if (usuario_id) {
+      // admin puede pedir por un usuario específico
+      where.usuario_id = usuario_id;
+    }
+
+    // filtro por mes/año opcional (más estable que usar los virtuales)
+    if (mes && anio) {
+      const m = parseInt(mes, 10);
+      const y = parseInt(anio, 10);
+      const start = new Date(y, m - 1, 1);
+      const end = new Date(y, m, 1);
+      where.fecha = { [Op.gte]: start, [Op.lt]: end };
+    }
+
+    const count = await RecaptacionModel.count({ where });
+    res.json({ count });
+  } catch (error) {
+    res.status(500).json({ mensajeError: error.message });
+  }
+};
 // Crear registros nuevos (uno o varios desde Excel o formulario)
 export const CR_Recaptacion_CTS = async (req, res) => {
   const { registros } = req.body; // registros: array de objetos con nombre, tipo_contacto, usuario_id

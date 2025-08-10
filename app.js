@@ -2446,153 +2446,245 @@ app.delete('/agendas_masivo', async (req, res) => {
   }
 });
 
+// Limpia c='c' cuando pasaron 30 días desde fecha_creacion del registro (del mes actual)
+const limpiarCampoC = async () => {
+  try {
+    const [r] = await pool.execute(
+      `UPDATE alumnos
+          SET c = ''
+        WHERE c = 'c'
+          AND DATE(fecha_creacion) <= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`
+    );
+    if (r.affectedRows) {
+      console.log(`[c] limpiados: ${r.affectedRows}`);
+    }
+  } catch (e) {
+    console.error('[c] error limpiando campo c:', e);
+  }
+};
+
+// Inserta/clona alumnos "nuevo" del mes pasado -> crea registro del mes actual (socio, c='c') y marca amarillo
 const insertarAlumnosNuevos = async () => {
   try {
-    // Consulta para obtener todos los alumnos con prospecto 'nuevo'
+    // 1) Candidatos: NUEVO del MES PASADO (usando tus columnas mes/anio)
     const [alumnosNuevos] = await pool.execute(`
-  SELECT id, nombre, fecha_creacion
-  FROM alumnos
-  WHERE prospecto = 'nuevo'
-    AND mes = MONTH(CURDATE())
-    AND anio = YEAR(CURDATE())
-`);
+      SELECT id, nombre, email, fecha_creacion, mes, anio
+      FROM alumnos
+      WHERE prospecto = 'nuevo'
+        AND mes  = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))
+        AND anio = YEAR (DATE_SUB(CURDATE(), INTERVAL 1 MONTH))
+    `);
 
-    // Si no hay alumnos nuevos, no hacer nada
-    if (alumnosNuevos.length === 0) {
-      console.log(
-        'No se encontraron alumnos nuevos para insertar en alumnos_nuevos.'
-      );
+    if (!alumnosNuevos.length) {
+      console.log('No se encontraron alumnos nuevos (mes pasado) para clonar.');
       return;
     }
 
     for (const alumno of alumnosNuevos) {
-      const { id, fecha_creacion } = alumno;
+      const { id: idMesPasado, nombre, email, fecha_creacion } = alumno;
 
-      // Verificar si el alumno ya existe en la tabla alumnos_nuevos
-      const [existeAlumno] = await pool.execute(
-        `
-        SELECT COUNT(*) AS count
-        FROM alumnos_nuevos
-        WHERE idAlumno = ?
-      `,
-        [id]
+      // --- Normalizar fechas a Y-M-D para comparar sin horas ---
+      const fc = new Date(fecha_creacion);
+      const hoy = new Date();
+      const hoyYMD = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+      const unMesDespuesYMD = new Date(
+        fc.getFullYear(),
+        fc.getMonth() + 1,
+        fc.getDate()
       );
 
-      if (existeAlumno[0].count > 0) {
-        console.log(`El alumno ${id} ya existe en la tabla alumnos_nuevos.`);
-        continue; // Salta la inserción si ya existe
+      // 2) Sólo el día exacto (p.ej. 10/jul -> 10/ago)
+      const esElDiaExacto =
+        unMesDespuesYMD.getFullYear() === hoyYMD.getFullYear() &&
+        unMesDespuesYMD.getMonth() === hoyYMD.getMonth() &&
+        unMesDespuesYMD.getDate() === hoyYMD.getDate();
+
+      if (!esElDiaExacto) {
+        console.log(
+          `Alumno ${idMesPasado} aún no cumple el mes exacto (hoy ${hoyYMD
+            .toISOString()
+            .slice(0, 10)}; cumple ${unMesDespuesYMD
+            .toISOString()
+            .slice(0, 10)})`
+        );
+        continue;
       }
 
-      // Convertir la fecha de creación a un objeto Date
-      const fechaCreacionDate = new Date(fecha_creacion);
-      const fechaActual = new Date();
+      // 3) Ver si YA existe el registro del mes actual (para no duplicar)
+      const [[yaExisteMesActual]] = await pool.execute(
+        `SELECT id
+           FROM alumnos
+          WHERE nombre = ?
+            AND email  = ?
+            AND mes    = MONTH(CURDATE())
+            AND anio   = YEAR(CURDATE())
+          LIMIT 1`,
+        [nombre, email]
+      );
 
-      // Verificar si la fecha de creación ya alcanzó un mes de antigüedad
-      const fechaUnMesDespues = new Date(fechaCreacionDate);
-      fechaUnMesDespues.setMonth(fechaUnMesDespues.getMonth() + 1);
+      let idMesActual;
 
-      // Si la fecha de creación es exactamente un mes antes de la fecha actual
-      if (
-        fechaUnMesDespues.getFullYear() === fechaActual.getFullYear() &&
-        fechaUnMesDespues.getMonth() === fechaActual.getMonth() &&
-        fechaUnMesDespues.getDate() === fechaActual.getDate()
-      ) {
-        console.log(
-          `Alumno ${id} cumple con el mes exacto, insertando en alumnos_nuevos.`
+      if (yaExisteMesActual?.id) {
+        // Ya está creado el registro del mes actual → asegurar estado
+        idMesActual = yaExisteMesActual.id;
+
+        // Asegurar que esté como socio y con c='c'
+        await pool.execute(
+          `UPDATE alumnos
+              SET prospecto = 'socio', c = 'c'
+            WHERE id = ?`,
+          [idMesActual]
         );
 
-        // Calcular fecha de creación para la tabla alumnos_nuevos (el último día del mes anterior)
+        console.log(
+          `Alumno ${idMesPasado} ya clonado este mes como id ${idMesActual}. Estado asegurado (socio, c='c').`
+        );
+      } else {
+        // 4) Clonar al mes actual (NUEVO registro) → socio + c='c'
+        // ⚠️ Ajustá las columnas comentadas a tu tabla real si las tenés (telefono, estado, observacion, local_id, etc.)
+        const [resultInsertAlumno] = await pool.execute(
+          `
+  INSERT INTO alumnos (
+    nombre,
+    email,
+    celular,
+    punto_d,
+    motivo,
+    user_id,
+    prospecto,
+    c,
+    fecha_creacion,
+    mes,
+    anio
+  )
+  SELECT
+    COALESCE(a.nombre, '')                      AS nombre,
+    COALESCE(a.email, '')                       AS email,
+    COALESCE(a.celular, '')                     AS celular,
+    COALESCE(a.punto_d, '')                     AS punto_d,
+    COALESCE(a.motivo, '')                      AS motivo,
+    COALESCE(a.user_id, 0)                      AS user_id,
+    'socio'                                     AS prospecto,
+    'c'                                         AS c,
+    CURDATE()                                   AS fecha_creacion,
+    MONTH(CURDATE())                            AS mes,
+    YEAR(CURDATE())                             AS anio
+  FROM alumnos a
+  WHERE a.id = ?
+`,
+          [idMesPasado]
+        );
+
+        idMesActual = resultInsertAlumno.insertId;
+        console.log(
+          `Clonado alumno ${idMesPasado} -> nuevo id ${idMesActual} para mes actual (socio, c='c').`
+        );
+      }
+
+      // 5) Marcar amarillo (alumnos_nuevos) para el NUEVO id del mes actual
+      const [[existeMarca]] = await pool.execute(
+        `SELECT COUNT(*) AS c FROM alumnos_nuevos WHERE idAlumno = ? AND marca = 1`,
+        [idMesActual]
+      );
+
+      if (!existeMarca.c) {
         const fechaCreacionNuevo = new Date(
-          fechaUnMesDespues.getFullYear(),
-          fechaUnMesDespues.getMonth(),
-          30
+          hoyYMD.getFullYear(),
+          hoyYMD.getMonth(),
+          1
         );
-
-        // Calcular fecha de eliminación (un mes después de la fecha de creación de alumnos_nuevos)
         const fechaEliminacion = new Date(
-          fechaUnMesDespues.getFullYear(),
-          fechaUnMesDespues.getMonth() + 1,
-          30
+          hoyYMD.getFullYear(),
+          hoyYMD.getMonth() + 1,
+          0
         );
 
-        console.log(`Insertando alumno_id: ${id} en la tabla alumnos_nuevos`);
-
-        // Insertar en alumnos_nuevos con marca true
-        const [resultInsert] = await pool.execute(
+        await pool.execute(
           `INSERT INTO alumnos_nuevos (idAlumno, marca, fecha_creacion, fecha_eliminacion)
-           VALUES (?, ?, ?, ?)`,
-          [id, true, fechaCreacionNuevo, fechaEliminacion]
+           VALUES (?, 1, ?, ?)`,
+          [idMesActual, fechaCreacionNuevo, fechaEliminacion]
         );
-
         console.log(
-          `Alumno ${id} insertado en alumnos_nuevos. Resultado:`,
-          resultInsert
+          `Marcado amarillo creado: alumnos_nuevos.idAlumno=${idMesActual}`
         );
-
-        // **Actualizar el alumno a "socio" en la tabla alumnos**
-        const [resultUpdate] = await pool.execute(
-          `UPDATE alumnos 
-           SET prospecto = 'socio', c = 'c', fecha_creacion = CURDATE()
-           WHERE id = ? AND prospecto = 'nuevo'`,
-          [id]
-        );
-
-        if (resultUpdate.affectedRows > 0) {
-          console.log(`Alumno ${id} actualizado a socio en la tabla alumnos.`);
-        } else {
-          console.log(
-            `No se pudo actualizar el alumno ${id}. Puede que ya no sea "nuevo".`
-          );
-        }
       } else {
         console.log(
-          `El alumno ${id} no cumple con la condición de fecha (no ha pasado un mes exacto).`
+          `Marca amarilla ya existente para idAlumno=${idMesActual}, no se duplica.`
         );
       }
+
+      // 6) NO tocar el registro del mes pasado (permanece como 'nuevo', mes=7). ✅
     }
 
-    console.log('Proceso de inserción de alumnos nuevos completado.');
+    console.log('Proceso de clonación + marca amarilla + c= "c" completado.');
   } catch (error) {
     console.error('Error insertando alumnos nuevos:', error);
   }
 };
 
-// Ejecutar la inserción de alumnos nuevos
-cron.schedule('* * * * *', async () => {
-  console.log('Ejecutando cron de inserción de alumnos nuevos...');
-  await insertarAlumnosNuevos();
-});
+// ✅ Corre una vez al día a las 03:05 (hora Tucumán)
+cron.schedule(
+  '5 3 * * *',
+  async () => {
+    if (insertarAlumnosNuevos.running) return; // candado anti-solapamiento
+    insertarAlumnosNuevos.running = true;
+    try {
+      console.log(
+        '[CRON 03:05] Insertar alumnos nuevos (mes pasado -> mes actual)'
+      );
+      await insertarAlumnosNuevos();
+    } catch (e) {
+      console.error('[CRON insertarAlumnosNuevos] Error:', e);
+    } finally {
+      insertarAlumnosNuevos.running = false;
+    }
+  },
+  { timezone: 'America/Argentina/Tucuman' }
+);
 
-// Función para eliminar los registros con fecha_eliminacion vencida
+// Limpia c a los 30 días (03:15)
+cron.schedule(
+  '15 3 * * *',
+  async () => {
+    try {
+      console.log('[CRON 03:15] Limpiar campo c');
+      await limpiarCampoC();
+    } catch (e) {
+      console.error('[CRON limpiarCampoC] Error:', e);
+    }
+  },
+  { timezone: 'America/Argentina/Tucuman' }
+);
+
+// Función para eliminar los registros con fecha_eliminacion vencida (sin cambios)
 const eliminarAlumnosNuevos = async () => {
   try {
     const today = moment().startOf('day').toDate();
-
-    // Eliminar registros cuya fecha_eliminacion sea hoy o antes
     const [resultDelete] = await pool.execute(
       'DELETE FROM alumnos_nuevos WHERE fecha_eliminacion <= ?',
       [today]
     );
-
     console.log('Eliminación completada correctamente:', resultDelete);
   } catch (error) {
     console.error('Error en la tarea de eliminación:', error);
   }
 };
 
-// Ejecutar la eliminación de registros con fecha_eliminacion vencida cada minuto
+// Cron de eliminación (lo dejo igual)
 cron.schedule('* * * * *', async () => {
   console.log('Ejecutando cron de eliminación de registros vencidos...');
   await eliminarAlumnosNuevos();
 });
 
-// Endpoint para obtener alumnos con marca = 1
+// Endpoint para el front (sin cambios)
 app.get('/alumnos_nuevos', async (req, res) => {
   try {
     const [alumnosNuevos] = await pool.execute(
-      `SELECT idAlumno, marca, fecha_creacion, fecha_eliminacion FROM alumnos_nuevos WHERE marca = 1`
+      `SELECT idAlumno, marca, fecha_creacion, fecha_eliminacion
+       FROM alumnos_nuevos
+       WHERE marca = 1`
     );
-    res.json(alumnosNuevos); // Devolver los resultados como JSON
+    res.json(alumnosNuevos);
   } catch (error) {
     console.error('Error al obtener alumnos nuevos:', error);
     res.status(500).json({ message: 'Error al obtener alumnos nuevos' });
