@@ -30,6 +30,7 @@ import NotificationModel from './Models/MD_TB_Notifications.js';
 // nueva forma de congelar las  planillas sab 15 de mar
 import { Sequelize } from 'sequelize';
 import { PlanillasCerradasModel } from './Models/MD_TB_PlanillasCerradas.js';
+import { SCHEDULE_VentasAgendaCron } from './Controllers/CTS_TB_VentasAgenda.js';
 
 import moment from 'moment-timezone';
 
@@ -46,6 +47,9 @@ if (process.env.NODE_ENV !== 'production') {
 // const PORT = process.env.PORT || 3000;
 
 // console.log(process.env.PORT)
+
+// inicia cron diario (09:00 Tucumán)
+SCHEDULE_VentasAgendaCron();
 
 const app = express();
 app.use(cors()); // aca configuramos cors para no tener errores

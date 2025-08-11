@@ -316,6 +316,13 @@ import {
   OBRS_ColaboradoresConVentasProspectos
 } from '../Controllers/CTS_TB_VentasProspectos.js';
 
+import {
+  GET_AgendaHoy,
+  GET_AgendaHoyCount,
+  PATCH_AgendaDone,
+  POST_GenerarAgendaHoy // opcional (para pruebas/manual)
+} from '../Controllers/CTS_TB_VentasAgenda.js';
+
 // Crea un enrutador de Express
 const router = express.Router();
 
@@ -925,6 +932,22 @@ router.get('/chunks-ia', OBRT_ChunksIA_CTS); // Obtener todos
 router.get('/chunks-ia/:id', OBRS_ChunkIA_PorID_CTS); // Obtener por ID
 router.put('/chunks-ia/:id', UPD_ChunkIA_CTS); // Editar
 router.delete('/chunks-ia/:id', DEL_ChunkIA_CTS); // Eliminar
+
+// Agenda de HOY (pendientes). Admin ve todo; user por usuario_id
+// GET /api/ventas/agenda/hoy?usuario_id=123&level=user&with_prospect=1
+router.get('/ventas/agenda/hoy', /* requireAuth, */ GET_AgendaHoy);
+
+// Contador para badge
+// GET /api/ventas/agenda/hoy/count?usuario_id=123&level=user
+router.get('/ventas/agenda/hoy/count', /* requireAuth, */ GET_AgendaHoyCount);
+
+// Marcar seguimiento como realizado
+// PATCH /api/ventas/agenda/:id/done
+router.patch('/ventas/agenda/:id/done', /* requireAuth, */ PATCH_AgendaDone);
+
+// Forzar generación hoy (útil para pruebas)
+// POST /api/ventas/agenda/generar-hoy
+router.post('/ventas/agenda/generar-hoy', /* requireAuth, */ POST_GenerarAgendaHoy);
 
 // Exporta el enrutador
 export default router;
