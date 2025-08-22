@@ -13,7 +13,6 @@ const upload = multer({ dest: 'uploads/' });
 const RecaptacionModel = Recaptacion.RecaptacionModel;
 
 /* ------------- helpers ------------- */
-
 const norm = (s = '') =>
   s
     .toString()
@@ -51,23 +50,153 @@ const parseDate = (v) => {
 };
 
 // MySQL: LIKE (case-insensitive según collation) + normalización JS
+// ------------------ helpers de normalización y similitud ------------------
+const NORM_RE = /[^a-z0-9\s]/g;
+const SPACES_RE = /\s+/g;
+
+function normalizeName(s = '') {
+  return s
+    .toString()
+    .trim()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(NORM_RE, ' ')
+    .replace(SPACES_RE, ' ')
+    .trim();
+}
+
+function tokenize(s = '') {
+  return normalizeName(s)
+    .split(' ')
+    .filter(t => t.length >= 2);
+}
+
+// Levenshtein (iterativo)
+function lev(a, b) {
+  a = normalizeName(a); b = normalizeName(b);
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const dp = Array(n + 1);
+  for (let j = 0; j <= n; j++) dp[j] = j;
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = Math.min(
+        dp[j] + 1,
+        dp[j - 1] + 1,
+        prev + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+
+function jaccardTokens(a, b) {
+  const A = new Set(tokenize(a));
+  const B = new Set(tokenize(b));
+  if (!A.size && !B.size) return 1;
+  let inter = 0;
+  for (const t of A) if (B.has(t)) inter++;
+  const uni = A.size + B.size - inter;
+  return uni ? inter / uni : 0;
+}
+
+function includesScore(a, b) {
+  const an = normalizeName(a), bn = normalizeName(b);
+  if (!an || !bn) return 0;
+  if (an === bn) return 1;
+  if (an.includes(bn) || bn.includes(an)) {
+    const ratio = Math.min(an.length, bn.length) / Math.max(an.length, bn.length);
+    return 0.6 + 0.4 * ratio;
+  }
+  return 0;
+}
+
+function similarity(a, b) {
+  const jac = jaccardTokens(a, b);
+  const d = lev(a, b);
+  const maxLen = Math.max(normalizeName(a).length, normalizeName(b).length) || 1;
+  const levSim = 1 - d / maxLen;
+  const inc = includesScore(a, b);
+  return 0.5 * jac + 0.3 * levSim + 0.2 * inc; // [0..1]
+}
+
+// --------- caché simple en memoria para snapshot de users (60s) ----------
+let _usersCache = { ts: 0, list: [] };
+async function getUsersSnapshot() {
+  const now = Date.now();
+  if (now - _usersCache.ts < 60_000 && _usersCache.list.length) {
+    return _usersCache.list;
+  }
+  const list = await Users.findAll({
+    attributes: ['id', 'name'],
+    where: {}, // podés filtrar level/state/sede si querés
+    limit: 1000,              // ajustá según tamaño real
+    order: [['id', 'ASC']],
+  });
+  _usersCache = { ts: now, list };
+  return list;
+}
+
+// ------------------ resolución robusta del usuario ------------------
 async function resolveUsuarioIdPorColaborador(nombreColaborador, fallbackId) {
   if (!nombreColaborador) return fallbackId ?? null;
 
-  const candidates = await Users.findAll({
-    where: { name: { [Op.like]: `%${nombreColaborador}%` } },
-    limit: 10,
-    attributes: ['id', 'name']
-  });
+  const wantedNorm = normalizeName(nombreColaborador);
+  const toks = tokenize(nombreColaborador);
 
-  if (candidates?.length) {
-    const wanted = norm(nombreColaborador);
-    const exact = candidates.find((c) => norm(c.name) === wanted);
-    return (exact || candidates[0]).id;
+  // 1) Primer pase: LIKE por tokens (rápido en DB)
+  const likeClauses = [];
+  if (toks.length) {
+    likeClauses.push({ name: { [Op.like]: `%${toks[0]}%` } });
+    if (toks.length > 1) likeClauses.push({ name: { [Op.like]: `%${toks[toks.length - 1]}%` } });
+  } else {
+    likeClauses.push({ name: { [Op.like]: `%${wantedNorm}%` } });
   }
 
+  let candidates = await Users.findAll({
+    where: { [Op.or]: likeClauses },
+    limit: 25,
+    attributes: ['id', 'name'],
+  });
+
+  // 1.a) Exacto-insensible por normalización
+  let exact = candidates.find(c => normalizeName(c.name) === wantedNorm);
+  if (exact) return exact.id;
+
+  // 2) Si no hay candidatos o son pocos confiables, ampliamos con snapshot
+  if (!candidates.length) {
+    candidates = await getUsersSnapshot();
+  }
+
+  // 3) Fuzzy scoring
+  let best = null;
+  let bestScore = 0;
+  for (const c of candidates) {
+    const s = similarity(nombreColaborador, c.name);
+    if (s > bestScore) {
+      bestScore = s;
+      best = c;
+    } else if (s === bestScore && best) {
+      if ((c.name || '').length > (best.name || '').length) best = c;
+    }
+  }
+
+  // 4) Umbral de confianza
+  const THRESHOLD = 0.72; // subí/bajá si hace falta
+  if (best && bestScore >= THRESHOLD) {
+    return best.id;
+  }
+
+  // 5) Fallback
   return fallbackId ?? null;
 }
+
 
 // Mes/año objetivo del import
 function daysInMonth(year, monthIndex0) {
@@ -221,9 +350,12 @@ router.post(
               const nombre = alias(row, ['Nombre']);
               const actividad = alias(row, ['Actividad']);
               const observacion = alias(row, ['Observacion', 'Observación']);
-              const convertido = parseBool(alias(row, ['Convertido']));
+              const convertido = parseBool(alias(row, ['Convertido'])); // Sí / No
               const fechaExcel = parseDate(alias(row, ['Fecha']));
               const colaborador = alias(row, ['Colaborador']);
+
+              // ✅ Si está convertido => saltar fila
+              if (convertido === true) continue;
 
               // usuario_id: resolver por "Colaborador" -> fallback a :usuario_id
               const usuario_id = await resolveUsuarioIdPorColaborador(
@@ -234,10 +366,9 @@ router.post(
               // tipo_contacto del ENUM (no usar valores de "Canal Contacto")
               const tipo_contacto = 'Leads no convertidos'; // o 'Otro'
 
-              // detalle: guardamos canal + contacto; si nada, default
+              // ✅ detalle: guardar SOLO el contacto (sin el canal)
               const detalle_contacto =
-                [canal, contacto].filter(Boolean).join(' | ') ||
-                'Importación planilla de ventas';
+                contacto || 'Importación planilla de ventas';
 
               // Si no hay nada identificable, salteo
               if (!nombre && !detalle_contacto) continue;
@@ -259,7 +390,7 @@ router.post(
                 observacion: obsConFecha
                   ? obsConFecha.toString().slice(0, 1000)
                   : null,
-                convertido: !!convertido,
+                convertido: false, // siempre falso al importar
                 fecha, // ✅ fuerza mes/anio del import
                 enviado: false,
                 respondido: false,
