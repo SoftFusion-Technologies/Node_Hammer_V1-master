@@ -1,33 +1,25 @@
 /*
-  * Programador: Benjamin Orellana
-  * Fecha Creación: 14 / 06 / 2025
-  * Versión: 1.0
-  *
-  * Descripción:
-    *Este archivo (MD_TB_recaptacion.js) contiene la definición del modelo Sequelize para la tabla de recaptación de contactos.
-   
-  * Tema: Modelos - Recaptación
-  
-  * Capa: Backend 
-*/
+ * Programador: Benjamin Orellana
+ * Fecha Creación: 14/06/2025
+ * Versión: 1.1
+ * Descripción: Modelo Sequelize para la tabla 'recaptacion'
+ */
 
-// Importaciones
-import dotenv from 'dotenv';
-import db from '../DataBase/db.js';
 import { DataTypes } from 'sequelize';
+import db from '../DataBase/db.js';
 
-if (process.env.NODE_ENV !== 'production') {
-  dotenv.config();
-}
-
-// Definición del modelo de la tabla 'recaptacion'
 export const RecaptacionModel = db.define(
   'recaptacion',
   {
+    id: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      primaryKey: true,
+      autoIncrement: true
+    },
     fecha: {
       type: DataTypes.DATEONLY,
       allowNull: false,
-      defaultValue: DataTypes.NOW
+      defaultValue: DataTypes.NOW // MySQL: curdate()
     },
     usuario_id: {
       type: DataTypes.BIGINT.UNSIGNED,
@@ -46,9 +38,11 @@ export const RecaptacionModel = db.define(
         'Prospectos inc. Socioplus',
         'Prosp inc Entrenadores',
         'Leads no convertidos',
-        'Otro'
+        'Otro',
+        'Cambio de plan'
       ),
-      allowNull: false
+      allowNull: true,
+      defaultValue: null
     },
     detalle_contacto: {
       type: DataTypes.STRING(255),
@@ -70,28 +64,25 @@ export const RecaptacionModel = db.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+
+    // 🔹 mapeo de columnas generadas por MySQL (STORED)
     mes: {
-      type: DataTypes.VIRTUAL,
-      get() {
-        const fecha = this.getDataValue('fecha');
-        return fecha ? new Date(fecha).getMonth() + 1 : null;
-      }
+      type: DataTypes.INTEGER,
+      allowNull: true // la DB lo calcula desde 'fecha'
     },
     anio: {
-      type: DataTypes.VIRTUAL,
-      get() {
-        const fecha = this.getDataValue('fecha');
-        return fecha ? new Date(fecha).getFullYear() : null;
-      }
+      type: DataTypes.INTEGER,
+      allowNull: true
     }
   },
   {
+    tableName: 'recaptacion',
     timestamps: true,
     createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    updatedAt: 'updated_at',
+    underscored: true,
+    freezeTableName: true
   }
 );
 
-export default {
-  RecaptacionModel
-};
+export default { RecaptacionModel };
