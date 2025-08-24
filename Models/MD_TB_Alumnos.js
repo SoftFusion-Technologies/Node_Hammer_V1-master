@@ -21,6 +21,19 @@ export const AlumnosModel = db.define(
       type: DataTypes.STRING(10),
       allowNull: true
     },
+    socio_origen: {
+      type: DataTypes.ENUM('nuevo', 'prospecto_c'),
+      allowNull: true
+    },
+    socio_origen_mes: {
+      type: DataTypes.TINYINT,
+      allowNull: true
+    },
+    socio_origen_anio: {
+      type: DataTypes.SMALLINT,
+      allowNull: true
+    },
+
     email: { type: DataTypes.STRING, allowNull: true },
     celular: { type: DataTypes.STRING, allowNull: true },
     punto_d: { type: DataTypes.TEXT, allowNull: true },

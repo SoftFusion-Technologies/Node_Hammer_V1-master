@@ -726,7 +726,7 @@ router.get('/alumnos/:id', OBR_Alumnos_CTS);
 router.post('/alumnos', CR_Alumnos_CTS);
 
 // Eliminar un registro en Alumnos por su ID
-// router.delete('/alumnos/:id', ER_Alumnos_CTS); SE COMENTA PARA QUE NO SE PUEDA ELIMINAR ALUMNOS
+router.delete('/alumnos/:id', ER_Alumnos_CTS);
 
 // Actualizar un registro en Alumnos por su ID
 router.put('/alumnos/:id', UR_Alumnos_CTS);
@@ -947,7 +947,10 @@ router.patch('/ventas/agenda/:id/done', /* requireAuth, */ PATCH_AgendaDone);
 
 // Forzar generación hoy (útil para pruebas)
 // POST /api/ventas/agenda/generar-hoy
-router.post('/ventas/agenda/generar-hoy', /* requireAuth, */ POST_GenerarAgendaHoy);
+router.post(
+  '/ventas/agenda/generar-hoy',
+  /* requireAuth, */ POST_GenerarAgendaHoy
+);
 
 // Exporta el enrutador
 export default router;

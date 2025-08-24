@@ -2461,13 +2461,15 @@ const limpiarCampoC = async () => {
     );
     if (r.affectedRows) {
       console.log(`[c] limpiados: ${r.affectedRows}`);
+    } else {
+      console.log('[c] no había registros para limpiar');
     }
   } catch (e) {
     console.error('[c] error limpiando campo c:', e);
   }
 };
 
-// Inserta/clona alumnos "nuevo" del mes pasado -> crea registro del mes actual (socio, c='c') y marca amarillo
+// Inserta/clona alumnos "nuevo" del mes pasado -> crea registro del mes actual (socio, c='') y marca amarillo
 const insertarAlumnosNuevos = async () => {
   try {
     // 1) Candidatos: NUEVO del MES PASADO (usando tus columnas mes/anio)
@@ -2532,10 +2534,10 @@ const insertarAlumnosNuevos = async () => {
         // Ya está creado el registro del mes actual → asegurar estado
         idMesActual = yaExisteMesActual.id;
 
-        // Asegurar que esté como socio y con c='c'
+        // Asegurar que esté como socio y con c=''
         await pool.execute(
           `UPDATE alumnos
-              SET prospecto = 'socio', c = 'c'
+              SET prospecto = 'socio', c = ''
             WHERE id = ?`,
           [idMesActual]
         );
@@ -2569,7 +2571,7 @@ const insertarAlumnosNuevos = async () => {
     COALESCE(a.motivo, '')                      AS motivo,
     COALESCE(a.user_id, 0)                      AS user_id,
     'socio'                                     AS prospecto,
-    'c'                                         AS c,
+    ''                                         AS c,
     CURDATE()                                   AS fecha_creacion,
     MONTH(CURDATE())                            AS mes,
     YEAR(CURDATE())                             AS anio
@@ -2625,7 +2627,6 @@ const insertarAlumnosNuevos = async () => {
     console.error('Error insertando alumnos nuevos:', error);
   }
 };
-
 // ✅ Corre una vez al día a las 03:05 (hora Tucumán)
 cron.schedule(
   '5 3 * * *',
@@ -2645,7 +2646,6 @@ cron.schedule(
   },
   { timezone: 'America/Argentina/Tucuman' }
 );
-
 // Limpia c a los 30 días (03:15)
 cron.schedule(
   '15 3 * * *',
@@ -2659,7 +2659,6 @@ cron.schedule(
   },
   { timezone: 'America/Argentina/Tucuman' }
 );
-
 // Función para eliminar los registros con fecha_eliminacion vencida (sin cambios)
 const eliminarAlumnosNuevos = async () => {
   try {
@@ -3013,89 +3012,149 @@ const cerrarMesAnterior = async () => {
 };
 
 // Función para copiar los alumnos que tienen asistencias después del 20 del mes anterior y estado "P"
-const copiarAlumnosMesAnterior = async () => {
+// ✅ Acepta overrides para test: { mesAnterior, anioAnterior, mesActual, anioActual }
+const copiarAlumnosMesAnterior = async (over = {}) => {
   console.log('Ejecutando copiar alumnos');
 
-  // Obtener el mes y año actual y el anterior
-  const { mesActual, anioActual, mesAnterior, anioAnterior } =
-    getMesYAnioActual();
+  // 1) Mes/año origen y destino (si no pasás overrides, usa los reales)
+  const now = new Date();
+  const defMesActual = now.getMonth() + 1;
+  const defAnioActual = now.getFullYear();
+  const defMesAnterior = defMesActual === 1 ? 12 : defMesActual - 1;
+  const defAnioAnterior =
+    defMesActual === 1 ? defAnioActual - 1 : defAnioActual;
+
+  const mesActual = over.mesActual ?? defMesActual;
+  const anioActual = over.anioActual ?? defAnioActual;
+  const mesAnterior = over.mesAnterior ?? defMesAnterior;
+  const anioAnterior = over.anioAnterior ?? defAnioAnterior;
+
   console.log(`Mes Actual: ${mesActual}, Año Actual: ${anioActual}`);
   console.log(`Mes Anterior: ${mesAnterior}, Año Anterior: ${anioAnterior}`);
 
-  // Filtrar las asistencias del mes anterior con día superior a 20 y estado "P"
+  // 2) Asistencias del mes anterior: día >= 20 y estado 'P'
   const asistenciasMesAnterior = await AsistenciasModel.findAll({
     where: {
       mes: mesAnterior,
       anio: anioAnterior,
-      dia: { [Sequelize.Op.gte]: 20 }, // Día mayor o igual a 20
-      estado: 'P' // Solo asistencias con estado "P"
+      dia: { [Sequelize.Op.gte]: 20 },
+      estado: 'P'
     }
   });
 
-  console.log(
-    `Asistencias del mes ${mesAnterior}-${anioAnterior} después del día 20 con estado "P":`
-  );
-  console.log(asistenciasMesAnterior);
-
-  // Extraer los IDs de los alumnos que tienen asistencias después del 20 con estado "P"
   const alumnosAcopiar = [
-    ...new Set(asistenciasMesAnterior.map((asistencia) => asistencia.alumno_id))
+    ...new Set(asistenciasMesAnterior.map((a) => a.alumno_id))
   ];
   console.log('Alumnos a copiar:', alumnosAcopiar);
 
-  // Verificar que no se copien alumnos que ya existan en el mes actual
+  // 3) Copiar
   for (const alumnoId of alumnosAcopiar) {
-    console.log(`Verificando existencia del alumno con ID: ${alumnoId}`);
+    // Traer el registro del MES ANTERIOR (id + mes/año)
+    const alumnoPrev = await AlumnosModel.findOne({
+      where: { id: alumnoId, mes: mesAnterior, anio: anioAnterior }
+    });
+    if (!alumnoPrev) {
+      console.log(
+        `No se encontró el alumno ${alumnoId} en ${mesAnterior}-${anioAnterior}`
+      );
+      continue;
+    }
 
-    const alumno = await AlumnosModel.findOne({
-      where: { id: alumnoId }
+    // Evitar duplicados en el MES DESTINO: (nombre + email + celular + mes/año)
+    const existeAlumnoEnMesActual = await AlumnosModel.findOne({
+      where: {
+        nombre: alumnoPrev.nombre,
+        email: alumnoPrev.email || '',
+        celular: alumnoPrev.celular || '',
+        mes: mesActual,
+        anio: anioActual
+      }
+    });
+    if (existeAlumnoEnMesActual) {
+      console.log(
+        `Ya existe ${alumnoPrev.nombre} en ${mesActual}-${anioActual}`
+      );
+      continue;
+    }
+
+    // Determinar el ORIGEN del socio según el mes anterior
+    const socio_origen =
+      alumnoPrev.prospecto === 'nuevo'
+        ? 'nuevo'
+        : alumnoPrev.prospecto === 'prospecto' && alumnoPrev.c === 'c'
+        ? 'prospecto_c'
+        : null;
+
+    // Crear SOCIO en el mes destino (socios SIN "c") y guardar el rastro
+    const { id, ...alumnoSinId } = alumnoPrev.dataValues;
+    const nuevo = await AlumnosModel.create({
+      ...alumnoSinId,
+      mes: mesActual,
+      anio: anioActual,
+      prospecto: 'socio',
+      c: '',
+      socio_origen: socio_origen,
+      socio_origen_mes: socio_origen ? mesAnterior : null,
+      socio_origen_anio: socio_origen ? anioAnterior : null
+      // (opcional) fecha_creacion: new Date(anioActual, mesActual - 1, 1)
     });
 
-    if (alumno) {
-      console.log(`Alumno encontrado: ${alumno.nombre}`);
-
-      // Verificar si el alumno ya existe en el mes actual (marzo)
-      const existeAlumnoEnMesActual = await AlumnosModel.findOne({
-        where: {
-          id: alumnoId,
-          mes: mesActual,
-          anio: anioActual
-        }
-      });
-
-      if (!existeAlumnoEnMesActual) {
-        // Verificar si el alumno ya es socio en el mes anterior
-        const alumnoSocioEnMesAnterior = await AlumnosModel.findOne({
-          where: {
-            id: alumnoId,
-            mes: mesAnterior, // Verificar en el mes anterior
-            anio: anioAnterior, // Año anterior
-            prospecto: 'socio' // Verificar si ya es socio
-          }
-        });
-
-        // Si es socio o nuevo, copiar y marcarlo como socio
-        const { id, ...alumnoSinId } = alumno.dataValues;
-
-        // Crear nuevo registro del alumno para el mes actual
-        await AlumnosModel.create({
-          ...alumnoSinId, // Copiar todos los valores del alumno, excepto el id
-          mes: mesActual, // Nuevo mes
-          anio: anioActual, // Nuevo año
-          prospecto: 'socio'
-        });
-
-        console.log(
-          `Alumno ${alumno.nombre} copiado al mes ${mesActual}-${anioActual} y marcado como socio`
-        );
-      } else {
-        console.log(
-          `El alumno ${alumno.nombre} ya existe en el mes ${mesActual}-${anioActual}`
-        );
-      }
+    // 🟨 Pintar amarillo SOLO si en el mes anterior era 'nuevo' o 'prospecto' con c='c' (P C)
+    const elegibleAmarillo = !!socio_origen; // mismo criterio
+    if (elegibleAmarillo) {
+      const primerDia = `${anioActual}-${String(mesActual).padStart(
+        2,
+        '0'
+      )}-01`;
+      await pool.execute(
+        `INSERT INTO alumnos_nuevos (idAlumno, marca, fecha_creacion, fecha_eliminacion)
+         SELECT ?, 1, ?, LAST_DAY(?)
+         WHERE NOT EXISTS (
+           SELECT 1 FROM alumnos_nuevos WHERE idAlumno = ? AND marca = 1
+         )`,
+        [nuevo.id, primerDia, primerDia, nuevo.id]
+      );
+      console.log(
+        `Copiado como SOCIO y marcado amarillo: ${alumnoPrev.nombre} -> ${mesActual}-${anioActual}`
+      );
     } else {
-      console.log(`No se encontró el alumno con ID: ${alumnoId}`);
+      console.log(
+        `Copiado como SOCIO (SIN amarillo, venía de '${
+          alumnoPrev.prospecto
+        }', c='${alumnoPrev.c || ''}'): ${
+          alumnoPrev.nombre
+        } -> ${mesActual}-${anioActual}`
+      );
     }
+  }
+};
+
+// await copiarAlumnosMesAnterior({
+//   mesAnterior: 9,
+//   anioAnterior: 2025,
+//   mesActual: 10,
+//   anioActual: 2025
+// });
+
+// Limpia c='c' en el mes anterior (deja c='' para que quede solo "P")
+const limpiarCPrevioMes = async () => {
+  try {
+    const ahora = new Date();
+    const finMesAnterior = new Date(ahora.getFullYear(), ahora.getMonth(), 0); // último día del mes anterior
+    const mesAnterior = finMesAnterior.getMonth() + 1;
+    const anioAnterior = finMesAnterior.getFullYear();
+
+    const [r] = await pool.execute(
+      `UPDATE alumnos
+          SET c = ''
+        WHERE c = 'c'
+          AND mes = ?
+          AND anio = ?`,
+      [mesAnterior, anioAnterior]
+    );
+    console.log(`[c] Limpiados del mes anterior: ${r.affectedRows}`);
+  } catch (e) {
+    console.error('[c] Error limpiando c del mes anterior:', e);
   }
 };
 
@@ -3119,10 +3178,26 @@ const eliminarDuplicados = async () => {
 
 // Programar la tarea para que se ejecute el día 1 de cada mes a las 00:05
 cron.schedule('5 0 1 * *', async () => {
-  console.log('📅 Es 1° del mes - Ejecutando cierre del mes anterior...');
-  await cerrarMesAnterior();
-  await copiarAlumnosMesAnterior(); // Copiar los alumnos con asistencias después del 20 del mes anterior
-  await eliminarDuplicados();
+  try {
+    await cerrarMesAnterior();
+  } catch (e) {
+    console.error(e);
+  }
+  try {
+    await copiarAlumnosMesAnterior();
+  } catch (e) {
+    console.error(e);
+  }
+  try {
+    await limpiarCPrevioMes();
+  } catch (e) {
+    console.error(e);
+  }
+  try {
+    await eliminarDuplicados();
+  } catch (e) {
+    console.error(e);
+  }
 });
 
 // const test = async () => {
