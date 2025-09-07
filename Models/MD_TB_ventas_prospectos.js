@@ -94,12 +94,21 @@ export const VentasProspectosModel = db.define(
     clase_prueba_1_obs: {
       type: DataTypes.TEXT
     },
+    clase_prueba_1_tipo: {
+      type: DataTypes.ENUM('Agenda', 'Visita programada', 'Clase de prueba'),
+      allowNull: true
+    },
     clase_prueba_2_fecha: {
       type: DataTypes.DATE,
       allowNull: true
     },
+
     clase_prueba_2_obs: {
       type: DataTypes.TEXT
+    },
+    clase_prueba_2_tipo: {
+      type: DataTypes.ENUM('Agenda', 'Visita programada', 'Clase de prueba'),
+      allowNull: true
     },
     clase_prueba_3_fecha: {
       type: DataTypes.DATE,
@@ -107,6 +116,10 @@ export const VentasProspectosModel = db.define(
     },
     clase_prueba_3_obs: {
       type: DataTypes.TEXT
+    },
+    clase_prueba_3_tipo: {
+      type: DataTypes.ENUM('Agenda', 'Visita programada', 'Clase de prueba'),
+      allowNull: true
     },
     convertido: {
       type: DataTypes.BOOLEAN,

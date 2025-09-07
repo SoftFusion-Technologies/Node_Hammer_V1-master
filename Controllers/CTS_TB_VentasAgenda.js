@@ -98,7 +98,8 @@ export const GEN_AgendaSeguimientoVentas = async () => {
 export const GET_AgendaHoy = async (req, res) => {
   try {
     const { usuario_id, level, with_prospect } = req.query;
-    const where = { followup_date: ymd(new Date()), done: false };
+
+    const where = { followup_date: ymd(new Date()) }; // 👈 sin filtro done
     if (level !== 'admin') {
       if (!usuario_id)
         return res.status(400).json({ mensajeError: 'Debe enviar usuario_id' });
@@ -125,13 +126,19 @@ export const GET_AgendaHoy = async (req, res) => {
     const items = await VentasAgendaModel.findAll({
       where,
       include,
-      order: [['created_at', 'ASC']]
+      // pendientes arriba, realizados abajo; luego por creación
+      order: [
+        ['done', 'ASC'],
+        ['created_at', 'ASC']
+      ]
     });
+
     res.json(items);
   } catch (e) {
     res.status(500).json({ mensajeError: e.message });
   }
 };
+
 
 // Contador para badge
 export const GET_AgendaHoyCount = async (req, res) => {
