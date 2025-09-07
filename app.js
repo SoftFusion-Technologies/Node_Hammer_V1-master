@@ -3779,6 +3779,89 @@ app.get('/stats-ventas', async (req, res) => {
       paramsCampaniasConvertidas
     );
 
+    /* ---------------------------------------------------------
+       🔹 NUEVO BLOQUE: ESTADÍSTICAS DE COMISIONES
+       --------------------------------------------------------- */
+
+    // Criterio de comisión
+    const whereComision = [...whereClauses];
+    const paramsComision = [...params];
+    whereComision.push('(comision = 1 OR comision = true)');
+    const comisionSQL = whereComision.length
+      ? 'WHERE ' + whereComision.join(' AND ')
+      : '';
+
+    // A) Total comisiones
+    const [[{ total_comisiones }]] = await pool.query(
+      `SELECT COUNT(*) AS total_comisiones
+       FROM ventas_prospectos
+       ${comisionSQL}`,
+      paramsComision
+    );
+
+    // B) Comisiones por asesor
+    const [comisionesPorAsesor] = await pool.query(
+      `SELECT asesor_nombre, COUNT(*) AS cantidad
+       FROM ventas_prospectos
+       ${comisionSQL}
+       GROUP BY asesor_nombre
+       ORDER BY cantidad DESC`,
+      paramsComision
+    );
+
+    // C) Comisiones por canal
+    const [comisionesPorCanal] = await pool.query(
+      `SELECT canal_contacto AS canal, COUNT(*) AS cantidad
+       FROM ventas_prospectos
+       ${comisionSQL}
+       GROUP BY canal_contacto
+       ORDER BY cantidad DESC`,
+      paramsComision
+    );
+
+    // D) Comisiones por actividad
+    const [comisionesPorActividad] = await pool.query(
+      `SELECT actividad, COUNT(*) AS cantidad
+       FROM ventas_prospectos
+       ${comisionSQL}
+       GROUP BY actividad
+       ORDER BY cantidad DESC`,
+      paramsComision
+    );
+
+    // E) Comisiones por origen (solo canal campaña)
+    const whereComisionCampania = [...whereClauses];
+    const paramsComisionCampania = [...params];
+    whereComisionCampania.push('(comision = 1 OR comision = true)');
+    whereComisionCampania.push("canal_contacto = 'Campaña'");
+    const comisionCampaniaSQL = whereComisionCampania.length
+      ? 'WHERE ' + whereComisionCampania.join(' AND ')
+      : '';
+    const [comisionesPorOrigenCampania] = await pool.query(
+      `SELECT campania_origen AS origen, COUNT(*) AS cantidad
+       FROM ventas_prospectos
+       ${comisionCampaniaSQL}
+       GROUP BY campania_origen
+       ORDER BY cantidad DESC`,
+      paramsComisionCampania
+    );
+
+    // F) Serie temporal (por día) de comisiones
+    const [comisionesPorDia] = await pool.query(
+      `SELECT DATE(fecha) AS dia, COUNT(*) AS cantidad
+       FROM ventas_prospectos
+       ${comisionSQL}
+       GROUP BY DATE(fecha)
+       ORDER BY dia ASC`,
+      paramsComision
+    );
+
+    // G) Tasa de comisión sobre convertidos (JS para evitar problemas de división)
+    const tasa_comision_sobre_convertidos =
+      total_convertidos > 0
+        ? Number((total_comisiones / total_convertidos).toFixed(4))
+        : 0;
+
     res.json({
       total_ventas,
       prospectos,
@@ -3788,7 +3871,14 @@ app.get('/stats-ventas', async (req, res) => {
       total_clases_prueba,
       total_convertidos,
       campaniasPorOrigen,
-      campaniasConvertidasPorOrigen
+      campaniasConvertidasPorOrigen, // 🔹 NUEVO: bloque comisiones
+      total_comisiones,
+      tasa_comision_sobre_convertidos,
+      comisionesPorAsesor,
+      comisionesPorCanal,
+      comisionesPorActividad,
+      comisionesPorOrigenCampania,
+      comisionesPorDia
     });
   } catch (error) {
     console.error('Error obteniendo estadísticas:', error);
