@@ -133,22 +133,114 @@ export const CR_VentasProspecto_CTS = async (req, res) => {
 };
 
 // Actualizar un prospecto (para editar nombre, dni, contacto, etc.)
+// controllers/VentasProspectosController.js
 export const UR_VentasProspecto_CTS = async (req, res) => {
-  const { id } = req.params;
-
   try {
-    const [updated] = await VentasProspectosModel.update(req.body, {
-      where: { id }
-    });
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ mensajeError: 'ID inválido' });
 
-    if (updated === 1) {
-      const actualizado = await VentasProspectosModel.findByPk(id);
-      res.json({ message: 'Prospecto actualizado', actualizado });
-    } else {
-      res.status(404).json({ mensajeError: 'Prospecto no encontrado' });
+    // 🔒 Lista blanca de campos actualizables
+    const ALLOWED = new Set([
+      'usuario_id',
+      'nombre',
+      'dni',
+      'tipo_prospecto',
+      'canal_contacto',
+      'contacto',
+      'actividad',
+      'sede',
+      'fecha',
+      'asesor_nombre',
+      'n_contacto_1',
+      'n_contacto_2',
+      'n_contacto_3',
+      'clase_prueba_1_fecha',
+      'clase_prueba_1_obs',
+      'clase_prueba_2_fecha',
+      'clase_prueba_2_obs',
+      'clase_prueba_3_fecha',
+      'clase_prueba_3_obs',
+      'convertido',
+      'observacion',
+      'campania_origen',
+      // comisión
+      'comision',
+      'comision_usuario_id'
+    ]);
+
+    const body = req.body ?? {};
+    const campos = {};
+
+    // Copiamos sólo lo permitido con normalizaciones simples
+    for (const k of Object.keys(body)) {
+      if (!ALLOWED.has(k)) continue;
+
+      const v = body[k];
+
+      if (['n_contacto_1', 'n_contacto_2', 'n_contacto_3'].includes(k)) {
+        campos[k] = Number(v ?? 0);
+      } else if (['convertido', 'comision'].includes(k)) {
+        campos[k] = !!v; // boolean
+      } else if (
+        [
+          'fecha',
+          'clase_prueba_1_fecha',
+          'clase_prueba_2_fecha',
+          'clase_prueba_3_fecha'
+        ].includes(k)
+      ) {
+        campos[k] = v ? new Date(v) : null;
+      } else if (k === 'comision_usuario_id') {
+        // Sólo setear si viene definido; casteado a número
+        if (typeof v !== 'undefined' && v !== null && v !== '') {
+          campos[k] = Number(v) || null;
+        }
+      } else {
+        campos[k] = v;
+      }
     }
-  } catch (error) {
-    res.status(500).json({ mensajeError: error.message });
+
+    // --------- Reglas especiales convertido / comisión ---------
+
+    // Si explícitamente desmarcan convertido → anular comisión y su metadata
+    if (
+      Object.prototype.hasOwnProperty.call(body, 'convertido') &&
+      body.convertido === false
+    ) {
+      campos.comision = false;
+      campos.comision_registrada_at = null;
+      campos.comision_usuario_id = null;
+    }
+
+    // Si vino 'comision' (true/false), setear/limpiar metadata
+    if (Object.prototype.hasOwnProperty.call(body, 'comision')) {
+      if (body.comision) {
+        campos.comision_registrada_at = new Date();
+        // Sólo tomar comision_usuario_id si vino
+        if (Object.prototype.hasOwnProperty.call(body, 'comision_usuario_id')) {
+          campos.comision_usuario_id = Number(body.comision_usuario_id) || null;
+        }
+      } else {
+        campos.comision_registrada_at = null;
+        campos.comision_usuario_id = null;
+      }
+    }
+
+    // Si no hay nada que actualizar, avisar
+    if (Object.keys(campos).length === 0) {
+      return res
+        .status(400)
+        .json({ mensajeError: 'Sin campos válidos para actualizar' });
+    }
+
+    const [n] = await VentasProspectosModel.update(campos, { where: { id } });
+    if (!n)
+      return res.status(404).json({ mensajeError: 'Prospecto no encontrado' });
+
+    const data = await VentasProspectosModel.findByPk(id);
+    return res.json(data);
+  } catch (err) {
+    return res.status(500).json({ mensajeError: err.message });
   }
 };
 

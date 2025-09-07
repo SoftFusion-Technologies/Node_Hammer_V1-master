@@ -112,6 +112,19 @@ export const VentasProspectosModel = db.define(
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+    // 🔹 Nuevo: campo de comisión
+    comision: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    comision_registrada_at: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    comision_usuario_id: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: true
+    },
     observacion: {
       type: DataTypes.STRING(255),
       allowNull: true
