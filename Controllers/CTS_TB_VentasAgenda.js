@@ -14,7 +14,10 @@ import { VentasAgendaModel } from '../Models/MD_TB_VentasAgenda.js';
 import { VentasProspectosModel } from '../Models/MD_TB_ventas_prospectos.js';
 import NotificationModel from '../Models/MD_TB_Notifications.js'; // 🔔 notificaciones
 import { Op, fn, col, where as sqlWhere } from 'sequelize';
-import UsersModel  from '../Models/MD_TB_Users.js';
+import UsersModel from '../Models/MD_TB_Users.js';
+
+import { norm, mapUserSedeToVp } from '../utils/sede.js';
+
 function ymd(d) {
   return d.toISOString().slice(0, 10);
 }
@@ -89,7 +92,6 @@ export const GEN_AgendaSeguimientoVentas = async () => {
   return creados;
 };
 
-
 // =========================
 // Endpoints
 // =========================
@@ -100,34 +102,70 @@ export const GET_AgendaHoy = async (req, res) => {
   try {
     const { usuario_id, level, with_prospect } = req.query;
 
-    const where = { followup_date: ymd(new Date()) }; // 👈 sin filtro done
-    if (level !== 'admin') {
-      if (!usuario_id)
-        return res.status(400).json({ mensajeError: 'Debe enviar usuario_id' });
-      where.usuario_id = usuario_id;
-    }
+    const byToday = sqlWhere(fn('DATE', col('followup_date')), fn('CURDATE'));
+    const where = { [Op.and]: [byToday] };
 
-    const include =
-      with_prospect === '1'
-        ? [
-            {
-              model: VentasProspectosModel,
-              as: 'prospecto',
-              attributes: [
-                'nombre',
-                'contacto',
-                'actividad',
-                'sede',
-                'asesor_nombre'
-              ]
-            }
+    const include = [];
+    const wantPros = with_prospect === '1';
+    const lvl = norm(level);
+
+    if (lvl === 'admin') {
+      if (wantPros) {
+        include.push({
+          model: VentasProspectosModel,
+          as: 'prospecto',
+          attributes: [
+            'nombre',
+            'contacto',
+            'actividad',
+            'sede',
+            'asesor_nombre'
           ]
-        : [];
+        });
+      }
+    } else {
+      if (!usuario_id) {
+        return res.status(400).json({ mensajeError: 'Debe enviar usuario_id' });
+      }
+      const user = await UsersModel.findByPk(usuario_id, {
+        attributes: ['id', 'sede', 'level']
+      });
+      if (!user) {
+        return res.status(404).json({ mensajeError: 'Usuario no encontrado' });
+      }
+
+      const mappedSede = mapUserSedeToVp(user.sede); // null => todas
+      if (mappedSede) {
+        include.push({
+          model: VentasProspectosModel,
+          as: 'prospecto',
+          attributes: wantPros
+            ? ['nombre', 'contacto', 'actividad', 'sede', 'asesor_nombre']
+            : [],
+          where: { sede: mappedSede },
+          required: true
+        });
+      } else {
+        // multisede -> todas
+        if (wantPros) {
+          include.push({
+            model: VentasProspectosModel,
+            as: 'prospecto',
+            attributes: [
+              'nombre',
+              'contacto',
+              'actividad',
+              'sede',
+              'asesor_nombre'
+            ]
+          });
+        }
+      }
+    }
 
     const items = await VentasAgendaModel.findAll({
       where,
       include,
-      // pendientes arriba, realizados abajo; luego por creación
       order: [
         ['done', 'ASC'],
         ['created_at', 'ASC']
@@ -140,32 +178,23 @@ export const GET_AgendaHoy = async (req, res) => {
   }
 };
 
-
 // Contador para badge
 export const GET_AgendaHoyCount = async (req, res) => {
   try {
     const { usuario_id, level } = req.query;
 
-    // Filtro robusto por día
-    const today = ymd(new Date());
-    const byToday = sqlWhere(fn('DATE', col('followup_date')), today);
+    const byToday = sqlWhere(fn('DATE', col('followup_date')), fn('CURDATE'));
+    const where = { done: false, [Op.and]: [byToday] };
 
-    const where = {
-      done: false, // "Enviado" = done:true -> no cuenta
-      [Op.and]: [byToday]
-    };
+    const lvl = norm(level);
+    const opts = { where }; // empezamos sin include
 
-    const opts = { where }; // armamos opciones para .count()
-    // Por defecto, sin include (cuenta global)
-
-    if (level === 'admin') {
-      // Admin -> todas las sedes (si algún día querés filtrar por sede, agregá include aquí)
+    if (lvl === 'admin') {
+      // todas las sedes
     } else {
-      // Vendedor -> deducir sede desde el usuario
       if (!usuario_id) {
         return res.status(400).json({ mensajeError: 'Debe enviar usuario_id' });
       }
-
       const user = await UsersModel.findByPk(usuario_id, {
         attributes: ['id', 'sede', 'level']
       });
@@ -173,22 +202,18 @@ export const GET_AgendaHoyCount = async (req, res) => {
         return res.status(404).json({ mensajeError: 'Usuario no encontrado' });
       }
 
-      const sedeUsuario = (user.sede || '').toLowerCase();
-
-      if (sedeUsuario && sedeUsuario !== 'multisede') {
-        // Filtrar por la sede del usuario (ve TODO lo de su sede, no sólo sus propios registros)
+      const mappedSede = mapUserSedeToVp(user.sede); // null => todas
+      if (mappedSede) {
         opts.include = [
           {
             model: VentasProspectosModel,
             as: 'prospecto',
             attributes: [],
-            where: { sede: user.sede }, // p.ej. 'monteros'
+            where: { sede: mappedSede },
             required: true
           }
         ];
-        opts.distinct = true; // evita duplicados por el join
-      } else {
-        // Multisede -> ve todas las sedes (sin include)
+        opts.distinct = true; // por el join
       }
     }
 

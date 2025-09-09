@@ -39,6 +39,8 @@ import { login, authenticateToken } from './Security/auth.js'; // Importa las fu
 import sharp from 'sharp';
 import dayjs from 'dayjs';
 
+import { mapUserSedeToVp, norm } from './utils/sede.js';
+
 // CONFIGURACION PRODUCCION
 if (process.env.NODE_ENV !== 'production') {
   dotenv.config();
@@ -1448,56 +1450,56 @@ cron.schedule('0 0 * * *', async () => {
   await genAlertInactivos();
 });
 
-const actualizarProspectosANuevo = async () => {
-  try {
-    // Consulta para obtener alumnos con 2 o más asistencias consecutivas usando MAX(id)
-    const [alumnosConAsistencias] = await pool.execute(`
-      SELECT MAX(asis.id) AS max_asistencia_id, a.id AS alumno_id, COUNT(*) AS asistencias_consecutivas
-      FROM asistencias AS asis
-      JOIN alumnos AS a ON asis.alumno_id = a.id
-      WHERE asis.estado = 'P' AND a.prospecto = 'prospecto'
-      GROUP BY asis.alumno_id
-      HAVING asistencias_consecutivas >= 2
-    `);
+// const actualizarProspectosANuevo = async () => {
+//   try {
+//     // Consulta para obtener alumnos con 2 o más asistencias consecutivas usando MAX(id)
+//     const [alumnosConAsistencias] = await pool.execute(`
+//       SELECT MAX(asis.id) AS max_asistencia_id, a.id AS alumno_id, COUNT(*) AS asistencias_consecutivas
+//       FROM asistencias AS asis
+//       JOIN alumnos AS a ON asis.alumno_id = a.id
+//       WHERE asis.estado = 'P' AND a.prospecto = 'prospecto'
+//       GROUP BY asis.alumno_id
+//       HAVING asistencias_consecutivas >= 2
+//     `);
 
-    // Si no hay alumnos con asistencias suficientes, no hacer nada
-    if (alumnosConAsistencias.length === 0) {
-      console.log('No se encontraron alumnos para convertir a "nuevo".');
-      return;
-    }
+//     // Si no hay alumnos con asistencias suficientes, no hacer nada
+//     if (alumnosConAsistencias.length === 0) {
+//       console.log('No se encontraron alumnos para convertir a "nuevo".');
+//       return;
+//     }
 
-    for (const { alumno_id, max_asistencia_id } of alumnosConAsistencias) {
-      console.log(`Actualizando alumno_id: ${alumno_id} a "nuevo"`);
+//     for (const { alumno_id, max_asistencia_id } of alumnosConAsistencias) {
+//       console.log(`Actualizando alumno_id: ${alumno_id} a "nuevo"`);
 
-      // Actualizar el alumno a "nuevo" solo si el id de asistencia es el más alto
-      const [resultUpdate] = await pool.execute(
-        `UPDATE alumnos 
-         SET prospecto = 'nuevo', c = 'c', fecha_creacion = CURDATE()
-         WHERE id = ? AND prospecto = 'prospecto'`,
-        [alumno_id]
-      );
+//       // Actualizar el alumno a "nuevo" solo si el id de asistencia es el más alto
+//       const [resultUpdate] = await pool.execute(
+//         `UPDATE alumnos 
+//          SET prospecto = 'nuevo', c = 'c', fecha_creacion = CURDATE()
+//          WHERE id = ? AND prospecto = 'prospecto'`,
+//         [alumno_id]
+//       );
 
-      console.log(
-        `Alumno ${alumno_id} actualizado a "nuevo". Resultado:`,
-        resultUpdate
-      );
+//       console.log(
+//         `Alumno ${alumno_id} actualizado a "nuevo". Resultado:`,
+//         resultUpdate
+//       );
 
-      // Generar las agendas necesarias (llamadas a funciones)
-      await genAlertAgendN1(); // Alerta para la próxima semana
-      await genAlertAgendN3(); // Alerta para la tercera semana
-    }
+//       // Generar las agendas necesarias (llamadas a funciones)
+//       await genAlertAgendN1(); // Alerta para la próxima semana
+//       await genAlertAgendN3(); // Alerta para la tercera semana
+//     }
 
-    console.log('Proceso de verificación y actualización completado.');
-  } catch (error) {
-    console.error('Error verificando asistencias:', error);
-  }
-};
+//     console.log('Proceso de verificación y actualización completado.');
+//   } catch (error) {
+//     console.error('Error verificando asistencias:', error);
+//   }
+// };
 
-// actualizarProspectosANuevo();
-cron.schedule('0 0 * * *', async () => {
-  console.log('Ejecutando cron de alertas para la actualizacion...');
-  await actualizarProspectosANuevo();
-});
+// // actualizarProspectosANuevo();
+// cron.schedule('0 0 * * *', async () => {
+//   console.log('Ejecutando cron de alertas para la actualizacion...');
+//   await actualizarProspectosANuevo();
+// });
 
 // ALERTAS - AGENDAS - R9 - BENJAMIN ORELLANA - FIN 17-NOV-24
 
@@ -3426,8 +3428,26 @@ app.post('/notifications/markAsRead', async (req, res) => {
 
 // Notificaciones de clase de prueba para el día
 app.get('/notifications/clases-prueba/:userId', async (req, res) => {
-  const userId = parseInt(req.params.userId, 10);
+  const userId = Number(req.params.userId);
   try {
+    // Traer user para saber sede/level
+    const [[user]] = await pool.query(
+      'SELECT id, level, sede FROM users WHERE id = ? LIMIT 1',
+      [userId]
+    );
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    const level = norm(user.level);
+    const mappedSede = mapUserSedeToVp(user.sede); // null => todas
+
+    // Admin ve todas (aunque su users.sede sea algo puntual)
+    const isAdmin = level === 'admin';
+
+    const params = [];
+    const sedeFilterSQL = !isAdmin && mappedSede ? ' AND vp.sede = ? ' : '';
+
+    if (!isAdmin && mappedSede) params.push(mappedSede);
+
     const [notis] = await pool.query(
       `
       SELECT
@@ -3439,7 +3459,8 @@ app.get('/notifications/clases-prueba/:userId', async (req, res) => {
         vp.clase_prueba_3_fecha,
         vp.n_contacto_2,
         vp.usuario_id,
-        u.name AS asesor_nombre
+        u.name AS asesor_nombre,
+        vp.sede
       FROM ventas_prospectos vp
       JOIN users u ON u.id = vp.usuario_id
       WHERE vp.n_contacto_2 = 0
@@ -3448,11 +3469,12 @@ app.get('/notifications/clases-prueba/:userId', async (req, res) => {
           DATE(vp.clase_prueba_2_fecha) = CURDATE() OR
           DATE(vp.clase_prueba_3_fecha) = CURDATE()
         )
-        AND vp.usuario_id = ?
+        ${sedeFilterSQL}
       ORDER BY vp.nombre
       `,
-      [userId]
+      params
     );
+
     res.json(notis);
   } catch (error) {
     console.error('Error obteniendo notificaciones clase de prueba:', error);
