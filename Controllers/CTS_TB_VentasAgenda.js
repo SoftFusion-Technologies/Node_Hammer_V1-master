@@ -43,25 +43,27 @@ function rangoAyer() {
 }
 
 // =========================
-// Generar agenda (AYER)
+// Generar agenda (AYER) — solo clase/visita, NO "Agenda"
 // =========================
 export const GEN_AgendaSeguimientoVentas = async () => {
-  // Ayer por fecha (ignora hora)
   const q = `
     SELECT id AS prospecto_id, usuario_id, nombre, contacto, actividad, sede, asesor_nombre,
-           1 AS clase_num, clase_prueba_1_fecha AS clase_fecha
+           1 AS clase_num, clase_prueba_1_fecha AS clase_fecha, clase_prueba_1_tipo AS clase_tipo
       FROM ventas_prospectos
      WHERE DATE(clase_prueba_1_fecha) = CURDATE() - INTERVAL 1 DAY
+       AND clase_prueba_1_tipo IN ('Clase de prueba','Visita programada')
     UNION ALL
     SELECT id, usuario_id, nombre, contacto, actividad, sede, asesor_nombre,
-           2 AS clase_num, clase_prueba_2_fecha
+           2 AS clase_num, clase_prueba_2_fecha, clase_prueba_2_tipo
       FROM ventas_prospectos
      WHERE DATE(clase_prueba_2_fecha) = CURDATE() - INTERVAL 1 DAY
+       AND clase_prueba_2_tipo IN ('Clase de prueba','Visita programada')
     UNION ALL
     SELECT id, usuario_id, nombre, contacto, actividad, sede, asesor_nombre,
-           3 AS clase_num, clase_prueba_3_fecha
+           3 AS clase_num, clase_prueba_3_fecha, clase_prueba_3_tipo
       FROM ventas_prospectos
      WHERE DATE(clase_prueba_3_fecha) = CURDATE() - INTERVAL 1 DAY
+       AND clase_prueba_3_tipo IN ('Clase de prueba','Visita programada')
   `;
 
   const candidatos = await db.query(q, { type: QueryTypes.SELECT });
@@ -72,8 +74,10 @@ export const GEN_AgendaSeguimientoVentas = async () => {
 
   for (const c of candidatos) {
     const fechaClaseStr = new Date(c.clase_fecha).toISOString().slice(0, 10);
-    const mensaje =
-      '¡Ayer tuvo una clase de prueba! Consúltale cómo fue su experiencia';
+    const isVisita = (c.clase_tipo || '').toLowerCase().includes('visita');
+    const mensaje = isVisita
+      ? `¡Ayer tenía una visita programada!`
+      : `¡Ayer tuvo una clase de prueba! Consúltale cómo fue su experiencia`;
 
     const [row, created] = await VentasAgendaModel.findOrCreate({
       where: {
@@ -81,13 +85,14 @@ export const GEN_AgendaSeguimientoVentas = async () => {
         clase_num: c.clase_num,
         fecha_clase: fechaClaseStr
       },
-      defaults: { usuario_id: c.usuario_id, followup_date: hoyStr, mensaje }
+      defaults: {
+        usuario_id: c.usuario_id,
+        followup_date: hoyStr,
+        mensaje
+      }
     });
 
-    if (created) {
-      creados++;
-      // (si activaste noti) crea la notificación acá
-    }
+    if (created) creados++;
   }
   return creados;
 };
@@ -224,6 +229,8 @@ export const GET_AgendaHoyCount = async (req, res) => {
     res.status(500).json({ mensajeError: e.message });
   }
 };
+
+
 // Marcar seguimiento como realizado
 export const PATCH_AgendaDone = async (req, res) => {
   try {

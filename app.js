@@ -1473,7 +1473,7 @@ cron.schedule('0 0 * * *', async () => {
 
 //       // Actualizar el alumno a "nuevo" solo si el id de asistencia es el más alto
 //       const [resultUpdate] = await pool.execute(
-//         `UPDATE alumnos 
+//         `UPDATE alumnos
 //          SET prospecto = 'nuevo', c = 'c', fecha_creacion = CURDATE()
 //          WHERE id = ? AND prospecto = 'prospecto'`,
 //         [alumno_id]
@@ -3427,6 +3427,7 @@ app.post('/notifications/markAsRead', async (req, res) => {
 });
 
 // Notificaciones de clase de prueba para el día
+// Pendiente/Enviado se determina por n_contacto_2 (0 = pendiente, 1 = enviado)
 app.get('/notifications/clases-prueba/:userId', async (req, res) => {
   const userId = Number(req.params.userId);
   try {
@@ -3439,39 +3440,53 @@ app.get('/notifications/clases-prueba/:userId', async (req, res) => {
 
     const level = norm(user.level);
     const mappedSede = mapUserSedeToVp(user.sede); // null => todas
-
-    // Admin ve todas (aunque su users.sede sea algo puntual)
     const isAdmin = level === 'admin';
 
     const params = [];
     const sedeFilterSQL = !isAdmin && mappedSede ? ' AND vp.sede = ? ' : '';
-
     if (!isAdmin && mappedSede) params.push(mappedSede);
 
     const [notis] = await pool.query(
       `
-      SELECT
-        vp.id AS prospecto_id,
-        vp.nombre,
-        vp.contacto,
-        vp.clase_prueba_1_fecha,
-        vp.clase_prueba_2_fecha,
-        vp.clase_prueba_3_fecha,
-        vp.n_contacto_2,
-        vp.usuario_id,
-        u.name AS asesor_nombre,
-        vp.sede
-      FROM ventas_prospectos vp
-      JOIN users u ON u.id = vp.usuario_id
-      WHERE vp.n_contacto_2 = 0
-        AND (
-          DATE(vp.clase_prueba_1_fecha) = CURDATE() OR
-          DATE(vp.clase_prueba_2_fecha) = CURDATE() OR
-          DATE(vp.clase_prueba_3_fecha) = CURDATE()
-        )
-        ${sedeFilterSQL}
-      ORDER BY vp.nombre
-      `,
+  SELECT
+    vp.id AS prospecto_id,
+    vp.nombre,
+    vp.contacto,
+    vp.clase_prueba_1_fecha,
+    vp.clase_prueba_2_fecha,
+    vp.clase_prueba_3_fecha,
+    vp.n_contacto_2,      -- 0 pendiente, 1 enviado (realizado)
+    vp.usuario_id,
+    u.name AS asesor_nombre,
+    vp.sede,
+
+    /* === Tipo de la clase/visita que cae HOY === */
+    CASE
+      WHEN DATE(vp.clase_prueba_1_fecha) = CURDATE() THEN vp.clase_prueba_1_tipo
+      WHEN DATE(vp.clase_prueba_2_fecha) = CURDATE() THEN vp.clase_prueba_2_tipo
+      WHEN DATE(vp.clase_prueba_3_fecha) = CURDATE() THEN vp.clase_prueba_3_tipo
+      ELSE NULL
+    END AS tipo_for_today,
+
+    /* Alias de compatibilidad para el front */
+    CASE
+      WHEN DATE(vp.clase_prueba_1_fecha) = CURDATE() THEN vp.clase_prueba_1_tipo
+      WHEN DATE(vp.clase_prueba_2_fecha) = CURDATE() THEN vp.clase_prueba_2_tipo
+      WHEN DATE(vp.clase_prueba_3_fecha) = CURDATE() THEN vp.clase_prueba_3_tipo
+      ELSE NULL
+    END AS tipo
+
+  FROM ventas_prospectos vp
+  JOIN users u ON u.id = vp.usuario_id
+  WHERE
+    (
+      DATE(vp.clase_prueba_1_fecha) = CURDATE() OR
+      DATE(vp.clase_prueba_2_fecha) = CURDATE() OR
+      DATE(vp.clase_prueba_3_fecha) = CURDATE()
+    )
+    ${sedeFilterSQL}
+  ORDER BY vp.n_contacto_2 ASC, vp.nombre
+  `,
       params
     );
 
@@ -3483,6 +3498,26 @@ app.get('/notifications/clases-prueba/:userId', async (req, res) => {
       .json({ error: 'Error obteniendo notificaciones de clase de prueba' });
   }
 });
+
+app.patch(
+  '/notifications/clases-prueba/:prospectoId/enviado',
+  async (req, res) => {
+    const prospectoId = Number(req.params.prospectoId);
+    try {
+      const [r] = await pool.query(
+        'UPDATE ventas_prospectos SET n_contacto_2 = 1, updated_at = NOW() WHERE id = ?',
+        [prospectoId]
+      );
+      if (r.affectedRows === 0) {
+        return res.status(404).json({ error: 'Prospecto no encontrado' });
+      }
+      res.json({ ok: true, n_contacto_2: 1 });
+    } catch (e) {
+      console.error('PATCH enviado error:', e);
+      res.status(500).json({ error: 'No se pudo marcar como enviado' });
+    }
+  }
+);
 
 // GET /prospectos-alertas
 app.get('/prospectos-alertas', async (req, res) => {
