@@ -49,7 +49,6 @@ const parseDate = (v) => {
   return isNaN(asDate) ? null : asDate;
 };
 
-// MySQL: LIKE (case-insensitive según collation) + normalización JS
 // ------------------ helpers de normalización y similitud ------------------
 const NORM_RE = /[^a-z0-9\s]/g;
 const SPACES_RE = /\s+/g;
@@ -69,13 +68,15 @@ function normalizeName(s = '') {
 function tokenize(s = '') {
   return normalizeName(s)
     .split(' ')
-    .filter(t => t.length >= 2);
+    .filter((t) => t.length >= 2);
 }
 
 // Levenshtein (iterativo)
 function lev(a, b) {
-  a = normalizeName(a); b = normalizeName(b);
-  const m = a.length, n = b.length;
+  a = normalizeName(a);
+  b = normalizeName(b);
+  const m = a.length,
+    n = b.length;
   if (!m) return n;
   if (!n) return m;
   const dp = Array(n + 1);
@@ -107,11 +108,13 @@ function jaccardTokens(a, b) {
 }
 
 function includesScore(a, b) {
-  const an = normalizeName(a), bn = normalizeName(b);
+  const an = normalizeName(a),
+    bn = normalizeName(b);
   if (!an || !bn) return 0;
   if (an === bn) return 1;
   if (an.includes(bn) || bn.includes(an)) {
-    const ratio = Math.min(an.length, bn.length) / Math.max(an.length, bn.length);
+    const ratio =
+      Math.min(an.length, bn.length) / Math.max(an.length, bn.length);
     return 0.6 + 0.4 * ratio;
   }
   return 0;
@@ -120,7 +123,8 @@ function includesScore(a, b) {
 function similarity(a, b) {
   const jac = jaccardTokens(a, b);
   const d = lev(a, b);
-  const maxLen = Math.max(normalizeName(a).length, normalizeName(b).length) || 1;
+  const maxLen =
+    Math.max(normalizeName(a).length, normalizeName(b).length) || 1;
   const levSim = 1 - d / maxLen;
   const inc = includesScore(a, b);
   return 0.5 * jac + 0.3 * levSim + 0.2 * inc; // [0..1]
@@ -135,9 +139,9 @@ async function getUsersSnapshot() {
   }
   const list = await Users.findAll({
     attributes: ['id', 'name'],
-    where: {}, // podés filtrar level/state/sede si querés
-    limit: 1000,              // ajustá según tamaño real
-    order: [['id', 'ASC']],
+    where: {},
+    limit: 1000,
+    order: [['id', 'ASC']]
   });
   _usersCache = { ts: now, list };
   return list;
@@ -154,7 +158,8 @@ async function resolveUsuarioIdPorColaborador(nombreColaborador, fallbackId) {
   const likeClauses = [];
   if (toks.length) {
     likeClauses.push({ name: { [Op.like]: `%${toks[0]}%` } });
-    if (toks.length > 1) likeClauses.push({ name: { [Op.like]: `%${toks[toks.length - 1]}%` } });
+    if (toks.length > 1)
+      likeClauses.push({ name: { [Op.like]: `%${toks[toks.length - 1]}%` } });
   } else {
     likeClauses.push({ name: { [Op.like]: `%${wantedNorm}%` } });
   }
@@ -162,11 +167,11 @@ async function resolveUsuarioIdPorColaborador(nombreColaborador, fallbackId) {
   let candidates = await Users.findAll({
     where: { [Op.or]: likeClauses },
     limit: 25,
-    attributes: ['id', 'name'],
+    attributes: ['id', 'name']
   });
 
   // 1.a) Exacto-insensible por normalización
-  let exact = candidates.find(c => normalizeName(c.name) === wantedNorm);
+  let exact = candidates.find((c) => normalizeName(c.name) === wantedNorm);
   if (exact) return exact.id;
 
   // 2) Si no hay candidatos o son pocos confiables, ampliamos con snapshot
@@ -188,7 +193,7 @@ async function resolveUsuarioIdPorColaborador(nombreColaborador, fallbackId) {
   }
 
   // 4) Umbral de confianza
-  const THRESHOLD = 0.72; // subí/bajá si hace falta
+  const THRESHOLD = 0.72;
   if (best && bestScore >= THRESHOLD) {
     return best.id;
   }
@@ -197,6 +202,43 @@ async function resolveUsuarioIdPorColaborador(nombreColaborador, fallbackId) {
   return fallbackId ?? null;
 }
 
+// ------------------ mapeo seguro de tipo_contacto ------------------
+const TIPO_ENUM = [
+  'Socios que no asisten',
+  'Inactivo 10 dias',
+  'Inactivo 30 dias',
+  'Inactivo 60 dias',
+  'Prospectos inc. Socioplus',
+  'Prosp inc Entrenadores',
+  'Leads no convertidos',
+  'Otro',
+  'Cambio de plan'
+];
+
+function mapTipoContacto(value) {
+  if (!value) return 'Otro'; // ✅ default
+  const v = value.toString().trim();
+
+  // match directo (insensible a tildes/mayus)
+  const vNorm = norm(v);
+  for (const opt of TIPO_ENUM) {
+    if (norm(opt) === vNorm) return opt;
+  }
+
+  // heurísticas simples
+  if (vNorm.includes('inactivo 10')) return 'Inactivo 10 dias';
+  if (vNorm.includes('inactivo 30')) return 'Inactivo 30 dias';
+  if (vNorm.includes('inactivo 60')) return 'Inactivo 60 dias';
+  if (vNorm.includes('no asisten') || vNorm.includes('no asiste'))
+    return 'Socios que no asisten';
+  if (vNorm.includes('cambio de plan')) return 'Cambio de plan';
+  if (vNorm.includes('lead')) return 'Leads no convertidos';
+  if (vNorm.includes('entrenador')) return 'Prosp inc Entrenadores';
+  if (vNorm.includes('socio') || vNorm.includes('socioplus'))
+    return 'Prospectos inc. Socioplus';
+
+  return 'Otro'; // ✅ default si no matchea ENUM
+}
 
 // Mes/año objetivo del import
 function daysInMonth(year, monthIndex0) {
@@ -264,8 +306,9 @@ router.post(
 
       try {
         if (isLegacy) {
-          // ===== Formato actual (no romper) =====
-          const requiredColumns = ['Nombre', 'Tipo de contacto', 'ID Usuario'];
+          // ===== Formato legado =====
+          // 🔁 CAMBIO: relajamos la obligatoriedad de "Tipo de contacto"
+          const requiredColumns = ['Nombre', 'ID Usuario']; // <- ya NO exigimos "Tipo de contacto"
           const missing = requiredColumns.filter(
             (rc) => !Object.keys(first).find((k) => norm(k) === norm(rc))
           );
@@ -275,52 +318,68 @@ router.post(
             );
 
           const validData = data.filter(
-            (row) =>
-              alias(row, ['Nombre']) &&
-              alias(row, ['Tipo de contacto']) &&
-              alias(row, ['ID Usuario'])
+            (row) => alias(row, ['Nombre']) && alias(row, ['ID Usuario'])
           );
           if (!validData.length)
             throw new Error('No se encontraron filas con datos válidos');
 
+          let rowIndex = 1; // índice amigable (1-based para el usuario)
           for (const row of validData) {
-            // Fecha original (si vino) solo la preservamos en observación
-            const fechaExcel = parseDate(alias(row, ['Fecha']));
-            const obsOrig = alias(row, ['Observacion', 'Observación']) || '';
-            const obsConFecha = fechaExcel
-              ? `${
-                  obsOrig ? obsOrig + ' — ' : ''
-                }Fecha origen: ${fechaExcel.toLocaleDateString('es-AR')}`
-              : obsOrig;
-
-            // Forzamos fecha al mes objetivo
-            const fecha = fechaImport;
-
-            const payload = {
-              usuario_id: alias(row, ['ID Usuario']),
-              nombre: alias(row, ['Nombre']),
-              tipo_contacto: alias(row, ['Tipo de contacto']),
-              detalle_contacto: alias(row, ['Detalle contacto']) || null,
-              actividad: alias(row, ['Actividad']) || null,
-              fecha, // ✅ fuerza mes/anio del import
-              enviado: false,
-              respondido: false,
-              agendado: false,
-              convertido: false,
-              observacion: obsConFecha || null
-            };
-
-            if (dryRun) {
-              preview.push(payload);
-              continue;
-            }
-
             try {
-              await RecaptacionModel.create(payload, { transaction });
-              inserted++;
+              // Fecha original (si vino) solo la preservamos en observación
+              const fechaExcel = parseDate(alias(row, ['Fecha']));
+              const obsOrig = alias(row, ['Observacion', 'Observación']) || '';
+              const obsConFecha = fechaExcel
+                ? `${
+                    obsOrig ? obsOrig + ' — ' : ''
+                  }Fecha origen: ${fechaExcel.toLocaleDateString('es-AR')}`
+                : obsOrig;
+
+              // Forzamos fecha al mes objetivo
+              const fecha = fechaImport;
+
+              // ✅ NUEVO: Canal de contacto (exacto + variantes comunes)
+              const canal_contacto =
+                alias(row, [
+                  'Canal de contacto', // exacto pedido
+                  'Canal Contacto',
+                  'Canal'
+                ]) || null;
+
+              // 🔁 CAMBIO: tipo_contacto es opcional, por defecto 'Otro'
+              const tipo_contacto = mapTipoContacto(
+                alias(row, ['Tipo de contacto'])
+              );
+
+              const payload = {
+                usuario_id: alias(row, ['ID Usuario']),
+                nombre: alias(row, ['Nombre']),
+                tipo_contacto,
+                canal_contacto, // ✅ NUEVO
+                detalle_contacto: alias(row, ['Detalle contacto']) || null,
+                actividad: alias(row, ['Actividad']) || null,
+                fecha, // fuerza mes/anio del import
+                enviado: false,
+                respondido: false,
+                agendado: false,
+                convertido: false,
+                observacion: obsConFecha || null
+              };
+
+              if (dryRun) {
+                preview.push({ rowIndex, payload });
+              } else {
+                await RecaptacionModel.create(payload, { transaction });
+                inserted++;
+              }
             } catch (e) {
-              errors.push({ row, error: e.message });
+              errors.push({
+                rowIndex,
+                row,
+                error: e.message
+              });
             }
+            rowIndex++;
           }
         } else {
           // ===== Nuevo Excel (ventas/prospectos) =====
@@ -333,13 +392,16 @@ router.post(
               'Formato desconocido: falta al menos Nombre / Usuario / Colaborador.'
             );
 
+          let rowIndex = 1;
           for (const row of data) {
             try {
-              const canal = alias(row, [
+              // ✅ NUEVO: Canal de contacto (nombre exacto + variantes)
+              const canal_contacto = alias(row, [
+                'Canal de contacto', // exacto pedido
                 'Canal Contacto',
-                'Canal',
-                'Tipo de contacto'
+                'Canal'
               ]);
+
               const contacto = alias(row, [
                 'Usuario / Celular',
                 'Celular',
@@ -350,12 +412,15 @@ router.post(
               const nombre = alias(row, ['Nombre']);
               const actividad = alias(row, ['Actividad']);
               const observacion = alias(row, ['Observacion', 'Observación']);
-              const convertido = parseBool(alias(row, ['Convertido'])); // Sí / No
+              const convertido = parseBool(alias(row, ['Convertido']));
               const fechaExcel = parseDate(alias(row, ['Fecha']));
               const colaborador = alias(row, ['Colaborador']);
 
-              // ✅ Si está convertido => saltar fila
-              if (convertido === true) continue;
+              // Saltar filas ya convertidas
+              if (convertido === true) {
+                rowIndex++;
+                continue;
+              }
 
               // usuario_id: resolver por "Colaborador" -> fallback a :usuario_id
               const usuario_id = await resolveUsuarioIdPorColaborador(
@@ -363,15 +428,20 @@ router.post(
                 usuarioIdFromUrl
               );
 
-              // tipo_contacto del ENUM (no usar valores de "Canal Contacto")
-              const tipo_contacto = 'Leads no convertidos'; // o 'Otro'
+              // 🔁 CAMBIO: tipo_contacto ahora opcional => default 'Otro'
+              const tipo_contacto = mapTipoContacto(
+                alias(row, ['Tipo de contacto'])
+              );
 
-              // ✅ detalle: guardar SOLO el contacto (sin el canal)
+              // detalle: guardar SOLO el contacto (sin el canal)
               const detalle_contacto =
                 contacto || 'Importación planilla de ventas';
 
               // Si no hay nada identificable, salteo
-              if (!nombre && !detalle_contacto) continue;
+              if (!nombre && !detalle_contacto) {
+                // Registramos como error de dato insuficiente
+                throw new Error('Fila sin Nombre ni Detalle de contacto');
+              }
 
               // Forzamos fecha al mes objetivo; preservamos fecha Excel en observación
               const fecha = fechaImport;
@@ -385,45 +455,50 @@ router.post(
                 usuario_id,
                 nombre: nombre || '(sin nombre)',
                 tipo_contacto,
+                canal_contacto: canal_contacto || null, // ✅ NUEVO
                 detalle_contacto,
                 actividad: actividad || null,
                 observacion: obsConFecha
                   ? obsConFecha.toString().slice(0, 1000)
                   : null,
                 convertido: false, // siempre falso al importar
-                fecha, // ✅ fuerza mes/anio del import
+                fecha, // fuerza mes/anio del import
                 enviado: false,
                 respondido: false,
                 agendado: false
               };
 
-              if (!dryRun && inserted < 1)
-                console.log('INSERT payload ejemplo =>', payload);
+              if (dryRun && inserted < 1) preview.push({ rowIndex, payload });
 
-              if (dryRun) {
-                preview.push(payload);
-              } else {
+              if (!dryRun) {
                 await RecaptacionModel.create(payload, { transaction });
                 inserted++;
               }
             } catch (e) {
-              errors.push({ row, error: e.message });
+              errors.push({
+                rowIndex,
+                row,
+                error: e.message
+              });
             }
+            rowIndex++;
           }
         }
 
+        // commit/rollback según modo
         if (!dryRun) await transaction.commit();
         else await transaction.rollback();
         fs.unlinkSync(file.path);
 
+        // ✅ Devolvemos TODOS los errores capturados (sin truncar)
         return res.status(200).json({
           message: dryRun
             ? 'Validación exitosa (dry-run)'
-            : 'Importación exitosa',
+            : 'Importación finalizada',
           inserted: dryRun ? 0 : inserted,
-          preview: dryRun ? preview.slice(0, 50) : undefined,
+          preview: dryRun ? preview : undefined,
           errors_count: errors.length,
-          errors: errors.length ? errors.slice(0, 20) : undefined,
+          errors, // ← lista completa (c/ rowIndex, row y error)
           mode: isLegacy ? 'legacy' : 'nuevo-excel'
         });
       } catch (error) {

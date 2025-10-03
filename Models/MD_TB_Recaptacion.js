@@ -44,9 +44,18 @@ export const RecaptacionModel = db.define(
       allowNull: true,
       defaultValue: null
     },
+    // 🔹 NUEVO
+    canal_contacto: {
+      type: DataTypes.TEXT, // WhatsApp, Llamada, IG, Meta Ads, etc.
+      allowNull: true,
+      defaultValue: null
+    },
+
+    // 🔹 ACTUALIZADO (antes STRING(255))
     detalle_contacto: {
-      type: DataTypes.STRING(255),
-      allowNull: true
+      type: DataTypes.TEXT,
+      allowNull: true,
+      defaultValue: null
     },
     enviado: {
       type: DataTypes.BOOLEAN,
