@@ -294,11 +294,7 @@ router.post(
       // detectar formato
       const first = data[0];
       const headers = Object.keys(first).map(norm);
-      const isLegacy =
-        headers.includes(norm('Nombre')) &&
-        headers.includes(norm('Tipo de contacto')) &&
-        headers.includes(norm('ID Usuario'));
-
+      const isLegacy = headers.includes(norm('ID Usuario'));
       const transaction = await db.transaction();
       const errors = [];
       const preview = [];
@@ -422,11 +418,20 @@ router.post(
                 continue;
               }
 
-              // usuario_id: resolver por "Colaborador" -> fallback a :usuario_id
-              const usuario_id = await resolveUsuarioIdPorColaborador(
-                colaborador,
-                usuarioIdFromUrl
-              );
+              // PRIORIDAD: si viene 'ID Usuario' en la planilla, usarlo SIEMPRE
+              const usuarioIdExcelRaw = alias(row, ['ID Usuario']);
+              const usuarioIdExcel =
+                usuarioIdExcelRaw != null ? Number(usuarioIdExcelRaw) : null;
+              let usuario_id = null;
+              if (usuarioIdExcel && !Number.isNaN(usuarioIdExcel)) {
+                usuario_id = usuarioIdExcel;
+              } else {
+                // caso sin ID Usuario explícito: resolver por "Colaborador" y si no, fallback a :usuario_id (conectado)
+                usuario_id = await resolveUsuarioIdPorColaborador(
+                  colaborador,
+                  usuarioIdFromUrl
+                );
+              }
 
               // 🔁 CAMBIO: tipo_contacto ahora opcional => default 'Otro'
               const tipo_contacto = mapTipoContacto(
