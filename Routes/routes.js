@@ -952,5 +952,33 @@ router.post(
   /* requireAuth, */ POST_GenerarAgendaHoy
 );
 
+import { POST_InformeFromOCR } from '../Controllers/CTS_TB_HxController.js';
+
+router.post('/hx/informes/from-ocr', POST_InformeFromOCR);
+
+import { GET_InformePDF } from '../Controllers/CTS_TB_HxInformePdf.js';
+
+router.get('/hx/informes/:id/pdf', GET_InformePDF); // descarga por informe_id
+
+import {
+  POST_UploadImagenesBalanza,
+  GET_ListImagenesBalanza,
+  GET_DownloadImagenBalanza,
+  GET_ListUltimosBatches
+} from '../Controllers/CTS_TB_HxImagenBalanza.js';
+
+router.get('/hx/imagenes-balanza/latest', GET_ListUltimosBatches);
+
+// Subir lote 2..4 imágenes
+router.post('/hx/imagenes-balanza', POST_UploadImagenesBalanza);
+
+// Listar por batch_id (path) o por informe_id/cliente_id (query)
+router.get('/hx/imagenes-balanza/:batch_id', GET_ListImagenesBalanza);
+router.get('/hx/imagenes-balanza', GET_ListImagenesBalanza);
+
+// Servir/descargar archivo por id
+router.get('/hx/imagenes-balanza/file/:id', GET_DownloadImagenBalanza);
+
+
 // Exporta el enrutador
 export default router;

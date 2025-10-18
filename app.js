@@ -41,6 +41,12 @@ import dayjs from 'dayjs';
 
 import { mapUserSedeToVp, norm } from './utils/sede.js';
 
+import initHxRelaciones from './Models/hx_relaciones.js';
+// … importar db y modelos antes si corresponde …
+
+
+// Inicializar asociaciones (una sola vez)
+initHxRelaciones();
 // CONFIGURACION PRODUCCION
 if (process.env.NODE_ENV !== 'production') {
   dotenv.config();
@@ -58,7 +64,7 @@ app.use(cors()); // aca configuramos cors para no tener errores
 app.use(express.json());
 app.use('/', GetRoutes);
 // definimos la conexion
-
+app.use('/exports', express.static('exports'));
 // Para verificar si nuestra conexión funciona, lo hacemos con el método authenticate()
 //  el cual nos devuelve una promesa que funciona de la siguiente manera:
 // un try y un catch para captar cualquier tipo de errores
