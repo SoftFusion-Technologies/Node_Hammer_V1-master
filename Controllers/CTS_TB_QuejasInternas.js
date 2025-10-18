@@ -18,20 +18,45 @@
 // Importa el modelo
 import MD_TB_QuejasInternas from '../Models/MD_TB_QuejasInternas.js';
 import NotificationModel from '../Models/MD_TB_Notifications.js';
+import { Op } from 'sequelize';
 
 // Asigna el modelo a una variable
 const QuejasInternasModel = MD_TB_QuejasInternas.QuejasInternasModel;
 
+const toCanonical = (s = '') =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .trim();
 
-// Obtener todas las quejas
 export const OBRS_Quejas_CTS = async (req, res) => {
   try {
+    // ✅ usa req.user si existe; si no, cae a headers enviados por el front
+    const email = req.user?.email || req.headers['x-user-email'] || '';
+    const level = req.user?.level || req.headers['x-user-level'] || '';
+    const sede = req.user?.sede || req.headers['x-user-sede'] || '';
+
+    const isCoordinator = ['ADMIN', 'ADMINISTRADOR', 'GERENTE'].includes(
+      toCanonical(level)
+    );
+    const sedeCanon = toCanonical(sede);
+    const qrKey = `QR-${sedeCanon}`;
+
+    const where = isCoordinator
+      ? {}
+      : {
+          [Op.or]: [{ cargado_por: email }, { cargado_por: qrKey }]
+        };
+
     const registros = await QuejasInternasModel.findAll({
+      where,
       order: [['created_at', 'DESC']]
     });
+
     res.json(registros);
   } catch (error) {
-    res.json({ mensajeError: error.message });
+    res.status(500).json({ mensajeError: error.message });
   }
 };
 
