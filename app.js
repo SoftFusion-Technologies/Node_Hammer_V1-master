@@ -44,7 +44,6 @@ import { mapUserSedeToVp, norm } from './utils/sede.js';
 import initHxRelaciones from './Models/hx_relaciones.js';
 // … importar db y modelos antes si corresponde …
 
-
 // Inicializar asociaciones (una sola vez)
 initHxRelaciones();
 // CONFIGURACION PRODUCCION
@@ -3454,56 +3453,70 @@ app.get('/notifications/clases-prueba/:userId', async (req, res) => {
 
     const [notis] = await pool.query(
       `
-  SELECT
-    vp.id AS prospecto_id,
-    vp.nombre,
-    vp.contacto,
-    vp.clase_prueba_1_fecha,
-    vp.clase_prueba_2_fecha,
-    vp.clase_prueba_3_fecha,
-    vp.n_contacto_2,      -- 0 pendiente, 1 enviado (realizado)
-    vp.usuario_id,
-    u.name AS asesor_nombre,
-    vp.sede,
+      SELECT
+        vp.id AS prospecto_id,
+        vp.nombre,
+        vp.contacto,
+        vp.clase_prueba_1_fecha,
+        vp.clase_prueba_2_fecha,
+        vp.clase_prueba_3_fecha,
+        vp.n_contacto_2,           -- 0 pendiente, 1 enviado (realizado)
+        vp.usuario_id,
+        u.name AS asesor_nombre,
+        vp.sede,
+        vp.observacion,            -- ✅ agregado: observación general del prospecto
 
-    /* === Tipo de la clase/visita que cae HOY === */
-    CASE
-      WHEN DATE(vp.clase_prueba_1_fecha) = CURDATE() THEN vp.clase_prueba_1_tipo
-      WHEN DATE(vp.clase_prueba_2_fecha) = CURDATE() THEN vp.clase_prueba_2_tipo
-      WHEN DATE(vp.clase_prueba_3_fecha) = CURDATE() THEN vp.clase_prueba_3_tipo
-      ELSE NULL
-    END AS tipo_for_today,
+        /* === Derivados para HOY (opcionales y muy útiles en el front) === */
+        CASE
+          WHEN DATE(vp.clase_prueba_1_fecha) = CURDATE() THEN vp.clase_prueba_1_tipo
+          WHEN DATE(vp.clase_prueba_2_fecha) = CURDATE() THEN vp.clase_prueba_2_tipo
+          WHEN DATE(vp.clase_prueba_3_fecha) = CURDATE() THEN vp.clase_prueba_3_tipo
+          ELSE NULL
+        END AS tipo_for_today,
 
-    /* Alias de compatibilidad para el front */
-    CASE
-      WHEN DATE(vp.clase_prueba_1_fecha) = CURDATE() THEN vp.clase_prueba_1_tipo
-      WHEN DATE(vp.clase_prueba_2_fecha) = CURDATE() THEN vp.clase_prueba_2_tipo
-      WHEN DATE(vp.clase_prueba_3_fecha) = CURDATE() THEN vp.clase_prueba_3_tipo
-      ELSE NULL
-    END AS tipo
+        CASE
+          WHEN DATE(vp.clase_prueba_1_fecha) = CURDATE() THEN vp.clase_prueba_1_fecha
+          WHEN DATE(vp.clase_prueba_2_fecha) = CURDATE() THEN vp.clase_prueba_2_fecha
+          WHEN DATE(vp.clase_prueba_3_fecha) = CURDATE() THEN vp.clase_prueba_3_fecha
+          ELSE NULL
+        END AS fecha_for_today,
 
-  FROM ventas_prospectos vp
-  JOIN users u ON u.id = vp.usuario_id
-  WHERE
-    (
-      DATE(vp.clase_prueba_1_fecha) = CURDATE() OR
-      DATE(vp.clase_prueba_2_fecha) = CURDATE() OR
-      DATE(vp.clase_prueba_3_fecha) = CURDATE()
-    )
-    ${sedeFilterSQL}
-  ORDER BY vp.n_contacto_2 ASC, vp.nombre
-  `,
+        CASE
+          WHEN DATE(vp.clase_prueba_1_fecha) = CURDATE() THEN vp.clase_prueba_1_obs
+          WHEN DATE(vp.clase_prueba_2_fecha) = CURDATE() THEN vp.clase_prueba_2_obs
+          WHEN DATE(vp.clase_prueba_3_fecha) = CURDATE() THEN vp.clase_prueba_3_obs
+          ELSE NULL
+        END AS obs_for_today,
+
+        /* Alias de compatibilidad para el front actual */
+        CASE
+          WHEN DATE(vp.clase_prueba_1_fecha) = CURDATE() THEN vp.clase_prueba_1_tipo
+          WHEN DATE(vp.clase_prueba_2_fecha) = CURDATE() THEN vp.clase_prueba_2_tipo
+          WHEN DATE(vp.clase_prueba_3_fecha) = CURDATE() THEN vp.clase_prueba_3_tipo
+          ELSE NULL
+        END AS tipo
+
+      FROM ventas_prospectos vp
+      JOIN users u ON u.id = vp.usuario_id
+      WHERE
+        (
+          DATE(vp.clase_prueba_1_fecha) = CURDATE() OR
+          DATE(vp.clase_prueba_2_fecha) = CURDATE() OR
+          DATE(vp.clase_prueba_3_fecha) = CURDATE()
+        )
+        ${sedeFilterSQL}
+      ORDER BY vp.n_contacto_2 ASC, vp.nombre
+      `,
       params
     );
 
     res.json(notis);
   } catch (error) {
     console.error('Error obteniendo notificaciones clase de prueba:', error);
-    res
-      .status(500)
-      .json({ error: 'Error obteniendo notificaciones de clase de prueba' });
+    res.status(500).json({ error: 'Error obteniendo notificaciones de clase de prueba' });
   }
 });
+
 
 app.patch(
   '/notifications/clases-prueba/:prospectoId/enviado',
