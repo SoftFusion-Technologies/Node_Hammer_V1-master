@@ -1004,5 +1004,33 @@ router.put('/ventas-comisiones/:id', PUT_actualizarVentaComision_CTS);
 router.put('/ventas-comisiones/:id/aprobar', PUT_aprobarVentaComision_CTS);
 router.put('/ventas-comisiones/:id/rechazar', PUT_rechazarVentaComision_CTS);
 router.delete('/ventas-comisiones/:id', DEL_eliminarVentaComision_CTS);
+
+// Import controlador Comisiones Vigentes
+import ComisionesVigentesCtrl from '../Controllers/CTS_TB_VentasComisionesVigentes.js';
+const {
+  OBRS_ComisionesVigentes_CTS,
+  OBR_ComisionVigente_CTS,
+  CR_ComisionVigente_CTS,
+  UR_ComisionVigente_CTS,
+  ER_ComisionVigente_CTS,
+  DUP_Comisiones_Mes_CTS,
+  DESACTIVAR_Comisiones_Mes_CTS,
+  OBR_ComisionPorCodigo_CTS
+} = ComisionesVigentesCtrl;
+
+// --- Rutas Comisiones Vigentes ---
+router.get('/comisiones-vigentes', OBRS_ComisionesVigentes_CTS);           // list (filtros: mes,anio,solo_activas,codigo)
+router.get('/comisiones-vigentes/:id', OBR_ComisionVigente_CTS);           // get by id
+router.post('/comisiones-vigentes', CR_ComisionVigente_CTS);               // create
+router.put('/comisiones-vigentes/:id', UR_ComisionVigente_CTS);            // update
+router.delete('/comisiones-vigentes/:id', ER_ComisionVigente_CTS);         // delete (hard)
+
+// Utilitarios de período
+router.post('/comisiones-vigentes/duplicar', DUP_Comisiones_Mes_CTS);      // body: origen_mes,origen_anio,destino_mes,destino_anio
+router.post('/comisiones-vigentes/desactivar', DESACTIVAR_Comisiones_Mes_CTS); // body/query: mes,anio o periodo_inicio
+
+// Búsqueda rápida por código
+router.get('/comisiones-vigentes/by-codigo', OBR_ComisionPorCodigo_CTS);   // query: codigo,mes,anio
+
 // Exporta el enrutador
 export default router;
