@@ -138,6 +138,16 @@ export const VentasProspectosModel = db.define(
       type: DataTypes.BIGINT.UNSIGNED,
       allowNull: true
     },
+    // 🔹 NUEVOS
+    comision_estado: {
+      type: DataTypes.STRING(20), // 'en_revision' | 'aprobado' | 'rechazado' | null
+      allowNull: true
+    },
+    comision_id: {
+      type: DataTypes.BIGINT.UNSIGNED, // FK a ventas_comisiones.id
+      allowNull: true
+    },
+
     observacion: {
       type: DataTypes.STRING(255),
       allowNull: true
@@ -164,7 +174,10 @@ export const VentasProspectosModel = db.define(
   {
     timestamps: true,
     createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    updatedAt: 'updated_at',
+    indexes: [
+      { fields: ['comision_estado'] } // hace match con idx_vp_comision_estado en SQL
+    ]
   }
 );
 

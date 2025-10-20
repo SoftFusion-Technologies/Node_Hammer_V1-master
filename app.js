@@ -42,6 +42,7 @@ import dayjs from 'dayjs';
 import { mapUserSedeToVp, norm } from './utils/sede.js';
 
 import initHxRelaciones from './Models/hx_relaciones.js';
+import './Models/ventas_relaciones.js'
 // … importar db y modelos antes si corresponde …
 
 // Inicializar asociaciones (una sola vez)

@@ -979,6 +979,30 @@ router.get('/hx/imagenes-balanza', GET_ListImagenesBalanza);
 // Servir/descargar archivo por id
 router.get('/hx/imagenes-balanza/file/:id', GET_DownloadImagenBalanza);
 
+import {
+  POST_convertirProspecto_CTS,
+  GET_listarVentasComisiones_CTS,
+  GET_obtenerVentaComision_CTS,
+  PUT_actualizarVentaComision_CTS,
+  PUT_aprobarVentaComision_CTS,
+  PUT_rechazarVentaComision_CTS,
+  DEL_eliminarVentaComision_CTS,
+  GET_resumenComisionesVendedor_CTS,
+  GET_listarComisionesVendedor_CTS
+} from '../Controllers/CTS_TB_VentasComision.js';
 
+router.get('/ventas-comisiones/resumen', GET_resumenComisionesVendedor_CTS);
+router.get('/ventas-comisiones/vendedor', GET_listarComisionesVendedor_CTS);
+
+// Conversión (crea comisión en revisión si esComision = true)
+router.post('/ventas-prospectos/:id/convertir', POST_convertirProspecto_CTS);
+
+// Comisiones
+router.get('/ventas-comisiones', GET_listarVentasComisiones_CTS);
+router.get('/ventas-comisiones/:id', GET_obtenerVentaComision_CTS);
+router.put('/ventas-comisiones/:id', PUT_actualizarVentaComision_CTS);
+router.put('/ventas-comisiones/:id/aprobar', PUT_aprobarVentaComision_CTS);
+router.put('/ventas-comisiones/:id/rechazar', PUT_rechazarVentaComision_CTS);
+router.delete('/ventas-comisiones/:id', DEL_eliminarVentaComision_CTS);
 // Exporta el enrutador
 export default router;
