@@ -135,7 +135,6 @@ export const CR_VentasProspecto_CTS = async (req, res) => {
 };
 
 // Actualizar un prospecto (para editar nombre, dni, contacto, etc.)
-// controllers/VentasProspectosController.js
 export const UR_VentasProspecto_CTS = async (req, res) => {
   const t = await db.transaction();
   try {
@@ -145,16 +144,13 @@ export const UR_VentasProspecto_CTS = async (req, res) => {
       return res.status(400).json({ mensajeError: 'ID inválido' });
     }
 
-    const prospecto = await VentasProspectosModel.findByPk(id, {
-      transaction: t
-    });
+    const prospecto = await VentasProspectosModel.findByPk(id, { transaction: t });
     if (!prospecto) {
       await t.rollback();
       return res.status(404).json({ mensajeError: 'Prospecto no encontrado' });
     }
 
-    // 🔒 Lista blanca de campos actualizables
-    // (NO incluimos comision_estado ni comision_id: solo se tocan vía endpoints de comisión)
+    // 🔒 Lista blanca (NO incluimos comision_estado ni comision_id: se gestionan en el módulo de comisiones)
     const ALLOWED = new Set([
       'usuario_id',
       'nombre',
@@ -199,18 +195,12 @@ export const UR_VentasProspecto_CTS = async (req, res) => {
       } else if (['convertido', 'comision'].includes(k)) {
         campos[k] = !!v;
       } else if (
-        [
-          'fecha',
-          'clase_prueba_1_fecha',
-          'clase_prueba_2_fecha',
-          'clase_prueba_3_fecha'
-        ].includes(k)
+        ['fecha', 'clase_prueba_1_fecha', 'clase_prueba_2_fecha', 'clase_prueba_3_fecha'].includes(k)
       ) {
         campos[k] = v ? new Date(v) : null;
       } else if (k === 'sede' && typeof v === 'string') {
         campos[k] = v.trim().toLowerCase();
       } else if (k === 'comision_usuario_id') {
-        // Solo si viene definido; casteado a número
         if (typeof v !== 'undefined' && v !== null && v !== '') {
           campos[k] = Number(v) || null;
         }
@@ -221,23 +211,16 @@ export const UR_VentasProspecto_CTS = async (req, res) => {
       }
     }
 
-    // --- Reglas específicas ---
-
-    // 1) Si cambia a 'Campaña', exigir campania_origen; si no es 'Campaña', guardarlo como '' para homogeneidad
+    // 1) Si cambian a 'Campaña', exigir campania_origen; si no es 'Campaña', limpiar a ''
     if (Object.prototype.hasOwnProperty.call(campos, 'canal_contacto')) {
       const canal = campos.canal_contacto;
       if (canal === 'Campaña') {
-        const origen = Object.prototype.hasOwnProperty.call(
-          body,
-          'campania_origen'
-        )
+        const origen = Object.prototype.hasOwnProperty.call(body, 'campania_origen')
           ? String(body.campania_origen ?? '').trim()
           : String(prospecto.campania_origen ?? '').trim();
         if (!origen) {
           await t.rollback();
-          return res
-            .status(400)
-            .json({ mensajeError: 'Debe especificar el origen de la campaña' });
+          return res.status(400).json({ mensajeError: 'Debe especificar el origen de la campaña' });
         }
         campos.campania_origen = origen;
       } else {
@@ -246,46 +229,52 @@ export const UR_VentasProspecto_CTS = async (req, res) => {
     }
 
     // 2) Bloquear intento de activar comisión desde UR
-    if (
-      Object.prototype.hasOwnProperty.call(body, 'comision') &&
-      body.comision === true
-    ) {
+    if (Object.prototype.hasOwnProperty.call(body, 'comision') && body.comision === true) {
       await t.rollback();
-      return res
-        .status(400)
-        .json({
-          mensajeError:
-            'Use el endpoint de conversión para registrar una comisión.'
-        });
+      return res.status(400).json({
+        mensajeError: 'Use el endpoint de conversión para registrar una comisión.'
+      });
     }
 
-    // 3) Si desmarcan convertido => limpiar comisión en prospecto
+    // 3) Si desmarcan "convertido"
     const revierteConversion =
-      Object.prototype.hasOwnProperty.call(body, 'convertido') &&
-      body.convertido === false;
+      Object.prototype.hasOwnProperty.call(body, 'convertido') && body.convertido === false;
 
     if (revierteConversion) {
+      // limpiar metadata en el prospecto
       campos.comision = false;
       campos.comision_registrada_at = null;
       campos.comision_usuario_id = null;
-      campos.comision_estado = null; // NUEVO
-      campos.comision_id = null; // NUEVO
+      campos.comision_estado = null;
+      campos.comision_id = null;
 
-      // (Recomendado) si tenía una comisión asociada, marcarla 'rechazado'
+      // regla nueva: si tenía comisión y está RECHAZADA, ELIMINARLA (para que no aparezca en "Ver comisiones")
       if (prospecto.comision_id) {
-        await VentasComisionesModel.update(
-          {
-            estado: 'rechazado',
-            rechazado_por: req.user?.id ?? null,
-            rechazado_at: new Date(),
-            motivo_rechazo: 'Conversión revertida desde edición del prospecto.'
-          },
-          { where: { id: prospecto.comision_id }, transaction: t }
-        );
+        const com = await VentasComisionesModel.findByPk(prospecto.comision_id, { transaction: t });
+
+        if (com) {
+          if (com.estado === 'rechazado') {
+            await VentasComisionesModel.destroy({
+              where: { id: com.id },
+              transaction: t
+            });
+          } else {
+            // si no estaba rechazada, la marcamos rechazada (auditoría) y queda fuera de aprobadas
+            await VentasComisionesModel.update(
+              {
+                estado: 'rechazado',
+                rechazado_por: req.user?.id ?? null,
+                rechazado_at: new Date(),
+                motivo_rechazo: 'Conversión revertida desde edición del prospecto.'
+              },
+              { where: { id: com.id }, transaction: t }
+            );
+          }
+        }
       }
     }
 
-    // 4) Si vino 'comision' en false explícitamente, limpiar metadatos (pero no tocar comision_id/estado)
+    // 4) Si vino 'comision' en false explícitamente, limpiar metadatos (no tocamos comision_id/estado)
     if (
       Object.prototype.hasOwnProperty.call(body, 'comision') &&
       body.comision === false &&
@@ -293,21 +282,15 @@ export const UR_VentasProspecto_CTS = async (req, res) => {
     ) {
       campos.comision_registrada_at = null;
       campos.comision_usuario_id = null;
-      // OJO: no tocamos comision_estado/comision_id aquí; esa gestión es del módulo de comisiones
     }
 
     // Nada para actualizar
     if (Object.keys(campos).length === 0) {
       await t.rollback();
-      return res
-        .status(400)
-        .json({ mensajeError: 'Sin campos válidos para actualizar' });
+      return res.status(400).json({ mensajeError: 'Sin campos válidos para actualizar' });
     }
 
-    const [n] = await VentasProspectosModel.update(campos, {
-      where: { id },
-      transaction: t
-    });
+    const [n] = await VentasProspectosModel.update(campos, { where: { id }, transaction: t });
     if (!n) {
       await t.rollback();
       return res.status(404).json({ mensajeError: 'Prospecto no encontrado' });
@@ -317,7 +300,7 @@ export const UR_VentasProspecto_CTS = async (req, res) => {
     await t.commit();
     return res.json(data);
   } catch (err) {
-    await t.rollback();
+    try { await t.rollback(); } catch {}
     return res.status(500).json({ mensajeError: err.message });
   }
 };
