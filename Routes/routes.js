@@ -1000,7 +1000,7 @@ router.post('/ventas-prospectos/:id/convertir', POST_convertirProspecto_CTS);
 // Comisiones
 router.get('/ventas-comisiones', GET_listarVentasComisiones_CTS);
 router.get('/ventas-comisiones/:id', GET_obtenerVentaComision_CTS);
-router.put('/ventas-comisiones/:id', PUT_actualizarVentaComision_CTS);
+router.patch('/ventas-comisiones/:id', PUT_actualizarVentaComision_CTS);
 router.put('/ventas-comisiones/:id/aprobar', PUT_aprobarVentaComision_CTS);
 router.put('/ventas-comisiones/:id/rechazar', PUT_rechazarVentaComision_CTS);
 router.delete('/ventas-comisiones/:id', DEL_eliminarVentaComision_CTS);
