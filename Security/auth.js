@@ -15,7 +15,7 @@ export const login = async (req, res) => {
 
     if (results.length > 0) {
       const user = results[0];
-      const token = jwt.sign({ id: user.id, level: user.level }, 'softfusion', {
+      const token = jwt.sign({ id: user.id, level: user.level, sede: user.sede }, 'softfusion', {
         expiresIn: '1h'
       });
 
@@ -23,8 +23,33 @@ export const login = async (req, res) => {
         message: 'Success',
         token,
         level: user.level,
-        id: user.id // ← se incluye aquí el ID
+        id: user.id, // ← se incluye aquí el ID
+        sede: user.sede
       });
+    } else {
+      return res.json('Fail');
+    }
+  } catch (err) {
+    console.log('Error executing query', err);
+    return res.json('Error');
+  }
+};
+
+export const login_profesores_pilates = async (req, res) => {
+  const { email, password } = req.body;
+
+  const sql =
+    'SELECT * FROM usuarios_pilates WHERE email = :email AND password = :password';
+  try {
+    const [results, metadata] = await db.query(sql, {
+      replacements: { email: email, password: password }
+    });
+    if (results.length > 0) {
+      const user = results[0];
+      const token = jwt.sign({ id: user.id, level: user.rol, sede_id: user.sede_id }, 'softfusion', {
+        expiresIn: '1h'
+      });
+      return res.json({ message: 'Success', token, level: user.rol, sede_id: user.sede_id });
     } else {
       return res.json('Fail');
     }

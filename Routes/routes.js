@@ -261,9 +261,10 @@ import {
   OBR_Sede_CTS,
   CR_Sede_CTS,
   ER_Sede_CTS,
-  UR_Sede_CTS
+  UR_Sede_CTS,
+  OBRS_SedesCiudad_CTS,
+  ObtenerCantidadAlumnosPorSede_CTS
 } from '../Controllers/CTS_TB_Sedes.js';
-
 /* Nuevo módulo para gestionar las quejas internas
  * Programador: Benjamin Orellana
  * Fecha Creación: 30 de Abril 2025
@@ -322,6 +323,78 @@ import {
   PATCH_AgendaDone,
   POST_GenerarAgendaHoy // opcional (para pruebas/manual)
 } from '../Controllers/CTS_TB_VentasAgenda.js';
+
+import {
+  OBRS_ClientesPilates_CTS,
+  OBR_ClientesPilates_CTS,
+  CR_ClientesPilates_CTS,
+  UR_ClientesPilates_CTS,
+  ER_ClientesPilates_CTS,
+  BUSCAR_ClientesPilates_CTS,
+  OBRS_ClientesPorEstado_CTS,
+  OBRS_ClientesProximosVencer_CTS,
+  ESP_OBRS_HorarioClientesPilates_CTS,
+  ER_ClienteConInscripciones_CTS,
+  UR_ContactarCliente_CTS,
+  ESP_OBRS_HorariosDisponibles_CTS,
+  EXISTE_ClientePruebaPorNombre_CTS,
+  UR_ClientesPilates_PlanRenovacion_CTS
+} from '../Controllers/CTS_TB_ClientesPilates.js';
+
+import {
+  OBRS_InscripcionesPilates_CTS,
+  OBR_InscripcionesPilates_CTS,
+  CR_InscripcionesPilates_CTS,
+  UR_InscripcionesPilates_CTS,
+} from  '../Controllers/CTS_TB_InscripcionesPilates.js';
+
+import {
+  OBRS_ListaEsperaPilates,
+  OBR_ListaEsperaPilates,
+  CR_ListaEsperaPilates,
+  UR_ListaEsperaPilates,
+  ER_ListaEsperaPilates
+} from '../Controllers/CTS_TB_ListaEsperaPilates.js';
+
+import {
+  OBRS_UsuariosPilates_CTS,
+  OBRS_UsuariosPilatesNombreCompleto_CTS,
+  OBRS_UsuariosPilatesPorSede_CTS,
+  OBR_UsuarioPilates_CTS,
+  CR_UsuarioPilates_CTS,
+  UR_UsuarioPilates_CTS,
+  ER_UsuarioPilates_CTS
+} from "../Controllers/CTS_TB_UsuariosPilates.js";
+
+import {
+  OBRS_HorariosPilates_CTS,
+  UR_InstructorHorarioPilates_CTS
+} from '../Controllers/CTS_TB_HorariosPilates.js';
+
+import {
+  OBRS_VentasProspectosHorario_CTS,
+  CR_VentasProspectosHorario_CTS,
+  PUT_VentasProspectosHorarioPorProspecto_CTS,
+} from "../Controllers/CTS_TB_VentasProspectosHorarios.js";
+
+import {
+  OBRS_AsistenciasFormato_CTS,
+  UR_AsistenciaCliente_CTS,
+  DEBUG_DispararCreacionAsistencias_CTS,
+  OBRS_AusenciasMensualesPorSede_CTS,
+  OBRS_ReporteAsistenciaPrueba_CTS
+} from "../Controllers/CTS_TB_AsistenciasPilates.js";
+
+import {
+  CR_crearContacto,
+  UR_modificarEstadoContacto,
+} from "../Controllers/CTS_TB_ContactosListaEsperaPilates.js";
+
+
+import {
+  OBR_AuditoriaPorCliente_CTS,
+  UR_AuditoriaFechaFin_CTS
+}from "../Controllers/CTS_TB_AuditoriaFechaFinModificadaPilates.js";
 
 // Crea un enrutador de Express
 const router = express.Router();
@@ -822,8 +895,10 @@ router.get(
 );
 
 // Rutas para sedes
+router.get('/sedes/ciudad', OBRS_SedesCiudad_CTS); // Obtener sedes que son ciudades - DEBE IR ANTES que /sedes
 router.get('/sedes', OBRS_Sede_CTS); // Obtener todas las sedes
 router.get('/sedes/:id', OBR_Sede_CTS); // Obtener sede por ID
+router.get('/sedes/alumnos/por/sede', ObtenerCantidadAlumnosPorSede_CTS); // Obtener sedes por ciudad
 router.post('/sedes', CR_Sede_CTS); // Crear nueva sede
 router.delete('/sedes/:id', ER_Sede_CTS); // Eliminar sede por ID
 router.put('/sedes/:id', UR_Sede_CTS); // Actualizar sede por ID
@@ -952,6 +1027,66 @@ router.post(
   /* requireAuth, */ POST_GenerarAgendaHoy
 );
 
+
+// ----------------------------------------------------------------
+// Rutas para operaciones CRUD en la tabla 'inscripciones_pilates'
+router.get('/clientes-pilates/horarios', ESP_OBRS_HorarioClientesPilates_CTS);
+router.get('/clientes-pilates', OBRS_ClientesPilates_CTS);
+router.get('/clientes-pilates/buscar', BUSCAR_ClientesPilates_CTS);
+router.get('/clientes-pilates/estado/:estado', OBRS_ClientesPorEstado_CTS);
+router.get('/clientes-pilates/proximos-vencer', OBRS_ClientesProximosVencer_CTS);
+router.get('/clientes-pilates/existe-prueba-por-nombre', EXISTE_ClientePruebaPorNombre_CTS);
+router.get('/clientes-pilates/:id', OBR_ClientesPilates_CTS);
+router.get('/clientes-pilates/horarios-disponibles/ventas', ESP_OBRS_HorariosDisponibles_CTS);
+router.put('/clientes-pilates/:id', UR_ClientesPilates_CTS);
+router.put('/clientes-pilates/contactar/:id', UR_ContactarCliente_CTS);
+router.put('/clientes-pilates/plan-renovacion/:id', UR_ClientesPilates_PlanRenovacion_CTS);
+router.post('/clientes/insertar', CR_ClientesPilates_CTS);
+router.delete("/clientes-pilates/con-inscripciones/:id", ER_ClienteConInscripciones_CTS);
+
+router.get("/auditoria-pilates/cliente/:cliente_id", OBR_AuditoriaPorCliente_CTS);
+router.put("/auditoria-pilates/cliente/:cliente_id", UR_AuditoriaFechaFin_CTS);
+
+// ----------------------------------------------------------------
+// Rutas para operaciones CRUD en la tabla 'inscripciones_pilates'
+router.get('/inscripciones-pilates', OBRS_InscripcionesPilates_CTS);
+router.get('/inscripciones-pilates/:id', OBR_InscripcionesPilates_CTS);
+router.post('/inscripciones-pilates', CR_InscripcionesPilates_CTS);
+router.put('/inscripciones-pilates/:id', UR_InscripcionesPilates_CTS);
+
+
+router.get('/lista-espera-pilates', OBRS_ListaEsperaPilates);
+router.get('/lista-espera-pilates/:id', OBR_ListaEsperaPilates);
+router.post('/lista-espera-pilates', CR_ListaEsperaPilates);
+router.put('/lista-espera-pilates/:id', UR_ListaEsperaPilates);
+router.delete('/lista-espera-pilates/:id', ER_ListaEsperaPilates);
+
+
+router.get("/usuarios-pilates", OBRS_UsuariosPilates_CTS);
+router.get("/usuarios-pilates/nombres", OBRS_UsuariosPilatesNombreCompleto_CTS);
+router.get("/usuarios-pilates/sede", OBRS_UsuariosPilatesPorSede_CTS); // Nueva ruta para filtrar por sede
+router.get("/usuarios-pilates/:id", OBR_UsuarioPilates_CTS);
+router.post("/usuarios-pilates", CR_UsuarioPilates_CTS);        // Crear
+router.put("/usuarios-pilates/:id", UR_UsuarioPilates_CTS);     // Actualizar
+router.delete("/usuarios-pilates/:id", ER_UsuarioPilates_CTS);  // Eliminar
+
+router.put('/horarios-pilates/cambiar-instructor', UR_InstructorHorarioPilates_CTS);
+
+
+router.get("/asistencias-pilates/formato", OBRS_AsistenciasFormato_CTS);
+router.get("/asistencias-pilates/ausencias-mensuales", OBRS_AusenciasMensualesPorSede_CTS);
+router.put("/asistencias-pilates/marcar", UR_AsistenciaCliente_CTS);
+router.get("/asistencias-pilates/crear-diarias", DEBUG_DispararCreacionAsistencias_CTS);
+router.get("/asistencias-pilates/reportes/asistencia-clases-prueba", OBRS_ReporteAsistenciaPrueba_CTS);
+
+router.post("/ventas-prospectos-horarios", CR_VentasProspectosHorario_CTS);
+router.get("/ventas-prospectos-horarios/:prospecto_id", OBRS_VentasProspectosHorario_CTS);
+router.put('/ventas-prospectos-horarios/modificar-por-prospecto', PUT_VentasProspectosHorarioPorProspecto_CTS);
+
+router.post("/contactos-lista-espera", CR_crearContacto)
+router.put("/contactos-lista-espera/:id_lista_espera", UR_modificarEstadoContacto);
+
+
 import { POST_InformeFromOCR } from '../Controllers/CTS_TB_HxController.js';
 
 router.post('/hx/informes/from-ocr', POST_InformeFromOCR);
@@ -1031,6 +1166,8 @@ router.post('/comisiones-vigentes/desactivar', DESACTIVAR_Comisiones_Mes_CTS); /
 
 // Búsqueda rápida por código
 router.get('/comisiones-vigentes/by-codigo', OBR_ComisionPorCodigo_CTS);   // query: codigo,mes,anio
+
+
 
 // Exporta el enrutador
 export default router;

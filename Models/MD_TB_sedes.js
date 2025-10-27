@@ -15,6 +15,8 @@
 import dotenv from 'dotenv'; // Importa el módulo dotenv para cargar variables de entorno desde un archivo .env
 import db from '../DataBase/db.js'; // Importa la conexión a la base de datos
 import { DataTypes } from 'sequelize'; // Importa el módulo DataTypes de Sequelize para definir tipos de datos
+import { HorariosPilatesModel } from '../Models/MD_TB_HorariosPilates.js';
+import InscripcionesPilatesModel from '../Models/MD_TB_InscripcionesPilates.js';
 
 // Si no estás en producción, carga las variables de entorno desde el archivo .env
 if (process.env.NODE_ENV !== 'production') {
@@ -35,7 +37,16 @@ export const SedeModel = db.define(
       type: DataTypes.STRING,
       allowNull: false, // No se permite nulo
       defaultValue: 'activo' // Estado por defecto es 'activo'
-    }
+    },
+    es_ciudad: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    cupo_maximo_pilates: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
   },
   {
     timestamps: true, // Habilita la creación automática de los campos createdAt y updatedAt en la tabla
@@ -43,6 +54,22 @@ export const SedeModel = db.define(
     updatedAt: 'updated_at' // Nombre personalizado para el campo de fecha de actualización
   }
 );
+
+// ----------------------------------
+// Asociaciones
+// ----------------------------------
+
+// Una sede tiene muchos horarios
+SedeModel.hasMany(HorariosPilatesModel, {
+  foreignKey: 'id_sede',
+  as: 'horarios'
+});
+
+// Cada horario tiene muchas inscripciones
+HorariosPilatesModel.hasMany(InscripcionesPilatesModel, {
+  foreignKey: 'id_horario',
+  as: 'inscripciones'
+});
 
 export default {
   SedeModel

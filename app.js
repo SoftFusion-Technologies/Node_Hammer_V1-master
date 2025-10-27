@@ -34,7 +34,11 @@ import { SCHEDULE_VentasAgendaCron } from './Controllers/CTS_TB_VentasAgenda.js'
 
 import moment from 'moment-timezone';
 
-import { login, authenticateToken } from './Security/auth.js'; // Importa las funciones del archivo auth.js
+import { login, login_profesores_pilates, authenticateToken } from './Security/auth.js';  // Importa las funciones del archivo auth.js
+import { crearAsistenciasDiariasAusentes } from './Controllers/CTS_TB_AsistenciasPilates.js';
+import {reiniciarContactosPorInasistencia} from "./Controllers/CTS_TB_ClientesPilates.js"
+
+import setupAssociations from './Models/Asociaciones.js';
 
 import sharp from 'sharp';
 import dayjs from 'dayjs';
@@ -75,8 +79,11 @@ try {
   console.log(`El error de la conexion es : ${error}`);
 }
 
+setupAssociations();
 // Ruta de login
 app.post('/login', login);
+// Ruta de login para profesores de pilates
+app.post('/login_profesores', login_profesores_pilates);
 
 // Ruta protegida
 app.get('/protected', authenticateToken, (req, res) => {
@@ -200,6 +207,28 @@ async function deleteOldNovedades() {
 }
 
 deleteOldNovedades();
+// Programar la tarea para que se ejecute todos los días a las 00:01 AM para crear asistencias diarias ausentes
+cron.schedule('1 0 * * *', () => {
+  console.log('[CRON] Disparando la tarea programada diaria de asistencias...');
+  crearAsistenciasDiariasAusentes();
+}, {
+  scheduled: true,
+  timezone: "America/Argentina/Buenos_Aires" 
+});
+
+
+// Programar la tarea para que se ejecute el 1 de cada mes a la 01:00 AM para reiniciar contactos por inasistencia
+cron.schedule(
+  "0 1 1 * *", // Se ejecuta a la 01:00 AM del día 1 de cada mes.
+  () => {
+    reiniciarContactosPorInasistencia();
+  },
+  {
+    scheduled: true,
+    timezone: "America/Argentina/Buenos_Aires",
+  }
+);
+
 
 // Programar la tarea para que se ejecute cada día a medianoche
 cron.schedule('0 0 * * *', () => {
