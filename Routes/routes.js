@@ -1095,6 +1095,12 @@ import { GET_InformePDF } from '../Controllers/CTS_TB_HxInformePdf.js';
 
 router.get('/hx/informes/:id/pdf', GET_InformePDF); // descarga por informe_id
 
+// routes/hx.js  (o donde definas las rutas)
+import { GET_InformeByBatch } from '../Controllers/CTS_TB_HxResolve.js';
+
+// preferible usar camelCase
+router.get('/hx/informes/by-batch/:batchId', GET_InformeByBatch);
+
 import {
   POST_UploadImagenesBalanza,
   GET_ListImagenesBalanza,

@@ -13,6 +13,13 @@ import { getInformeFilename } from '../utils/names.js';
 
 /* ===================== Helpers ===================== */
 
+const uuid36 = yup
+  .string()
+  .matches(
+    /^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$/,
+    'batch_id debe ser UUID'
+);
+  
 async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
 }
@@ -148,7 +155,8 @@ const bodySchema = yup
     fecha: yup.string().required('fecha (YYYY-MM-DD) es requerida'),
     cliente: clienteSchema.nullable(), // ← ahora puede ser null/omitido
     content: yup.mixed().nullable(),
-    textos: yup.mixed().nullable()
+    textos: yup.mixed().nullable(),
+    batch_id: uuid36.nullable()
   })
   .required();
 
@@ -418,7 +426,6 @@ export async function POST_InformeFromOCR(req, res) {
   } = payload;
 
   // 2) Parse de los JSON (acepta string u objeto)
-  // Si viene "content", debe ser JSON válido; si no viene, seguimos sin métricas.
   let contentObj = null;
   if (content !== undefined && content !== null && content !== '') {
     contentObj = parseMaybeJSON(content);
@@ -431,7 +438,6 @@ export async function POST_InformeFromOCR(req, res) {
       });
     }
   }
-  // si no vino, contentObj queda en null
 
   const textosObj = parseMaybeJSON(textos) || {};
 
@@ -442,6 +448,9 @@ export async function POST_InformeFromOCR(req, res) {
   }
   const textosFields = extractTextos(textosObj);
 
+  // 👇 *** ÚNICO CAMBIO CLAVE: separar comidasParsed de lo que va a la tabla de informes
+  const { comidasParsed, ...textosCols } = textosFields;
+
   // 4) Transacción + idempotencia
   const t = await db.transaction();
   try {
@@ -449,13 +458,11 @@ export async function POST_InformeFromOCR(req, res) {
     let clienteRow;
 
     if (cliente?.id) {
-      // Soporte puntual para id explícito
       clienteRow = await HxClienteModel.findByPk(cliente.id, {
         transaction: t
       });
       if (!clienteRow) throw new Error(`cliente_id ${cliente.id} no existe`);
 
-      // Mergear SOLO campos faltantes o placeholders
       const patch = {};
       if (cliente.dni && !clienteRow.dni)
         patch.dni = String(cliente.dni).replace(/\D/g, '');
@@ -473,7 +480,6 @@ export async function POST_InformeFromOCR(req, res) {
       if (Object.keys(patch).length)
         await clienteRow.update(patch, { transaction: t });
     } else {
-      // Resolución completa (DNI > nombre) y actualización de campos se hace en el helper
       clienteRow = await upsertClienteFromPayload(cliente || {}, t);
     }
 
@@ -484,30 +490,24 @@ export async function POST_InformeFromOCR(req, res) {
         cliente_id: clienteRow.id,
         fecha,
         ...infoFields,
-        ...textosFields
+        ...textosCols // 👈 usar SOLO columnas válidas del informe (sin comidasParsed)
       },
       transaction: t
     });
 
-    // Si ya existía, lo actualizamos (idempotente)
     if (!createdInforme) {
       await informeRow.update(
-        { ...infoFields, ...textosFields },
+        { ...infoFields, ...textosCols }, // 👈 idem
         { transaction: t }
       );
     }
-    // 4.3) Comidas (array) — admite múltiples items por "tipo" con campo "orden"
-    if (
-      Array.isArray(textosFields.comidasParsed) &&
-      textosFields.comidasParsed.length
-    ) {
-      // contador por tipo para asignar orden 1..N en el mismo orden recibido
+
+    // 4.3) Comidas (array) — usa comidasParsed
+    if (Array.isArray(comidasParsed) && comidasParsed.length) {
       const counters = new Map(); // tipo -> next orden
 
-      for (const c of textosFields.comidasParsed) {
+      for (const c of comidasParsed) {
         const descripcion = c.descripcion ?? null;
-
-        // normalizar tipo: si viene vacío/null, lo mandamos a 'sin_tipo'
         const tipo =
           c.tipo && String(c.tipo).trim()
             ? String(c.tipo).trim().toLowerCase()
@@ -516,7 +516,6 @@ export async function POST_InformeFromOCR(req, res) {
         const nextOrden = (counters.get(tipo) ?? 0) + 1;
         counters.set(tipo, nextOrden);
 
-        // respeta UNIQUE (informe_id, tipo, orden); si reintentan, actualiza
         const [row, created] = await HxInformeComidaModel.findOrCreate({
           where: { informe_id: informeRow.id, tipo, orden: nextOrden },
           defaults: { descripcion },
@@ -530,10 +529,36 @@ export async function POST_InformeFromOCR(req, res) {
     }
 
     // 4.4) Vincular imágenes de balanza al informe
-    const { batch_id } = payload; // viene del body
+    const batch_id_from_body = payload?.batch_id ?? req.body?.batch_id ?? null;
+    const batch_id_from_header =
+      req.get('batchid') || req.get('BatchId') || null;
+    const batch_id = (batch_id_from_body || batch_id_from_header || '').trim();
 
+   if (batch_id) {
+     const imgs = await HxImagenBalanzaModel.findAll({
+       where: { batch_id },
+       transaction: t
+     });
+     if (!imgs.length)
+       throw new Error(`No hay imágenes para batch_id ${batch_id}`);
+
+     const distintosCliente = imgs.some(
+       (im) => im.cliente_id && im.cliente_id !== clienteRow.id
+     );
+     if (distintosCliente)
+       throw new Error(`El batch ${batch_id} pertenece a otro cliente.`);
+
+     const [affected] = await HxImagenBalanzaModel.update(
+       { cliente_id: clienteRow.id, informe_id: informeRow.id },
+       { where: { batch_id }, transaction: t }
+     );
+
+     if (!affected)
+       throw new Error(
+         `No se pudo vincular imágenes al informe (batch_id ${batch_id}).`
+       );
+   }
     if (batch_id) {
-      // Valida que el batch pertenezca al mismo cliente (o no tenga cliente)
       const imgs = await HxImagenBalanzaModel.findAll({
         where: { batch_id },
         transaction: t
@@ -543,7 +568,6 @@ export async function POST_InformeFromOCR(req, res) {
         throw new Error(`No hay imágenes para batch_id ${batch_id}`);
       }
 
-      // si existen imágenes de otro cliente distinto → evitar cruce
       const distintosCliente = imgs.some(
         (im) => im.cliente_id && im.cliente_id !== clienteRow.id
       );
@@ -551,14 +575,11 @@ export async function POST_InformeFromOCR(req, res) {
         throw new Error(`El batch ${batch_id} pertenece a otro cliente.`);
       }
 
-      // asignar cliente_id si está vacío, y setear informe_id
       await HxImagenBalanzaModel.update(
         { cliente_id: clienteRow.id, informe_id: informeRow.id },
         { where: { batch_id }, transaction: t }
       );
     } else {
-      // Si no vino batch_id: tomar el ÚLTIMO batch del cliente con informe_id NULL
-      // 1) buscar la última imagen del cliente con informe_id null (orden por created_at desc)
       const lastImg = await HxImagenBalanzaModel.findOne({
         where: { cliente_id: clienteRow.id, informe_id: null },
         order: [['created_at', 'DESC']],
@@ -566,13 +587,11 @@ export async function POST_InformeFromOCR(req, res) {
       });
 
       if (lastImg?.batch_id) {
-        // 2) asignar ese batch completo al informe
         await HxImagenBalanzaModel.update(
           { informe_id: informeRow.id },
           {
             where: {
               batch_id: lastImg.batch_id,
-              // evitar tocar filas ya vinculadas a otro informe
               [Op.or]: [{ informe_id: null }, { informe_id: informeRow.id }]
             },
             transaction: t
@@ -583,7 +602,7 @@ export async function POST_InformeFromOCR(req, res) {
 
     await t.commit();
 
-    // ¿Responder como PDF para descarga?
+    // Preferencias de PDF
     const wantsPDFDownload =
       req.query?.download === '1' ||
       (req.get('accept') || '').toLowerCase().includes('application/pdf');
@@ -593,7 +612,6 @@ export async function POST_InformeFromOCR(req, res) {
 
     if (wantsPDFDownload || wantsPDFMeta) {
       try {
-        // Traer datos completos para el PDF
         const clienteFull = await HxClienteModel.findByPk(clienteRow.id, {
           attributes: [
             'id',
@@ -615,10 +633,8 @@ export async function POST_InformeFromOCR(req, res) {
           attributes: ['tipo', 'orden', 'descripcion']
         });
 
-        // Import dinámico (si preferís, pasalo a import estático arriba)
         const { generateInformePDFBuffer } = await import('../utils/hx_pdf.js');
 
-        // Generar buffer PDF
         const pdfBuffer = await generateInformePDFBuffer({
           cliente: clienteFull.toJSON(),
           informe: informeFull.toJSON(),
@@ -652,7 +668,6 @@ export async function POST_InformeFromOCR(req, res) {
           });
         }
 
-        // Nombre de archivo por fecha
         const fecha =
           informeFull.fecha || new Date().toISOString().slice(0, 10);
         const filename = getInformeFilename({
@@ -670,13 +685,11 @@ export async function POST_InformeFromOCR(req, res) {
           return res.end(pdfBuffer);
         }
 
-        // Guardar en disco y devolver metadatos JSON
         const saveDir = path.resolve('./exports');
         await ensureDir(saveDir);
         const savePath = path.join(saveDir, filename);
         await fs.writeFile(savePath, pdfBuffer);
 
-        // Si exponés /exports estático, devolvés una URL accesible:
         const publicUrl = `/exports/${filename}`;
 
         return res.json({
@@ -706,20 +719,16 @@ export async function POST_InformeFromOCR(req, res) {
       }
     }
 
-    // URLs útiles
     const pdfDownloadUrl = `/hx/informes/${informeRow.id}/pdf`;
     const pdfInlineUrl = `/hx/informes/${informeRow.id}/pdf?view=1`;
 
-    // 1) Si pidieron redirección (para navegadores): 303 → descarga
     if (req.query?.redirect === '1') {
-      // Nota: 303 forza a repetir el request como GET a la Location
       res.status(303).set('Location', pdfDownloadUrl);
       return res.end();
     }
 
-    // 2) Si pidieron abrir (HTML) → entregar una página que redirige (para navegadores)
     if (req.query?.open === '1') {
-      const fecha = fecha; // ya definida arriba en tu código si la necesitás para título
+      const fecha = fecha;
       const html = `<!doctype html>
 <html lang="es"><head>
   <meta charset="utf-8">
@@ -735,7 +744,6 @@ export async function POST_InformeFromOCR(req, res) {
       return res.end(html);
     }
 
-    // Respuesta JSON normal si no pediste PDF
     return res.json({
       ok: true,
       idempotency_key: idempotency_key ?? null,
@@ -744,13 +752,12 @@ export async function POST_InformeFromOCR(req, res) {
       created: createdInforme,
       pdf: {
         generated: false,
-        url: `/hx/informes/${informeRow.id}/pdf`, // descarga directa desde navegador
-        inline_url: `/hx/informes/${informeRow.id}/pdf?view=1` // ver en pestaña (si implementás "inline")
+        url: `/hx/informes/${informeRow.id}/pdf`,
+        inline_url: `/hx/informes/${informeRow.id}/pdf?view=1`
       }
     });
   } catch (err) {
     await t.rollback();
-    // Detalle de error
     return res.status(500).json({
       ok: false,
       code: 'INGEST_ERROR',
