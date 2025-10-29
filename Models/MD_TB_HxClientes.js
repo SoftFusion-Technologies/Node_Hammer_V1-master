@@ -1,6 +1,6 @@
 /* Programador: Benjamin Orellana
  * Fecha Creación: 07/10/2025
- * Versión: 1.0
+ * Versión: 1.1
  *
  * Descripción:
  *  Definición del modelo Sequelize para la tabla `hx_clientes`.
@@ -22,7 +22,7 @@ const HxClienteModel = db.define(
   'hx_clientes',
   {
     id: {
-      type: DataTypes.BIGINT, // UNSIGNED en DB; Sequelize no lo requiere explícito
+      type: DataTypes.BIGINT,
       primaryKey: true,
       autoIncrement: true
     },
@@ -30,12 +30,16 @@ const HxClienteModel = db.define(
       type: DataTypes.STRING(120),
       allowNull: true
     },
+    // Nuevo campo: sede (texto libre)
+    sede: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
     dni: {
       type: DataTypes.STRING(20),
       allowNull: true,
       unique: true
     },
-
     sexo: {
       type: DataTypes.ENUM('M', 'F', 'X'),
       allowNull: true
@@ -53,8 +57,8 @@ const HxClienteModel = db.define(
   {
     tableName: 'hx_clientes',
     freezeTableName: true,
-    timestamps: true, // crea/actualiza createdAt/updatedAt
-    underscored: true, // mapea a created_at / updated_at en la DB
+    timestamps: true,
+    underscored: true,
     indexes: [{ name: 'idx_nombre', fields: ['nombre'] }]
   }
 );

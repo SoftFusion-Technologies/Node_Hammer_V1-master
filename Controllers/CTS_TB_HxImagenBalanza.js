@@ -101,13 +101,11 @@ const upload = multer({
 export async function POST_UploadImagenesBalanza(req, res) {
   upload(req, res, async (err) => {
     if (err) {
-      return res
-        .status(400)
-        .json({
-          ok: false,
-          code: 'UPLOAD_ERROR',
-          message: err.message || 'Error subiendo imágenes'
-        });
+      return res.status(400).json({
+        ok: false,
+        code: 'UPLOAD_ERROR',
+        message: err.message || 'Error subiendo imágenes'
+      });
     }
 
     const files = req.files || [];
@@ -116,8 +114,9 @@ export async function POST_UploadImagenesBalanza(req, res) {
       informe_id,
       fecha_captura,
       notas,
-      nombre: nombreRaw, // 👈 nuevo
-      dni: dniRaw // 👈 nuevo
+      nombre: nombreRaw, // 👈 existente
+      dni: dniRaw, // 👈 existente
+      sede: sedeRaw // 👈 NUEVO
     } = req.body || {};
     const MIN = 2,
       MAX = 4;
@@ -135,41 +134,63 @@ export async function POST_UploadImagenesBalanza(req, res) {
     let clienteRow = null;
     const nombre = (nombreRaw || '').trim() || null;
     const dni = (dniRaw || '').replace(/\D/g, '') || null;
+    const sede = (sedeRaw ?? '').toString().trim() || null;
+
+    const hasDniColumn = !!HxClienteModel.rawAttributes?.dni;
+    const hasSedeColumn = !!HxClienteModel.rawAttributes?.sede;
 
     if (cliente_id) {
       clienteRow = await HxClienteModel.findByPk(cliente_id);
       if (!clienteRow) {
-        return res
-          .status(400)
-          .json({
-            ok: false,
-            code: 'CLIENT_NOT_FOUND',
-            message: `cliente_id ${cliente_id} no existe`
-          });
+        return res.status(400).json({
+          ok: false,
+          code: 'CLIENT_NOT_FOUND',
+          message: `cliente_id ${cliente_id} no existe`
+        });
+      }
+      // Si viene sede y existe la columna, actualizamos si cambió
+      if (hasSedeColumn && sede && sede !== (clienteRow.sede || null)) {
+        await clienteRow.update({ sede });
+      }
+      // Si viene nombre y está vacío en DB, opcionalmente lo completamos
+      if (nombre && !clienteRow.nombre) {
+        await clienteRow.update({ nombre });
+      }
+      // Si viene dni y existe columna y está vacío en DB, opcionalmente lo completamos
+      if (dni && hasDniColumn && !clienteRow.dni) {
+        await clienteRow.update({ dni });
       }
     } else if (nombre || dni) {
-      // Si el modelo tiene columna "dni", intentamos por DNI primero
-      const hasDniColumn = !!HxClienteModel.rawAttributes?.dni;
-
+      // Buscar por DNI primero (si existe la columna)
       if (dni && hasDniColumn) {
         clienteRow = await HxClienteModel.findOne({ where: { dni } });
       }
-
+      // Luego por nombre exacto
       if (!clienteRow && nombre) {
         clienteRow = await HxClienteModel.findOne({ where: { nombre } });
       }
 
       if (!clienteRow) {
-        // crear cliente
+        // Crear cliente con los datos disponibles
         clienteRow = await HxClienteModel.create({
           nombre: nombre || null,
-          ...(hasDniColumn && dni ? { dni } : {})
+          ...(hasDniColumn && dni ? { dni } : {}),
+          ...(hasSedeColumn && sede ? { sede } : {})
         });
 
         if (!nombre) {
           await clienteRow.update({
             nombre: `Sin nombre cliente ${clienteRow.id}`
           });
+        }
+      } else {
+        // Si ya existía, actualizamos sede si llegó y existe la columna
+        if (hasSedeColumn && sede && sede !== (clienteRow.sede || null)) {
+          await clienteRow.update({ sede });
+        }
+        // Opcional: completar dni si faltaba
+        if (hasDniColumn && dni && !clienteRow.dni) {
+          await clienteRow.update({ dni });
         }
       }
     }
@@ -180,13 +201,11 @@ export async function POST_UploadImagenesBalanza(req, res) {
     if (informe_id) {
       informeRow = await HxInformeModel.findByPk(informe_id);
       if (!informeRow) {
-        return res
-          .status(400)
-          .json({
-            ok: false,
-            code: 'REPORT_NOT_FOUND',
-            message: `informe_id ${informe_id} no existe`
-          });
+        return res.status(400).json({
+          ok: false,
+          code: 'REPORT_NOT_FOUND',
+          message: `informe_id ${informe_id} no existe`
+        });
       }
     }
 
@@ -196,12 +215,13 @@ export async function POST_UploadImagenesBalanza(req, res) {
       const baseDir = path.resolve('./uploads/balanza', batch_id);
       await ensureDir(baseDir);
 
-      // Si NO tenés dni en la tabla, guardo meta en notas
+      // Si el modelo NO tiene las columnas, persistimos lo provisto en notas
       let notasExtraObj = {};
-      if (!HxClienteModel.rawAttributes?.dni && (dni || nombre)) {
+      if ((!hasDniColumn && (dni || nombre)) || (!hasSedeColumn && sede)) {
         notasExtraObj = {
-          provided_nombre: nombre || undefined,
-          provided_dni: dni || undefined
+          ...(nombre ? { provided_nombre: nombre } : {}),
+          ...(dni ? { provided_dni: dni } : {}),
+          ...(sede ? { provided_sede: sede } : {})
         };
       }
 
@@ -297,7 +317,10 @@ export async function POST_UploadImagenesBalanza(req, res) {
           ? {
               id: clienteRow.id,
               nombre: clienteRow.nombre,
-              ...(clienteRow.dni ? { dni: clienteRow.dni } : {})
+              ...(clienteRow.dni ? { dni: clienteRow.dni } : {}),
+              ...(hasSedeColumn && (clienteRow.sede || sede)
+                ? { sede: clienteRow.sede ?? sede }
+                : {})
             }
           : null,
         items: saved
