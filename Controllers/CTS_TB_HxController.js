@@ -534,36 +534,11 @@ export async function POST_InformeFromOCR(req, res) {
       req.get('batchid') || req.get('BatchId') || null;
     const batch_id = (batch_id_from_body || batch_id_from_header || '').trim();
 
-   if (batch_id) {
-     const imgs = await HxImagenBalanzaModel.findAll({
-       where: { batch_id },
-       transaction: t
-     });
-     if (!imgs.length)
-       throw new Error(`No hay imágenes para batch_id ${batch_id}`);
-
-     const distintosCliente = imgs.some(
-       (im) => im.cliente_id && im.cliente_id !== clienteRow.id
-     );
-     if (distintosCliente)
-       throw new Error(`El batch ${batch_id} pertenece a otro cliente.`);
-
-     const [affected] = await HxImagenBalanzaModel.update(
-       { cliente_id: clienteRow.id, informe_id: informeRow.id },
-       { where: { batch_id }, transaction: t }
-     );
-
-     if (!affected)
-       throw new Error(
-         `No se pudo vincular imágenes al informe (batch_id ${batch_id}).`
-       );
-   }
     if (batch_id) {
       const imgs = await HxImagenBalanzaModel.findAll({
         where: { batch_id },
         transaction: t
       });
-
       if (!imgs.length) {
         throw new Error(`No hay imágenes para batch_id ${batch_id}`);
       }
@@ -575,17 +550,22 @@ export async function POST_InformeFromOCR(req, res) {
         throw new Error(`El batch ${batch_id} pertenece a otro cliente.`);
       }
 
-      await HxImagenBalanzaModel.update(
+      const [affected] = await HxImagenBalanzaModel.update(
         { cliente_id: clienteRow.id, informe_id: informeRow.id },
         { where: { batch_id }, transaction: t }
       );
+      if (!affected) {
+        throw new Error(
+          `No se pudo vincular imágenes al informe (batch_id ${batch_id}).`
+        );
+      }
     } else {
+      // Fallback: tomar el último batch sin informe del cliente
       const lastImg = await HxImagenBalanzaModel.findOne({
         where: { cliente_id: clienteRow.id, informe_id: null },
         order: [['created_at', 'DESC']],
         transaction: t
       });
-
       if (lastImg?.batch_id) {
         await HxImagenBalanzaModel.update(
           { informe_id: informeRow.id },
@@ -634,7 +614,6 @@ export async function POST_InformeFromOCR(req, res) {
         });
 
         const { generateInformePDFBuffer } = await import('../utils/hx_pdf.js');
-
         const pdfBuffer = await generateInformePDFBuffer({
           cliente: clienteFull.toJSON(),
           informe: informeFull.toJSON(),
@@ -646,8 +625,6 @@ export async function POST_InformeFromOCR(req, res) {
 
         if (wantsPDFBase64) {
           const b64 = pdfBuffer.toString('base64');
-          const fecha =
-            informeFull.fecha || new Date().toISOString().slice(0, 10);
           const filename = getInformeFilename({
             informe: informeFull,
             cliente: clienteFull
@@ -668,28 +645,20 @@ export async function POST_InformeFromOCR(req, res) {
           });
         }
 
-        const fecha =
-          informeFull.fecha || new Date().toISOString().slice(0, 10);
+        // Guardar en disco y devolver URL pública
         const filename = getInformeFilename({
           informe: informeFull,
           cliente: clienteFull
         });
 
-        if (wantsPDFDownload) {
-          res.setHeader('Content-Type', 'application/pdf');
-          res.setHeader(
-            'Content-Disposition',
-            `attachment; filename="${filename}"`
-          );
-          res.setHeader('X-PDF-Filename', filename);
-          return res.end(pdfBuffer);
-        }
-
-        const saveDir = path.resolve('./exports');
+        // Usa un directorio absoluto configurable (mejor con PM2)
+        const saveDir = process.env.EXPORTS_DIR || '/root/proyect/exports';
         await ensureDir(saveDir);
         const savePath = path.join(saveDir, filename);
         await fs.writeFile(savePath, pdfBuffer);
 
+        // Asegurate de exponer este dir:
+        // app.use('/exports', express.static(process.env.EXPORTS_DIR || '/root/proyect/exports'));
         const publicUrl = `/exports/${filename}`;
 
         return res.json({
@@ -713,8 +682,7 @@ export async function POST_InformeFromOCR(req, res) {
           ok: false,
           code: 'PDF_ERROR',
           message: 'No se pudo generar/guardar el PDF',
-          detail:
-            process.env.NODE_ENV === 'production' ? undefined : err.message
+          detail: err.message
         });
       }
     }
@@ -728,7 +696,7 @@ export async function POST_InformeFromOCR(req, res) {
     }
 
     if (req.query?.open === '1') {
-      const fecha = fecha;
+      const fechaTitulo = fecha; // ← evita "const fecha = fecha;"
       const html = `<!doctype html>
 <html lang="es"><head>
   <meta charset="utf-8">
@@ -744,6 +712,7 @@ export async function POST_InformeFromOCR(req, res) {
       return res.end(html);
     }
 
+    // Respuesta JSON si no se pidió PDF
     return res.json({
       ok: true,
       idempotency_key: idempotency_key ?? null,

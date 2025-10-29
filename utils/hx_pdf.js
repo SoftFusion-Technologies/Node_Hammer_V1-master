@@ -180,7 +180,7 @@ function renderHTML({ cliente, informe, comidasRows }) {
       )} años</span></div>
       <div class="pair"><span class="label">Sexo:</span> <span class="value">${sexo}</span></div>
       <div class="pair"><span class="label">Altura:</span> <span class="value">${altura} m</span></div>
-      <div class="pair"><span class="label">Dni:</span> <span class="value">${dni} m</span></div>
+      <div class="pair"><span class="label">Dni:</span> <span class="value">${dni}</span></div>
     </div>
   </section>
 
@@ -191,7 +191,7 @@ function renderHTML({ cliente, informe, comidasRows }) {
       <tbody>
         ${row('Peso', `${fmtNum(informe.peso_kg)} kg`)}
         ${row(
-          'IMC',
+          'IMC (indice de masa corporal)',
           `${fmtNum(informe.imc)} ${
             informe.imc_categoria ? '(' + informe.imc_categoria + ')' : ''
           }`
@@ -200,7 +200,7 @@ function renderHTML({ cliente, informe, comidasRows }) {
           'Grasa corporal',
           `${fmtNum(informe.grasa_pct)} % – ${fmtNum(informe.grasa_kg)} kg`
         )}
-        ${row('Grasa visceral', `${fmtInt(informe.grasa_visceral)}`)}
+        ${row('Grasa visceral', `${fmtInt(informe.grasa_visceral)} kg`)}
         ${row(
           'Masa muscular esquelética',
           `${fmtNum(informe.masa_muscular_esqueletica_kg)} kg`
