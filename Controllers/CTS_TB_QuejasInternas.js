@@ -30,43 +30,68 @@ const toCanonical = (s = '') =>
     .toUpperCase()
     .trim();
 
+function getUserFromReq(req) {
+  const userLevel = (
+    req.query.userLevel ??
+    req.body?.userLevel ??
+    ''
+  ).toString();
+  const userName = (req.query.userName ?? req.body?.userName ?? '').toString();
+  return {
+    email: userName.trim().toLowerCase(),
+    levelCanon: toCanonical(userLevel)
+  };
+}
+
+function isCoordinator(levelCanon) {
+  return ['ADMIN', 'ADMINISTRADOR', 'GERENTE'].includes(levelCanon);
+}
 export const OBRS_Quejas_CTS = async (req, res) => {
   try {
-    // ✅ usa req.user si existe; si no, cae a headers enviados por el front
-    const email = req.user?.email || req.headers['x-user-email'] || '';
-    const level = req.user?.level || req.headers['x-user-level'] || '';
-    const sede = req.user?.sede || req.headers['x-user-sede'] || '';
+    const { email, levelCanon } = getUserFromReq(req);
+    if (!email || !levelCanon) {
+      return res
+        .status(400)
+        .json({ mensajeError: 'Faltan userName o userLevel.' });
+    }
 
-    const isCoordinator = ['ADMIN', 'ADMINISTRADOR', 'GERENTE'].includes(
-      toCanonical(level)
-    );
-    const sedeCanon = toCanonical(sede);
-    const qrKey = `QR-${sedeCanon}`;
-
-    const where = isCoordinator
-      ? {}
-      : {
-          [Op.or]: [{ cargado_por: email }, { cargado_por: qrKey }]
-        };
+    const where = isCoordinator(levelCanon) ? {} : { cargado_por: email };
 
     const registros = await QuejasInternasModel.findAll({
       where,
       order: [['created_at', 'DESC']]
     });
 
-    res.json(registros);
+    return res.json(registros);
   } catch (error) {
-    res.status(500).json({ mensajeError: error.message });
+    return res.status(500).json({ mensajeError: error.message });
   }
 };
 
-// Obtener una queja por ID
 export const OBR_Queja_CTS = async (req, res) => {
   try {
+    const { email, levelCanon } = getUserFromReq(req);
+    if (!email || !levelCanon) {
+      return res
+        .status(400)
+        .json({ mensajeError: 'Faltan userName o userLevel.' });
+    }
+
     const registro = await QuejasInternasModel.findByPk(req.params.id);
-    res.json(registro);
+    if (!registro)
+      return res.status(404).json({ mensajeError: 'No encontrado.' });
+
+    // Si no es admin/gerente, solo puede ver lo que cargó él
+    if (
+      !isCoordinator(levelCanon) &&
+      String(registro.cargado_por).toLowerCase() !== email
+    ) {
+      return res.status(403).json({ mensajeError: 'Sin permiso.' });
+    }
+
+    return res.json(registro);
   } catch (error) {
-    res.json({ mensajeError: error.message });
+    return res.status(500).json({ mensajeError: error.message });
   }
 };
 
