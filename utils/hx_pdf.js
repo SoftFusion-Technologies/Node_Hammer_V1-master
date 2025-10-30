@@ -12,8 +12,7 @@ const MEAL_ORDER = [
   'media_manana', // (Media mañana)
   'almuerzo',
   'merienda',
-  'cena',
-  'snack_nocturno'
+  'cena'
 ];
 
 // Normaliza “tipo” a claves del orden fijo
@@ -48,7 +47,6 @@ function tipoNice(t) {
     almuerzo: 'Almuerzo',
     merienda: 'Merienda',
     cena: 'Cena',
-    snack_nocturno: 'Snack nocturno',
     sin_tipo: '(Sin tipo)'
   };
   return map[t] || (t ? t.charAt(0).toUpperCase() + t.slice(1) : '(Sin tipo)');
