@@ -322,6 +322,7 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
 
       schedule[horarioKey] = {
         coach: coachUpper,
+        horarioId: horario.id,
         coachId: instructor?.id ?? null,
         alumnos,
       };
