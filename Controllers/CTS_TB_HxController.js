@@ -18,8 +18,8 @@ const uuid36 = yup
   .matches(
     /^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$/,
     'batch_id debe ser UUID'
-);
-  
+  );
+
 async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
 }
@@ -231,6 +231,10 @@ function extractInformesFields(content, opts = {}) {
   const puntaje_fisico_100 =
     pp.physical_score != null ? round0(pp.physical_score) : null;
 
+  const adj = pp.suggest_for_adjustments || {};
+  const ajuste_grasa_kg = toNumSafe(adj.fat_control);
+  const ajuste_musculo_kg = toNumSafe(adj.muscle_control);
+  const ajuste_peso_kg = toNumSafe(adj.weight_control);
   // Altura contextual del día (si viene Height en cm o m)
   const altura_m_from_content = cmToM(c.Height);
   const altura_m = altura_m_from_content ?? altura_m_fallback ?? null;
@@ -279,8 +283,12 @@ function extractInformesFields(content, opts = {}) {
     edad_metabolica_anios,
 
     // NUEVO:
-    puntaje_fisico_100 // ← se verá en el PDF como “82 /100”, por ej.
+    puntaje_fisico_100, // ← se verá en el PDF como “82 /100”, por ej.
     // Campos no modelados: soft_lean_mass, ffmi, waist_hip
+    // NUEVO: ajustes sugeridos en kg
+    ajuste_grasa_kg,
+    ajuste_musculo_kg,
+    ajuste_peso_kg
   };
 }
 

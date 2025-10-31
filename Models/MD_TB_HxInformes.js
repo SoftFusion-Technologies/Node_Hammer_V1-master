@@ -35,7 +35,7 @@ const HxInformeModel = db.define(
       references: { model: 'hx_clientes', key: 'id' }
     },
 
-        // Core
+    // Core
     fecha: {
       type: DataTypes.DATEONLY,
       allowNull: false
@@ -85,6 +85,9 @@ const HxInformeModel = db.define(
       allowNull: true
     },
     puntaje_fisico_100: { type: DataTypes.TINYINT.UNSIGNED, allowNull: true },
+    ajuste_grasa_kg: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
+    ajuste_musculo_kg: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
+    ajuste_peso_kg: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
 
     // Textos libres
     interpretacion: { type: DataTypes.TEXT, allowNull: true },
@@ -103,6 +106,5 @@ const HxInformeModel = db.define(
     ]
   }
 );
-
 
 export default HxInformeModel;

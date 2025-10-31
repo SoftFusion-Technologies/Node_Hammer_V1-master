@@ -227,6 +227,19 @@ function renderHTML({ cliente, informe, comidasRows }) {
       </tbody>
     </table>
   </section>
+  
+  <!-- Ajustes sugeridos (kg) -->
+<section class="section">
+  <div class="title"><span class="sq"></span>Ajustes sugeridos</div>
+  <table class="kv">
+    <tbody>
+      ${row('Grasa (control)', `${fmtNum(informe.ajuste_grasa_kg)} kg`)}
+      ${row('Músculo (control)', `${fmtNum(informe.ajuste_musculo_kg)} kg`)}
+      ${row('Peso (control)', `${fmtNum(informe.ajuste_peso_kg)} kg`)}
+    </tbody>
+  </table>
+</section>
+
 
   <!-- Interpretación -->
   <section class="section">
