@@ -346,6 +346,7 @@ import {
   OBR_InscripcionesPilates_CTS,
   CR_InscripcionesPilates_CTS,
   UR_InscripcionesPilates_CTS,
+  UR_CambiarTurnoInscripcion_CTS
 } from  '../Controllers/CTS_TB_InscripcionesPilates.js';
 
 import {
@@ -1053,6 +1054,7 @@ router.get('/inscripciones-pilates', OBRS_InscripcionesPilates_CTS);
 router.get('/inscripciones-pilates/:id', OBR_InscripcionesPilates_CTS);
 router.post('/inscripciones-pilates', CR_InscripcionesPilates_CTS);
 router.put('/inscripciones-pilates/:id', UR_InscripcionesPilates_CTS);
+router.patch('/inscripciones-pilates/cambiar-turno', UR_CambiarTurnoInscripcion_CTS);
 
 
 router.get('/lista-espera-pilates', OBRS_ListaEsperaPilates);

@@ -50,93 +50,7 @@ export const OBR_InscripcionesPilates_CTS = async (req, res) => {
   }
 };
 
-/**
- * Controlador: CR_InscripcionesPilates_CTS
- * Crea una nueva inscripción en la tabla inscripciones_pilates.
- *
- * Flujo:
- *  1. Valida que los campos requeridos estén presentes en el body.
- *  2. Busca el id del horario en la tabla horarios_pilates a partir de `dia` y `horario`.
- *  3. Si encuentra el horario, crea la inscripción asociando cliente y horario.
- *  4. Devuelve un JSON con la inscripción creada.
- *
- * Request Body esperado:
- *  {
- *    "id_cliente": number,        // ID del cliente a inscribir
- *    "dia": string,               // Día de la semana (ej: "Lunes")
- *    "horario": string,           // Hora en formato HH:mm (ej: "10:00")
- *    "fecha_inscripcion": string  // Fecha en formato YYYY-MM-DD
- *  }
- *
- * Respuestas:
- *  - 201: Inscripción creada con éxito.
- *  - 400: Algún campo requerido está ausente.
- *  - 404: No se encontró un horario válido para el día y hora indicados.
- *  - 500: Error interno del servidor (se incluye stack trace para debugging).
- */
-/* export const CR_InscripcionesPilates_CTS = async (req, res) => {
-  try {
-    const { id_cliente, dia, horario, fecha_inscripcion, id_sede } = req.body;
-
-    // 1) Validaciones iniciales
-    if (!id_cliente || !dia || !horario || !fecha_inscripcion || !id_sede) {
-      return res.status(400).json({
-        mensajeError:
-          "id_cliente, dia, horario y fecha_inscripcion son requeridos",
-      });
-    }
-
-    // 2) Preparar patrón para búsqueda flexible del día (ej: %Lunes%)
-    const diaPattern = `%${dia}%`;
-
-    // 3) Buscar el id del horario correspondiente en la tabla horarios_pilates
-    const horarioResult = await db.query(
-      `SELECT id 
-       FROM horarios_pilates
-       WHERE dia_semana LIKE :diaPattern
-         AND DATE_FORMAT(hora_inicio, '%H:%i') = :horario`,
-      {
-        replacements: {
-          diaPattern: diaPattern,
-          horario: horario,
-        },
-        type: db.QueryTypes.SELECT,
-      }
-    );
-
-    // Si no encuentra coincidencias, devuelve 404 con info de debugging
-    if (!horarioResult || horarioResult.length === 0) {
-      return res.status(404).json({
-        mensajeError: "No se encontró el horario con ese día y hora",
-        debug: { dia, horario, diaPattern },
-      });
-    }
-
-    // 4) Extraer id_horario encontrado
-    const id_horario = horarioResult[0].id;
-
-    // 5) Crear la inscripción en la tabla inscripciones_pilates
-    const nuevaInscripcion = await InscripcionesPilatesModel.create({
-      id_cliente,
-      id_horario,
-      fecha_inscripcion,
-    });
-
-    // 6) Respuesta exitosa
-    res.status(201).json({
-      message: "Inscripción creada correctamente",
-      inscripcion: nuevaInscripcion,
-    });
-  } catch (error) {
-    // Manejo centralizado de errores
-    console.error("Error completo:", error);
-    res.status(500).json({
-      mensajeError: error.message,
-      stack: error.stack, // incluir stack para debugging en desarrollo
-    });
-  }
-};
- */
+// Crear nueva inscripción
 export const CR_InscripcionesPilates_CTS = async (req, res) => {
   try {
     const { id_cliente, dia, horario, fecha_inscripcion, id_sede } = req.body;
@@ -244,17 +158,49 @@ export const UR_InscripcionesPilates_CTS = async (req, res) => {
   }
 };
 
-// controllers/InscripcionesPilatesController.js
-/* export const ER_InscripcionesByCliente_CTS = async (idCliente) => {
+// Actualizar el horario de una inscripción existente (Cambio de Turno)
+export const UR_CambiarTurnoInscripcion_CTS = async (req, res) => {
   try {
-    await InscripcionesPilatesModel.destroy({
-      where: { id_cliente: idCliente },
+    // 1. Obtenemos los datos que nos manda el frontend.
+    const { id_estudiante, id_horario_anterior, id_horario_nuevo } = req.body;
+
+    // 2. Verificamos que tengamos toda la información necesaria.
+    if (!id_estudiante || !id_horario_anterior || !id_horario_nuevo) {
+      return res.status(400).json({
+        mensajeError: "Faltan datos. Se requiere id_estudiante, id_horario_anterior y id_horario_nuevo."
+      });
+    }
+
+    // 3. Buscamos la inscripción específica del alumno en su horario anterior y la actualizamos.
+    const [numeroDeFilasActualizadas] = await InscripcionesPilatesModel.update(
+      { id_horario: id_horario_nuevo }, // El campo que queremos cambiar
+      {
+        where: {
+          id_cliente: id_estudiante,       // Condición 1: Que coincida el ID del alumno
+          id_horario: id_horario_anterior  // Condición 2: Que coincida el ID del horario viejo
+        }
+      }
+    );
+
+    // 4. Comprobamos si la actualización se realizó con éxito.
+    if (numeroDeFilasActualizadas === 0) {
+      // Si es 0, significa que no se encontró ninguna inscripción que cumpla las condiciones.
+      return res.status(404).json({
+        mensajeError: "No se encontró la inscripción del alumno en el horario anterior. No se realizó ningún cambio."
+      });
+    }
+
+    // 5. Si todo salió bien, enviamos una respuesta de éxito.
+    res.status(200).json({
+      message: "¡Cambio de turno realizado con éxito!"
     });
-    
+
   } catch (error) {
-    throw new Error("Error al eliminar inscripciones: " + error.message);
+    // En caso de cualquier otro error, lo capturamos y lo mostramos.
+    console.error("Error al cambiar el turno:", error);
+    res.status(500).json({ mensajeError: error.message });
   }
-}; */
+};
 
 export const ER_InscripcionesByCliente_CTS = async (idCliente) => {
   try {
