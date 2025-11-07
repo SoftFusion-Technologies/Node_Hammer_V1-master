@@ -1,25 +1,19 @@
 /*
- * Programador: [Tu nombre]
- * Fecha Creación: [Fecha actual]
+ * Programador: Sergio Gustavo Manrique
+ * Fecha Creación: 23/10/2025
  * Versión: 1.0
  *
  * Descripción:
- * Este archivo contiene controladores para manejar operaciones CRUD en el modelo InscripcionesPilates.
- *
- * Tema: Controladores - Inscripciones Pilates
+ * Este archivo contiene controladores para gestionar el registro de alumnos
+ * (inscripciones) en los diferentes horarios de clase, incluyendo la
+ * creación de asistencias automáticas si el plan inicia hoy.
  *
  * Capa: Backend
- *
- * Nomenclatura: OBR_ obtenerRegistro
- *               OBRS_obtenerRegistros(plural)
- *               CR_ crearRegistro
- *               ER_ eliminarRegistro
- *               UR_ actualizarRegistro
  */
 
 import db from "../DataBase/db.js";
-import InscripcionesPilatesModel from '../Models/MD_TB_InscripcionesPilates.js';
-import AsistenciasPilatesModel from '../Models/MD_TB_AsistenciasPilates.js';
+import InscripcionesPilatesModel from "../Models/MD_TB_InscripcionesPilates.js";
+import AsistenciasPilatesModel from "../Models/MD_TB_AsistenciasPilates.js";
 import ClientesPilatesModel from "../Models/MD_TB_ClientesPilates.js";
 const AsistenciasModel = AsistenciasPilatesModel.AsistenciasPilatesModel;
 
@@ -58,7 +52,8 @@ export const CR_InscripcionesPilates_CTS = async (req, res) => {
     // Validaciones básicas
     if (!id_cliente || !dia || !horario || !fecha_inscripcion || !id_sede) {
       return res.status(400).json({
-        mensajeError: "id_cliente, dia, horario, fecha_inscripcion e id_sede son requeridos",
+        mensajeError:
+          "id_cliente, dia, horario, fecha_inscripcion e id_sede son requeridos",
       });
     }
 
@@ -107,7 +102,9 @@ export const CR_InscripcionesPilates_CTS = async (req, res) => {
         fecha: hoy,
         presente: false, // Por defecto, se crea como ausente
       });
-      console.log(`[Asistencia Automática] Creado registro de ausente para el nuevo cliente ID: ${id_cliente}`);
+      console.log(
+        `[Asistencia Automática] Creado registro de ausente para el nuevo cliente ID: ${id_cliente}`
+      );
     }
 
     res.status(201).json({
@@ -122,8 +119,6 @@ export const CR_InscripcionesPilates_CTS = async (req, res) => {
     });
   }
 };
-
-
 
 // Actualizar inscripción
 export const UR_InscripcionesPilates_CTS = async (req, res) => {
@@ -167,7 +162,8 @@ export const UR_CambiarTurnoInscripcion_CTS = async (req, res) => {
     // 2. Verificamos que tengamos toda la información necesaria.
     if (!id_estudiante || !id_horario_anterior || !id_horario_nuevo) {
       return res.status(400).json({
-        mensajeError: "Faltan datos. Se requiere id_estudiante, id_horario_anterior y id_horario_nuevo."
+        mensajeError:
+          "Faltan datos. Se requiere id_estudiante, id_horario_anterior y id_horario_nuevo.",
       });
     }
 
@@ -176,9 +172,9 @@ export const UR_CambiarTurnoInscripcion_CTS = async (req, res) => {
       { id_horario: id_horario_nuevo }, // El campo que queremos cambiar
       {
         where: {
-          id_cliente: id_estudiante,       // Condición 1: Que coincida el ID del alumno
-          id_horario: id_horario_anterior  // Condición 2: Que coincida el ID del horario viejo
-        }
+          id_cliente: id_estudiante, // Condición 1: Que coincida el ID del alumno
+          id_horario: id_horario_anterior, // Condición 2: Que coincida el ID del horario viejo
+        },
       }
     );
 
@@ -186,15 +182,15 @@ export const UR_CambiarTurnoInscripcion_CTS = async (req, res) => {
     if (numeroDeFilasActualizadas === 0) {
       // Si es 0, significa que no se encontró ninguna inscripción que cumpla las condiciones.
       return res.status(404).json({
-        mensajeError: "No se encontró la inscripción del alumno en el horario anterior. No se realizó ningún cambio."
+        mensajeError:
+          "No se encontró la inscripción del alumno en el horario anterior. No se realizó ningún cambio.",
       });
     }
 
     // 5. Si todo salió bien, enviamos una respuesta de éxito.
     res.status(200).json({
-      message: "¡Cambio de turno realizado con éxito!"
+      message: "¡Cambio de turno realizado con éxito!",
     });
-
   } catch (error) {
     // En caso de cualquier otro error, lo capturamos y lo mostramos.
     console.error("Error al cambiar el turno:", error);

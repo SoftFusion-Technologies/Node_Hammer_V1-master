@@ -1,7 +1,8 @@
 /*
- * Programador: Benjamin Orellana
+ * Programador: Sergio Gustavo Manrique
  * Fecha Creación: 19/09/2025
- * Versión: 1.0
+ * Ultima Modificación: 07/11/2025
+ * Versión: 1.1
  *
  * Descripción:
  * Controlador para la tabla asistencias_pilates.
@@ -64,6 +65,7 @@ export const OBRS_AsistenciasFormato_CTS = async (req, res) => {
   }
 };
 
+// Genera un reporte que muestra si los clientes en estado 'Clase de prueba' asistieron o no a su fecha de prueba.
 export const OBRS_ReporteAsistenciaPrueba_CTS = async (req, res) => {
   try {
     const hoy = new Date().toISOString().slice(0, 10); // Fecha de hoy en formato 'YYYY-MM-DD'
@@ -117,6 +119,7 @@ export const OBRS_ReporteAsistenciaPrueba_CTS = async (req, res) => {
   }
 };
 
+// Actualiza el estado de 'presente' (true/false) de un cliente para una fecha determinada en la tabla de asistencias.
 export const UR_AsistenciaCliente_CTS = async (req, res) => {
   try {
     const { id_cliente, fecha, presente } = req.body;
@@ -166,11 +169,11 @@ export const UR_AsistenciaCliente_CTS = async (req, res) => {
 
 // En CTS_TB_AsistenciasPilates.js
 
+// [CRON JOB] Crea automáticamente registros de asistencia como 'ausente' (false) para todos los alumnos que tienen clase hoy y cuyo plan ya comenzó.
 export const crearAsistenciasDiariasAusentes = async () => {
   // 1. OBTENEMOS LA FECHA Y DÍA ACTUAL DINÁMICAMENTE
   const fechaActual = new Date();
-  /*   const hoy = fechaActual.toISOString().slice(0, 10); */
-  const hoy = "2025-10-17";
+  const hoy = fechaActual.toISOString().slice(0, 10);
   const diasSemana = [
     "domingo",
     "lunes",
@@ -288,6 +291,7 @@ export const crearAsistenciasDiariasAusentes = async () => {
  * GET /asistencias-pilates/ausencias-mensuales?id_sede=X&fecha=YYYY-MM-DD
  * Devuelve los alumnos de una sede con sus ausencias del mes correspondiente a la fecha
  */
+// Obtiene una lista de clientes de una sede y cuenta el total de sus ausencias registradas durante el mes de la fecha indicada.
 export const OBRS_AusenciasMensualesPorSede_CTS = async (req, res) => {
   try {
     const { id_sede, fecha } = req.query;
@@ -445,6 +449,7 @@ export const OBRS_AusenciasMensualesPorSede_CTS = async (req, res) => {
 /**
  * [DEBUG] Endpoint para disparar manualmente la creación de asistencias diarias.
  */
+// Endpoint para forzar la ejecución manual de la función 'crearAsistenciasDiariasAusentes' (uso en desarrollo/prueba).
 export const DEBUG_DispararCreacionAsistencias_CTS = async (req, res) => {
   try {
     console.log(

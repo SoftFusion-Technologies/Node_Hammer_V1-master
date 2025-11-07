@@ -1,3 +1,19 @@
+/*
+ * Programador: Sergio Gustavo Manrique
+ * Fecha Creación: 23/10/2025
+ * Versión: 1.0
+ *
+ * Descripción:
+ * Este archivo contiene los controladores para gestionar la Lista de Espera de
+ * Pilates. Incluye las operaciones CRUD y la lógica para filtrar, ordenar
+ * por prioridad y adjuntar los registros de seguimiento (contactos)
+ * con el nombre del usuario que los cargó.
+ *
+ * Tema: Controladores - Lista de Espera Pilates
+ *
+ * Capa: Backend
+ */
+
 import ListaEsperaPilates from "../Models/MD_TB_ListaEsperaPilates.js";
 import ContactosListaEsperaPilatesModel from "../Models/MD_TB_ContactosListaEsperaPilates.js";
 import UsersModel from "../Models/MD_TB_Users.js";
@@ -39,7 +55,7 @@ export const OBRS_ListaEsperaPilates = async (req, res) => {
     });
 
     const listaIds = lista.map((l) => l.id);
-    
+
     // --> LA CORRECCIÓN EMPIEZA AQUÍ <--
 
     // 2. Declaramos las variables fuera del 'if' para que estén disponibles en toda la función
@@ -56,7 +72,9 @@ export const OBRS_ListaEsperaPilates = async (req, res) => {
       // 3. Recolectamos TODOS los IDs de usuario necesarios en un solo paso
       const contactUserIds = contactos.map((c) => c.id_usuario_contacto);
       const mainListUserIds = lista.map((l) => l.id_usuario_cargado);
-      const allUserIds = Array.from(new Set([...contactUserIds, ...mainListUserIds])).filter(Boolean);
+      const allUserIds = Array.from(
+        new Set([...contactUserIds, ...mainListUserIds])
+      ).filter(Boolean);
 
       // 4. Creamos el mapa de usuarios (ID -> Nombre) con una sola consulta
       if (allUserIds.length > 0) {
@@ -75,7 +93,8 @@ export const OBRS_ListaEsperaPilates = async (req, res) => {
         const contactoPlain = c.get({ plain: true });
         const key = contactoPlain.id_lista_espera;
         if (!acc[key]) acc[key] = [];
-        contactoPlain.nombre_usuario_contacto = usersMap[contactoPlain.id_usuario_contacto] || "N/D";
+        contactoPlain.nombre_usuario_contacto =
+          usersMap[contactoPlain.id_usuario_contacto] || "N/D";
         acc[key].push(contactoPlain);
         return acc;
       }, {});
@@ -84,11 +103,12 @@ export const OBRS_ListaEsperaPilates = async (req, res) => {
     // 6. Mapeamos la respuesta final, reemplazando 'id_usuario_cargado' por su nombre
     const listaConContactos = lista.map((item) => {
       const plainItem = item.get({ plain: true });
-      
+
       const resultado = {
         ...plainItem,
         // Usamos el 'usersMap' que ahora sí está disponible
-        nombre_usuario_cargado: usersMap[plainItem.id_usuario_cargado].toUpperCase() || "N/D",
+        nombre_usuario_cargado:
+          usersMap[plainItem.id_usuario_cargado].toUpperCase() || "N/D",
         // Adjuntamos los contactos si existen
         contacto_cliente: contactosPorLista[plainItem.id] || [],
       };
@@ -98,7 +118,7 @@ export const OBRS_ListaEsperaPilates = async (req, res) => {
 
       return resultado;
     });
-    
+
     // --> LA CORRECCIÓN TERMINA AQUÍ <--
 
     res.json(listaConContactos);
@@ -176,7 +196,9 @@ export const CR_ListaEsperaPilates = async (req, res) => {
     if (!id_usuario_cargado || !/^\d+$/.test(id_usuario_cargado.toString())) {
       return res
         .status(400)
-        .json({ error: "id_usuario_cargado es obligatorio y debe ser numérico." });
+        .json({
+          error: "id_usuario_cargado es obligatorio y debe ser numérico.",
+        });
     }
 
     // Crear DTO limpio

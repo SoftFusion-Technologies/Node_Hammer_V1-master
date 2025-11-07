@@ -1,20 +1,12 @@
 /*
- * Programador: [Tu nombre]
- * Fecha Creación: [Fecha actual]
+ * Programador: Sergio Gustavo Manrique
+ * Fecha Creación: 23/10/2025
  * Versión: 1.0
  *
- * Descripción:
- * Este archivo (CTS_TB_HorariosPilates.js) contiene controladores para manejar operaciones CRUD en el modelo HorariosPilates.
- *
- * Tema: Controladores - Horarios Pilates
- *
- * Capa: Backend
- *
- * Nomenclatura: OBR_ obtenerRegistro
- *               OBRS_obtenerRegistros(plural)
- *               CR_ crearRegistro
- *               ER_ eliminarRegistro
- *               UR_ actualizarRegistro
+* Descripción:
+ * Este archivo maneja la lógica para obtener, crear, actualizar y eliminar
+ * los horarios de clase de Pilates, incluyendo validación de conflictos
+ * de instructores y filtrado por sede/día.
  */
 
 import MD_TB_HorariosPilates from "../Models/MD_TB_HorariosPilates.js";

@@ -1,3 +1,16 @@
+/*
+ * Programador: Sergio Gustavo Manrique
+ * Fecha Creación: 23/10/2025
+ * Versión: 1.0
+ *
+ * Descripción:
+ * Este archivo contiene los controladores para gestionar los registros de
+ * contacto (seguimiento) que se realizan a los potenciales clientes
+ * de la tabla 'Lista de Espera'.
+ *
+ * Tema: Controladores - Contactos Lista de Espera Pilates
+ * Capa: Backend
+ */
 import ContactosListaEsperaPilatesModel from "../Models/MD_TB_ContactosListaEsperaPilates.js";
 
 // Crear un nuevo contacto en la lista de espera

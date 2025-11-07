@@ -1,5 +1,5 @@
 /*
- * Programador: [Tu nombre]
+ * Programador: Sergio Gustavo Manrique
  * Fecha Creación: 23/10/2025
  * Versión: 1.0
  *
