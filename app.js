@@ -3689,57 +3689,89 @@ function cleanFileName(filename) {
 
 app.post(
   '/upload-dashboard-image',
-  multerUpload.single('file'),
+  multerUpload.single('file'), // 'file' es la imagen principal (ej: "PROMOS MES DE JUNIO")
   async (req, res) => {
-    const { titulo, descripcion, orden } = req.body;
-    let file = req.file;
+    // AHORA RECIBIMOS EL TIPO DESDE EL FRONTEND
+    const { titulo, descripcion, orden, tipo } = req.body;
+    const file = req.file;
 
+    // El archivo (imagen de título) es obligatorio en ambos casos
     if (!file) {
-      return res.status(400).json({ message: 'Archivo no proporcionado' });
+      return res.status(400).json({ message: 'La imagen principal es obligatoria' });
+    }
+    
+    // Validar que el tipo sea uno de los valores esperados
+    const tipoValido = tipo === 'IMAGEN_SIMPLE' || tipo === 'GRUPO_PROMOCION';
+    if (!tipo || !tipoValido) {
+      return res.status(400).json({ message: 'Tipo de elemento no válido.' });
     }
 
-    // --- LIMPIEZA DE NOMBRE ---
+    // --- LIMPIEZA DE NOMBRE (Tu lógica actual) ---
     const ext = path.extname(file.originalname);
     const base = path.basename(file.originalname, ext);
     const safeBase = cleanFileName(base);
     const uniqueName = `${safeBase}-${Date.now()}${ext}`;
     const finalPath = path.join('uploads', uniqueName);
 
-    // Mover/renombrar el archivo (si el nombre cambia)
     await fs.promises.rename(file.path, finalPath);
 
     try {
-      // Insertá en la tabla
+      // Insertá en la tabla (ahora con la columna 'tipo')
       await pool.query(
-        `INSERT INTO imagenes_dashboard (titulo, descripcion, url, orden, activo) VALUES (?, ?, ?, ?, 1)`,
+        `INSERT INTO imagenes_dashboard (titulo, tipo, descripcion, url, orden, activo) 
+         VALUES (?, ?, ?, ?, ?, 1)`,
         [
           titulo || null,
+          tipo, // La nueva columna
           descripcion || null,
-          `uploads/${uniqueName}`,
+          `uploads/${uniqueName}`, // La URL de la imagen principal
           orden || 1
         ]
       );
 
       res.status(200).json({
-        message: 'Imagen de dashboard subida y guardada correctamente.',
+        message: 'Elemento de dashboard subido y guardado correctamente.',
         url: `uploads/${uniqueName}`,
         nombre: uniqueName
       });
     } catch (error) {
       console.error(error);
-      res.status(500).json({ message: 'Error al guardar la imagen.' });
+      res.status(500).json({ message: 'Error al guardar el elemento.' });
     }
   }
 );
 
-app.get('/dashboard-images', async (req, res) => {
+app.get("/dashboard-images", async (req, res) => {
   try {
-    const [imagenes] = await pool.query(
-      'SELECT * FROM imagenes_dashboard WHERE activo = 1 ORDER BY orden ASC, id ASC'
+    // 1. Traemos los elementos "Padre" (de tu tabla 'imagenes_dashboard')
+    const [elementos] = await pool.query(
+      "SELECT * FROM imagenes_dashboard WHERE activo = 1 ORDER BY orden ASC, id ASC"
     );
-    res.json(imagenes);
+
+    // 2. Iteramos y buscamos los "Hijos" (las tarjetitas)
+    const elementosCompletos = await Promise.all(
+      elementos.map(async (elemento) => {
+        // SI el tipo es GRUPO_PROMOCION, buscamos sus tarjetas
+        if (elemento.tipo === "GRUPO_PROMOCION") {
+          const [tarjetas] = await pool.query(
+            `SELECT * FROM promocion_tarjetas 
+             WHERE elemento_id = ? AND activo = 1 
+             ORDER BY orden ASC`,
+            [elemento.id]
+          );
+          // Devolvemos el elemento con su array de 'tarjetas' anidado
+          return { ...elemento, tarjetas: tarjetas };
+        } else {
+          // Si es una imagen simple, solo le agregamos un array vacío
+          return { ...elemento, tarjetas: [] };
+        }
+      })
+    );
+
+    res.json(elementosCompletos);
   } catch (e) {
-    res.status(500).json({ error: 'Error trayendo imágenes' });
+    console.error("Error trayendo elementos del dashboard:", e);
+    res.status(500).json({ error: "Error trayendo elementos del dashboard" });
   }
 });
 
@@ -3753,6 +3785,132 @@ app.delete('/dashboard-images/:id', async (req, res) => {
     res.status(500).json({ error: 'Error eliminando imagen' });
   }
 });
+
+
+
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+/* COMIENZO DE CODIGO HECHO POR SERGIO MANRIQUE */
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+
+app.post(
+  '/promocion-tarjetas',
+  // Usamos .fields() para aceptar DOS archivos con nombres diferentes
+  multerUpload.fields([
+    { name: 'imagen_tarjeta', maxCount: 1 }, // El .jpg de la tarjetita
+    { name: 'instructivo', maxCount: 1 }     // El PDF o .jpg del instructivo
+  ]),
+  async (req, res) => {
+    const { elemento_id, orden } = req.body; // El ID del grupo padre
+    const tarjetaFile = req.files?.['imagen_tarjeta']?.[0];
+    const instructivoFile = req.files?.['instructivo']?.[0];
+
+    if (!elemento_id || !tarjetaFile) {
+      return res.status(400).json({ message: 'Falta el ID del elemento o la imagen de la tarjeta.' });
+    }
+
+    // Función helper para guardar archivos (la usaremos dos veces)
+    const guardarArchivo = async (file) => {
+      const ext = path.extname(file.originalname);
+      const base = path.basename(file.originalname, ext);
+      const safeBase = cleanFileName(base);
+      const uniqueName = `${safeBase}-${Date.now()}${ext}`;
+      // ¡Guardamos en carpetas separadas para ordenar!
+      const subfolder = file.mimetype.includes('pdf') ? 'instructivos' : 'tarjetas';
+      const finalPath = path.join('uploads', subfolder, uniqueName);
+      
+      // Asegurarse que la subcarpeta exista
+      await fs.promises.mkdir(path.join('uploads', subfolder), { recursive: true });
+      
+      await fs.promises.rename(file.path, finalPath);
+      return `uploads/${subfolder}/${uniqueName}`;
+    };
+
+    try {
+      // Guardar la imagen de la tarjetita (obligatoria)
+      const tarjetaUrl = await guardarArchivo(tarjetaFile);
+      
+      // Guardar el instructivo (opcional)
+      let instructivoUrl = null;
+      if (instructivoFile) {
+        instructivoUrl = await guardarArchivo(instructivoFile);
+      }
+
+      // Insertar en la nueva tabla 'promocion_tarjetas'
+      await pool.query(
+        `INSERT INTO promocion_tarjetas (elemento_id, imagen_tarjeta_url, instructivo_url, orden, activo) 
+         VALUES (?, ?, ?, ?, 1)`,
+        [elemento_id, tarjetaUrl, instructivoUrl, orden || 1]
+      );
+
+      res.status(200).json({ message: 'Tarjeta de promoción subida correctamente.' });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Error al guardar la tarjetita.' });
+    }
+  }
+);
+
+// 2. ELIMINAR una tarjetita específica (Soft Delete)
+app.delete('/promocion-tarjetas/:id', async (req, res) => {
+  try {
+    await pool.query('UPDATE promocion_tarjetas SET activo = 0 WHERE id = ?', [
+      req.params.id
+    ]);
+    res.json({ ok: true, message: 'Tarjeta eliminada' });
+  } catch (e) {
+    res.status(500).json({ error: 'Error eliminando la tarjeta' });
+  }
+});
+
+// 3. ACTUALIZAR solo el instructivo de una tarjetita
+app.put(
+  '/promocion-tarjetas/:id/instructivo',
+  multerUpload.single('instructivo'), // Solo acepta el archivo de instructivo
+  async (req, res) => {
+    const { id } = req.params;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ message: 'Archivo de instructivo no proporcionado' });
+    }
+
+    // (Usamos la misma función helper de arriba para guardar)
+    const guardarArchivo = async (file) => {
+      const ext = path.extname(file.originalname);
+      const base = path.basename(file.originalname, ext);
+      const safeBase = cleanFileName(base);
+      const uniqueName = `${safeBase}-${Date.now()}${ext}`;
+      const subfolder = 'instructivos';
+      const finalPath = path.join('uploads', subfolder, uniqueName);
+      await fs.promises.mkdir(path.join('uploads', subfolder), { recursive: true });
+      await fs.promises.rename(file.path, finalPath);
+      return `uploads/${subfolder}/${uniqueName}`;
+    };
+
+    try {
+      const instructivoUrl = await guardarArchivo(file);
+
+      // Actualizamos solo el instructivo
+      await pool.query(
+        'UPDATE promocion_tarjetas SET instructivo_url = ? WHERE id = ?',
+        [instructivoUrl, id]
+      );
+      res.json({ message: 'Instructivo actualizado correctamente.' });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: 'Error actualizando instructivo' });
+    }
+  }
+);
+
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+/* FIN DE CODIGO HECHO POR SERGIO MANRIQUE */
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+
 
 app.get('/stats-ventas', async (req, res) => {
   try {
@@ -4276,6 +4434,156 @@ if (!PORT) {
   console.error('El puerto no está definido en el archivo de configuración.');
   process.exit(1);
 }
+
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+/* COMIENZO DE CODIGO HECHO POR SERGIO MANRIQUE */
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * Función helper para borrar un archivo del disco de forma segura.
+ * No frena el script si el archivo ya no existe (ENOENT).
+ */
+const safeUnlink = async (filePath) => {
+  // Ignorar si la URL es nula o vacía (ej: un instructivo opcional)
+  if (!filePath) return; 
+
+  try {
+    // Construimos la ruta absoluta al archivo
+    const fullPath = path.join(CURRENT_DIR, filePath);
+    
+    await fs.promises.unlink(fullPath);
+    console.log(`[CRON LIMPIEZA] Archivo físico eliminado: ${fullPath}`);
+  } catch (error) {
+    // Si el archivo no existe, lo ignoramos (es el estado deseado)
+    if (error.code === 'ENOENT') {
+      console.warn(`[CRON LIMPIEZA] Archivo no encontrado (ignorado): ${filePath}`);
+    } else {
+      // Si es otro error (ej: permisos), lo logueamos pero no frenamos el cron
+      console.error(`[CRON LIMPIEZA] Error al borrar archivo ${filePath}:`, error.message);
+    }
+  }
+};
+
+/**
+ * Lógica principal del Cron Job.
+ * Ejecuta la limpieza de 2 fases para evitar archivos huérfanos.
+ */
+const limpiarImagenesInactivas = async () => {
+  console.log('[CRON LIMPIEZA] 🚀 Iniciando limpieza de imágenes inactivas...');
+  let archivosABorrar = [];
+
+  try {
+    // --- FASE 1: Limpiar "Hijos" (Tarjetitas) marcadas como inactivas ---
+    console.log('[CRON LIMPIEZA] Fase 1: Buscando tarjetitas inactivas (activo = 0)...');
+    
+    const [tarjetasInactivas] = await pool.query(
+      `SELECT id, imagen_tarjeta_url, instructivo_url FROM promocion_tarjetas WHERE activo = 0`
+    );
+
+    if (tarjetasInactivas.length > 0) {
+      console.log(`[CRON LIMPIEZA] Fase 1: ${tarjetasInactivas.length} tarjetitas inactivas encontradas.`);
+      for (const tarjeta of tarjetasInactivas) {
+        archivosABorrar.push(tarjeta.imagen_tarjeta_url);
+        archivosABorrar.push(tarjeta.instructivo_url);
+      }
+    } else {
+      console.log('[CRON LIMPIEZA] Fase 1: No hay tarjetitas inactivas.');
+    }
+
+    // --- FASE 2: Limpiar "Padres" (Grupos/Imágenes) inactivos ---
+    console.log('[CRON LIMPIEZA] Fase 2: Buscando elementos "Padre" inactivos (activo = 0)...');
+    
+    const [padresInactivos] = await pool.query(
+      `SELECT id, url FROM imagenes_dashboard WHERE activo = 0`
+    );
+
+    if (padresInactivos.length > 0) {
+      console.log(`[CRON LIMPIEZA] Fase 2: ${padresInactivos.length} elementos padre inactivos encontrados.`);
+      
+      const idsPadresInactivos = padresInactivos.map(p => {
+        archivosABorrar.push(p.url); // Añadir la imagen principal del grupo
+        return p.id;
+      });
+
+      // ¡Paso Clave! Buscar todos los archivos de los hijos que se borrarán en CASCADA
+      const [hijosDePadresInactivos] = await pool.query(
+        `SELECT imagen_tarjeta_url, instructivo_url 
+         FROM promocion_tarjetas 
+         WHERE elemento_id IN (?)`, // MySQL 'IN' acepta un array
+        [idsPadresInactivos]
+      );
+
+      if (hijosDePadresInactivos.length > 0) {
+        console.log(`[CRON LIMPIEZA] Fase 2: ${hijosDePadresInactivos.length} archivos "Hijo" (de padres inactivos) también se borrarán.`);
+        for (const hijo of hijosDePadresInactivos) {
+          archivosABorrar.push(hijo.imagen_tarjeta_url);
+          archivosABorrar.push(hijo.instructivo_url);
+        }
+      }
+
+    } else {
+       console.log('[CRON LIMPIEZA] Fase 2: No hay elementos padre inactivos.');
+    }
+
+    // --- FASE 3: Borrado Físico de Archivos ---
+    // Filtramos nulos/vacíos y duplicados
+    const archivosUnicos = [...new Set(archivosABorrar.filter(url => url))];
+    
+    if (archivosUnicos.length > 0) {
+        console.log(`[CRON LIMPIEZA] Fase 3: Total de ${archivosUnicos.length} archivos únicos a eliminar del disco...`);
+        // Usamos Promise.all para borrarlos en paralelo
+        await Promise.all(archivosUnicos.map(safeUnlink));
+        console.log('[CRON LIMPIEZA] Fase 3: Borrado de archivos físicos completado.');
+    } else {
+        console.log('[CRON LIMPIEZA] Fase 3: No hay archivos físicos para borrar.');
+    }
+    
+    // --- FASE 4: Borrado Lógico (Base de Datos) ---
+    // (Hacemos esto SIEMPRE al final)
+    
+    if (tarjetasInactivas.length > 0) {
+      // Borrado "Hard Delete" de las tarjetitas inactivas (Fase 1)
+      await pool.query(`DELETE FROM promocion_tarjetas WHERE activo = 0`);
+      console.log(`[CRON LIMPIEZA] Fase 4: ${tarjetasInactivas.length} registros de tarjetitas (activo=0) eliminados de la DB.`);
+    }
+
+    if (padresInactivos.length > 0) {
+      // Borrado "Hard Delete" de los padres (Fase 2)
+      // ON DELETE CASCADE se encargará de los hijos en la DB.
+      await pool.query(`DELETE FROM imagenes_dashboard WHERE activo = 0`);
+      console.log(`[CRON LIMPIEZA] Fase 4: ${padresInactivos.length} registros de elementos padre (activo=0) eliminados de la DB.`);
+    }
+
+    console.log('[CRON LIMPIEZA] ✅ Limpieza completada exitosamente.');
+
+  } catch (error) {
+    // Capturamos cualquier error grave del proceso
+    console.error('[CRON LIMPIEZA] ❌ Ha ocurrido un error grave durante la limpieza:', error);
+  }
+};
+
+/**
+ * Programar la tarea para que se ejecute el día 1 de cada mes a las 4:00 AM.
+ * ('0 4 1 * *' = Minuto 0, Hora 4, Día 1 del mes, Cualquier mes, Cualquier día de la semana)
+ */
+cron.schedule('0 4 1 * *', () => {
+  console.log('[CRON] Ejecutando limpieza mensual de imágenes inactivas...');
+  limpiarImagenesInactivas();
+}, {
+  scheduled: true,
+  timezone: "America/Argentina/Buenos_Aires"
+});
+
+
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+/* FIN DE CODIGO HECHO POR SERGIO MANRIQUE */
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+
+
 
 app.listen(PORT, () => {
   console.log(`Servidor escuchando en el puerto ${PORT}`);
