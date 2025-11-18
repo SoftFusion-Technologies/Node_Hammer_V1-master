@@ -38,9 +38,7 @@ export const OBR_AuditoriaPorCliente_CTS = async (req, res) => {
     });
 
     if (!auditoria) {
-      return res
-        .status(404)
-        .json({ mensajeError: "No se encontraron registros de auditoría para este cliente." });
+      return res.status(200).json(null);
     }
 
     // Formateamos la respuesta para que sea amigable para el frontend.
