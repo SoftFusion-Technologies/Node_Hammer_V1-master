@@ -39,7 +39,7 @@ const QuejasInternasModel = db.define(
       allowNull: false
     },
     tipo_usuario: {
-      type: DataTypes.ENUM('socio', 'colaborador', 'cliente'),
+      type: DataTypes.ENUM('socio', 'colaborador', 'cliente', 'prospecto','nuevo'),
       allowNull: false
     },
     contacto: {
