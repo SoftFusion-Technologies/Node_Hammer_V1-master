@@ -17,6 +17,7 @@
 
 // Importa el modelo
 import MD_TB_QuejasInternas from '../Models/MD_TB_QuejasInternas.js';
+import QuejasPilatesModel from '../Models/MD_TB_QuejasPilates.js';
 import NotificationModel from '../Models/MD_TB_Notifications.js';
 import { Op } from 'sequelize';
 
@@ -46,6 +47,7 @@ function getUserFromReq(req) {
 function isCoordinator(levelCanon) {
   return ['ADMIN', 'ADMINISTRADOR', 'GERENTE'].includes(levelCanon);
 }
+
 export const OBRS_Quejas_CTS = async (req, res) => {
   try {
     const { email, levelCanon } = getUserFromReq(req);
@@ -55,15 +57,54 @@ export const OBRS_Quejas_CTS = async (req, res) => {
         .json({ mensajeError: 'Faltan userName o userLevel.' });
     }
 
-    const where = isCoordinator(levelCanon) ? {} : { cargado_por: email };
+    // Filtro de permisos: Si es coordinador ve todo, si no, solo lo suyo
+    const whereClause = isCoordinator(levelCanon) ? {} : { cargado_por: email };
 
-    const registros = await QuejasInternasModel.findAll({
-      where,
-      order: [['created_at', 'DESC']]
+    // 1. Ejecutamos ambas consultas en paralelo (Promise.all es más rápido)
+    const [registrosInternos, registrosPilates] = await Promise.all([
+      QuejasInternasModel.findAll({
+        where: whereClause,
+        raw: true, // Traemos objetos planos para poder modificarlos fácil
+      }),
+      QuejasPilatesModel.findAll({
+        where: whereClause,
+        raw: true,
+      })
+    ]);
+
+    // 2. Procesamos y etiquetamos GIMNASIO
+    const internasMarcadas = registrosInternos.map(q => ({
+      ...q,
+      origen: 'GIMNASIO',     // Etiqueta para el frontend (Badge)
+      es_pilates: false,      // Flag lógico
+      tabla_origen: 'interna' // Útil si necesitas saber a qué endpoint llamar para borrar/editar
+    }));
+
+    // 3. Procesamos y etiquetamos PILATES
+    const pilatesMarcadas = registrosPilates.map(q => ({
+      ...q,
+      origen: 'PILATES',
+      es_pilates: true,
+      tabla_origen: 'pilates',
+      tipo_usuario: 'cliente pilates', 
+      creado_desde_qr: 0 
+    }));
+
+    // 4. UNIFICAMOS ambas listas
+    const listaUnificada = [...internasMarcadas, ...pilatesMarcadas];
+
+    // 5. ORDENAMOS cronológicamente (lo más nuevo primero)
+    listaUnificada.sort((a, b) => {
+      const fechaA = new Date(a.fecha || a.fecha);
+      const fechaB = new Date(b.fecha || b.fecha);
+      return fechaB - fechaA; // Orden Descendente (Mayor a menor)
     });
 
-    return res.json(registros);
+    // 6. Enviamos la lista lista para consumir
+    return res.json(listaUnificada);
+
   } catch (error) {
+    console.error("Error al obtener quejas unificadas:", error);
     return res.status(500).json({ mensajeError: error.message });
   }
 };

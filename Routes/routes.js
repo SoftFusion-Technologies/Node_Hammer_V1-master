@@ -280,6 +280,14 @@ import {
   MARCAR_NoResuelto_Queja_CTS
 } from '../Controllers/CTS_TB_QuejasInternas.js';
 
+import { 
+    createQuejaPilates, 
+    updateQuejaPilates, 
+    deleteQuejaPilates, 
+    resolverQuejaPilates, 
+    noResueltoQuejaPilates 
+} from '../Controllers/CTS_TB_QuejasPilates.js';
+
 import {
   OBRS_UserDailyTasks_CTS,
   CR_UserDailyTask_CTS,
@@ -329,7 +337,7 @@ import {
   OBR_ClientesPilates_CTS,
   CR_ClientesPilates_CTS,
   UR_ClientesPilates_CTS,
-  ER_ClientesPilates_CTS,
+  UR_ClientesPilates_Observaciones_CTS,
   BUSCAR_ClientesPilates_CTS,
   OBRS_ClientesPorEstado_CTS,
   OBRS_ClientesProximosVencer_CTS,
@@ -915,6 +923,23 @@ router.delete('/quejas/:id', ER_Queja_CTS);
 router.put('/quejas/:id/resolver', MARCAR_Resuelto_Queja_CTS);
 router.put('/quejas/:id/no-resuelto', MARCAR_NoResuelto_Queja_CTS);
 
+// Rutas para quejas de pilates
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+/* COMIENZO DE CODIGO HECHO POR SERGIO MANRIQUE. FECHA 21/11/2025 */
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+router.post('/quejas-pilates', createQuejaPilates); // Crear una nueva queja de pilates
+router.put('/quejas-pilates/:id', updateQuejaPilates); // Actualizar una queja de pilates por ID
+router.delete('/quejas-pilates/:id', deleteQuejaPilates); // Eliminar una queja de pilates por ID
+router.put('/quejas-pilates/:id/resolver', resolverQuejaPilates); // PUT: Marcar una queja como RESUELTA
+router.put('/quejas-pilates/:id/no-resuelto', noResueltoQuejaPilates); // PUT: Marcar una queja como NO RESUELTA
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+/* FIN DE CODIGO HECHO POR SERGIO MANRIQUE. FECHA 21/11/2025 */
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+
 router.get('/tareasdiarias', OBRS_TareasDiarias_CTS);
 router.get('/tareasdiarias/:id', OBR_TareaDiaria_CTS);
 router.post('/tareasdiarias', CR_TareaDiaria_CTS);
@@ -1042,6 +1067,7 @@ router.get('/clientes-pilates/horarios-disponibles/ventas', ESP_OBRS_HorariosDis
 router.put('/clientes-pilates/:id', UR_ClientesPilates_CTS);
 router.put('/clientes-pilates/contactar/:id', UR_ContactarCliente_CTS);
 router.put('/clientes-pilates/plan-renovacion/:id', UR_ClientesPilates_PlanRenovacion_CTS);
+router.patch('/clientesPilates/:id/observaciones', UR_ClientesPilates_Observaciones_CTS);
 router.post('/clientes/insertar', CR_ClientesPilates_CTS);
 router.delete("/clientes-pilates/con-inscripciones/:id", ER_ClienteConInscripciones_CTS);
 

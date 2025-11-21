@@ -487,6 +487,60 @@ export const UR_ClientesPilates_CTS = async (req, res) => {
   }
 };
 
+// Actualizar solo las observaciones de un cliente Pilates (Uso de PATCH)
+// Modifica únicamente el campo 'observaciones' de un cliente Pilates por su ID.
+export const UR_ClientesPilates_Observaciones_CTS = async (req, res) => {
+  try {
+    const { id } = req.params; // ID del cliente a actualizar
+    const { observaciones } = req.body; // Solo esperamos el nuevo texto de observación
+
+    // 1. Validación de datos esenciales
+    if (observaciones === undefined) {
+      return res
+        .status(400)
+        .json({ mensajeError: "El campo 'observaciones' es requerido" });
+    }
+
+    // 2. Buscar cliente existente
+    const cliente = await ClientesPilatesModel.findByPk(id);
+
+    if (!cliente) {
+      return res.status(404).json({ mensajeError: "Cliente no encontrado" });
+    }
+
+    // 3. Actualizar solo el campo 'observaciones'
+    // Sequelize actualizará solo los campos que están en el objeto pasado.
+    const [affectedRows] = await ClientesPilatesModel.update(
+      { observaciones: observaciones },
+      {
+        where: { id: id },
+      }
+    );
+
+    if (affectedRows === 0) {
+      // Esto solo ocurriría si el cliente existía (findByPk lo confirmó)
+      // pero la actualización falló por alguna razón (ej. bloqueo de tabla),
+      // aunque es poco probable con findByPk previo.
+      return res
+        .status(500)
+        .json({ mensajeError: "La actualización de observaciones falló." });
+    }
+
+    // 4. Obtener el cliente actualizado para la respuesta
+    const clienteActualizado = await ClientesPilatesModel.findByPk(id, {
+      attributes: ["id", "nombre", "observaciones"], // Devolver solo campos relevantes
+    });
+
+    res.json({
+      message: "Observaciones actualizadas correctamente",
+      cliente: clienteActualizado,
+    });
+  } catch (error) {
+    console.error("Error en UR_ClientesPilates_Observaciones_CTS:", error);
+    res.status(500).json({ mensajeError: error.message });
+  }
+};
+
 export const UR_ClientesPilates_PlanRenovacion_CTS = async (req, res) => {
   try {
     // La ruta define :id en routes.js
@@ -547,27 +601,6 @@ export const UR_ClientesPilates_PlanRenovacion_CTS = async (req, res) => {
   }
 };
 
-// Eliminar un cliente pilates
-// Elimina un cliente Pilates por su ID.
-export const ER_ClientesPilates_CTS = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Buscar cliente
-    const cliente = await ClientesPilatesModel.findByPk(id);
-
-    if (!cliente) {
-      return res.status(404).json({ mensajeError: "Cliente no encontrado" });
-    }
-
-    // Eliminar cliente
-    await cliente.destroy();
-
-    res.json({ message: "Cliente eliminado correctamente" });
-  } catch (error) {
-    res.status(500).json({ mensajeError: error.message });
-  }
-};
 
 // Eliminar un cliente pilates y sus inscripciones/asistencias en cascada
 // Elimina un cliente Pilates y todas sus inscripciones y asistencias asociadas (eliminación en cascada).
