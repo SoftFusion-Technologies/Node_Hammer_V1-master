@@ -25,11 +25,11 @@ if (process.env.NODE_ENV !== 'production') {
 const QuejasInternasModel = db.define(
   'quejas_internas',
   {
-    fecha: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW
-    },
+    // fecha: {
+    //   type: DataTypes.DATE,
+    //   allowNull: false,
+    //   defaultValue: DataTypes.NOW
+    // },
     cargado_por: {
       type: DataTypes.STRING,
       allowNull: false

@@ -281,11 +281,11 @@ import {
 } from '../Controllers/CTS_TB_QuejasInternas.js';
 
 import { 
-    createQuejaPilates, 
-    updateQuejaPilates, 
-    deleteQuejaPilates, 
-    resolverQuejaPilates, 
-    noResueltoQuejaPilates 
+    CR_QuejaPilates_CTS, 
+    UR_QuejaPilates_CTS, 
+    ER_QuejaPilates_CTS, 
+    MARCAR_Resuelto_QuejaPilates, 
+    MARCAR_NoResuelto_QuejaPilates 
 } from '../Controllers/CTS_TB_QuejasPilates.js';
 
 import {
@@ -929,11 +929,11 @@ router.put('/quejas/:id/no-resuelto', MARCAR_NoResuelto_Queja_CTS);
 /* COMIENZO DE CODIGO HECHO POR SERGIO MANRIQUE. FECHA 21/11/2025 */
 /* ---------------------------------------------------------------------- */
 /* ---------------------------------------------------------------------- */
-router.post('/quejas-pilates', createQuejaPilates); // Crear una nueva queja de pilates
-router.put('/quejas-pilates/:id', updateQuejaPilates); // Actualizar una queja de pilates por ID
-router.delete('/quejas-pilates/:id', deleteQuejaPilates); // Eliminar una queja de pilates por ID
-router.put('/quejas-pilates/:id/resolver', resolverQuejaPilates); // PUT: Marcar una queja como RESUELTA
-router.put('/quejas-pilates/:id/no-resuelto', noResueltoQuejaPilates); // PUT: Marcar una queja como NO RESUELTA
+router.post('/quejas-pilates', CR_QuejaPilates_CTS); // Crear una nueva queja de pilates
+router.put('/quejas-pilates/:id', UR_QuejaPilates_CTS); // Actualizar una queja de pilates por ID
+router.delete('/quejas-pilates/:id', ER_QuejaPilates_CTS); // Eliminar una queja de pilates por ID
+router.put('/quejas-pilates/:id/resolver', MARCAR_Resuelto_QuejaPilates); // PUT: Marcar una queja como RESUELTA
+router.put('/quejas-pilates/:id/no-resuelto', MARCAR_NoResuelto_QuejaPilates); // PUT: Marcar una queja como NO RESUELTA
 /* ---------------------------------------------------------------------- */
 /* ---------------------------------------------------------------------- */
 /* FIN DE CODIGO HECHO POR SERGIO MANRIQUE. FECHA 21/11/2025 */

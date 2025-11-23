@@ -24,18 +24,12 @@ const isCoordinator = (level = "") => {
 
 
 // Crear una nueva queja de Pilates
-export const createQuejaPilates = async (req, res) => {
-  const {
-    cargado_por,
-    nombre,
-    contacto,
-    motivo,
-    sede,
-  } = req.body;
+export const CR_QuejaPilates_CTS = async (req, res) => {
+  const { cargado_por, nombre, contacto, motivo, sede } = req.body;
 
   try {
     let nombreSede = 'Sede no especificada';
-    
+
     // --- LÓGICA DE VERIFICACIÓN DE TIPO DE CAMPO 'SEDE' ---
     const sedeEsId = sede && !isNaN(sede) && Number.isInteger(Number(sede));
 
@@ -47,7 +41,9 @@ export const createQuejaPilates = async (req, res) => {
         if (sedeEncontrada) {
           nombreSede = sedeEncontrada.nombre;
         } else {
-          console.warn(`Sede con ID ${sede} no encontrada. Se guardará como 'Sede no especificada'.`);
+          console.warn(
+            `Sede con ID ${sede} no encontrada. Se guardará como 'Sede no especificada'.`
+          );
           // Si no se encuentra, se mantiene 'Sede no especificada'
         }
       } else {
@@ -62,7 +58,7 @@ export const createQuejaPilates = async (req, res) => {
       contacto,
       motivo,
       resuelto: 0,
-      sede: nombreSede, 
+      sede: nombreSede
     });
 
     res.status(201).json(nuevaQueja);
@@ -76,37 +72,33 @@ export const createQuejaPilates = async (req, res) => {
 };
 
 // Actualizar una queja de Pilates
-export const updateQuejaPilates = async (req, res) => {
+export const UR_QuejaPilates_CTS = async (req, res) => {
   try {
     const queja = await QuejasPilatesModel.findByPk(req.params.id);
     if (!queja) {
-      return res.status(404).json({ mensajeError: 'Queja de Pilates no encontrada' });
+      return res
+        .status(404)
+        .json({ mensajeError: 'Queja de Pilates no encontrada' });
     }
 
-    const {
-      nombre,
-      contacto,
-      motivo,
-      sede,
-    } = req.body;
+    const { nombre, contacto, motivo, sede } = req.body;
 
     let nombreSedeActualizada = sede;
-    
-    if (sede) {
-        const sedeEncontrada = await SedeModel.findByPk(sede);
-        if (sedeEncontrada) {
-            nombreSedeActualizada = sedeEncontrada.nombre;
-        } else {
-            nombreSedeActualizada = sede;
-        }
-    }
 
+    if (sede) {
+      const sedeEncontrada = await SedeModel.findByPk(sede);
+      if (sedeEncontrada) {
+        nombreSedeActualizada = sedeEncontrada.nombre;
+      } else {
+        nombreSedeActualizada = sede;
+      }
+    }
 
     await queja.update({
       nombre,
       contacto,
       motivo,
-      sede: nombreSedeActualizada, 
+      sede: nombreSedeActualizada
     });
 
     res.json(queja);
@@ -119,11 +111,13 @@ export const updateQuejaPilates = async (req, res) => {
 };
 
 // Eliminar una queja de Pilates (Borrado Lógico o Físico)
-export const deleteQuejaPilates = async (req, res) => {
+export const ER_QuejaPilates_CTS = async (req, res) => {
   try {
     const queja = await QuejasPilatesModel.findByPk(req.params.id);
     if (!queja) {
-      return res.status(404).json({ mensajeError: 'Queja de Pilates no encontrada' });
+      return res
+        .status(404)
+        .json({ mensajeError: 'Queja de Pilates no encontrada' });
     }
 
     // Realiza el borrado físico (DELETE FROM)
@@ -138,12 +132,14 @@ export const deleteQuejaPilates = async (req, res) => {
 };
 
 // Marcar como resuelta
-export const resolverQuejaPilates = async (req, res) => {
+export const MARCAR_Resuelto_QuejaPilates = async (req, res) => {
   const { resuelto_por } = req.body; // El email/nombre del usuario que resuelve
   try {
     const queja = await QuejasPilatesModel.findByPk(req.params.id);
     if (!queja) {
-      return res.status(404).json({ mensajeError: 'Queja de Pilates no encontrada' });
+      return res
+        .status(404)
+        .json({ mensajeError: 'Queja de Pilates no encontrada' });
     }
 
     // Actualización de estado
@@ -162,11 +158,13 @@ export const resolverQuejaPilates = async (req, res) => {
 };
 
 // Marcar como NO resuelta (reabrir)
-export const noResueltoQuejaPilates = async (req, res) => {
+export const MARCAR_NoResuelto_QuejaPilates = async (req, res) => {
   try {
     const queja = await QuejasPilatesModel.findByPk(req.params.id);
     if (!queja) {
-      return res.status(404).json({ mensajeError: 'Queja de Pilates no encontrada' });
+      return res
+        .status(404)
+        .json({ mensajeError: 'Queja de Pilates no encontrada' });
     }
 
     // Actualización de estado

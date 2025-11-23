@@ -15,10 +15,10 @@ const QuejasPilatesModel = db.define('quejas_pilates', {
     primaryKey: true,
     autoIncrement: true
   },
-  fecha: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW
-  },
+  // fecha: { campo dropeado por Benjamin Orellana
+  //   type: DataTypes.DATE,
+  //   defaultValue: DataTypes.NOW
+  // },
   cargado_por: {
     type: DataTypes.STRING(100),
     allowNull: false
