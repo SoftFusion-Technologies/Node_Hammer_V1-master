@@ -123,17 +123,42 @@ import dayjs from 'dayjs';
 export const MOVER_A_VENTAS_CTS = async (req, res) => {
   try {
     const { idTestClass, usuario_id } = req.body;
-
     // Función para normalizar sede
+
     const normalizarSede = (sede) => {
       const s = (sede || '').toLowerCase().trim();
-      if (s === 'monteros' || s === 'concepcion' || s === 'barrio sur')
-        return s;
+
+      // San Miguel Barrio Norte
+      if (s === 'sanmiguelbn' || s === 'san miguel bn') {
+        return 'barrio norte';
+      }
+
+      // San Miguel (Barrio Sur)
+      if (s === 'sanmiguel' || s === 'san miguel') {
+        return 'barrio sur';
+      }
+
+      // Monteros
+      if (s === 'monteros') {
+        return 'monteros';
+      }
+
+      // Concepción
+      if (s === 'concepcion' || s === 'concepción') {
+        return 'concepcion';
+      }
+
+      // Default de seguridad
       return 'barrio sur';
     };
 
     // 1. Traer datos de la clase de prueba
-    const testClass = await TestClassModel.findByPk(idTestClass);
+    const testClass = await TestClassModel.findByPk(idTestClass); // inyecta 82
+
+    console.log('ID TestClass:', idTestClass);
+    console.log('Sede original:', testClass.sede);
+    console.log('Sede normalizada:', normalizarSede(testClass.sede));
+
     if (!testClass)
       return res.status(404).json({ mensajeError: 'Lead no encontrado' });
     if (testClass.movido_a_ventas)

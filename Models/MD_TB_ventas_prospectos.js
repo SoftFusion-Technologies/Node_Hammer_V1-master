@@ -65,7 +65,12 @@ export const VentasProspectosModel = db.define(
       allowNull: false
     },
     sede: {
-      type: DataTypes.ENUM('monteros', 'concepcion', 'barrio sur'),
+      type: DataTypes.ENUM(
+        'monteros',
+        'concepcion',
+        'barrio sur',
+        'barrio norte'
+      ),
       allowNull: false
     },
     fecha: {
