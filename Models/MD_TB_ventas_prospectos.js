@@ -47,7 +47,8 @@ export const VentasProspectosModel = db.define(
         'Facebook',
         'Pagina web',
         'Campaña',
-        'Comentarios/Stickers'
+        'Comentarios/Stickers',
+        'Desde pilates'
       ),
       allowNull: false
     },

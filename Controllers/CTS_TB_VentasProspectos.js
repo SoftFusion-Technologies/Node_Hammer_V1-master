@@ -14,6 +14,8 @@
 // Importar modelo
 import MD_TB_VentasProspectos from '../Models/MD_TB_ventas_prospectos.js';
 const { VentasProspectosModel } = MD_TB_VentasProspectos;
+import MD_TB_VentasProspectosHorarios from '../Models/MD_TB_VentasProspectosHorarios.js';
+const { VentasProspectosHorariosModel } = MD_TB_VentasProspectosHorarios;
 
 import UserModel from '../Models/MD_TB_Users.js';
 import { Op } from 'sequelize';
@@ -346,6 +348,120 @@ export const OBRS_ColaboradoresConVentasProspectos = async (req, res) => {
   }
 };
 
+// Crear prospecto con horario para pilates a ventas
+//Controlador hecho por Sergio Manrique 
+//Fecha: 27/11/2025
+export const CR_VentasProspectoConHorario_CTS = async (req, res) => {
+  const t = await db.transaction();
+
+  try {
+    const {
+      usuario_id,
+      nombre,
+      dni = "Sin DNI",
+      tipo_prospecto = "Nuevo",
+      contacto,
+      canal_contacto,
+      actividad,
+      sede,
+      observacion,
+      asesor_nombre,
+      clase_prueba_1_fecha,
+      clase_prueba_1_tipo,
+      // Datos de horario
+      hhmm,
+      grp,
+      clase_num = 1
+    } = req.body;
+
+    // ✅ Validaciones básicas
+    if (!usuario_id || !nombre || !contacto || !canal_contacto || !actividad || !sede) {
+      await t.rollback();
+      return res.status(400).json({
+        mensajeError: 'Faltan datos obligatorios del prospecto'
+      });
+    }
+
+    // ✅ Validar datos de horario
+    if (!hhmm || !grp) {
+      await t.rollback();
+      return res.status(400).json({
+        mensajeError: 'Faltan datos de horario (hhmm, grp)'
+      });
+    }
+
+    // ✅ Validar usuario existe
+    const usuario = await UserModel.findByPk(usuario_id, { transaction: t });
+    if (!usuario) {
+      await t.rollback();
+      return res.status(404).json({ mensajeError: 'Usuario no válido' });
+    }
+
+    // 1️⃣ CREAR PROSPECTO
+    const nuevoProspecto = await VentasProspectosModel.create(
+      {
+        usuario_id,
+        nombre: nombre.trim(),
+        dni,
+        tipo_prospecto,
+        canal_contacto,
+        contacto: contacto.trim(),
+        actividad,
+        sede: sede.trim().toLowerCase(),
+        asesor_nombre: asesor_nombre || usuario.name,
+        n_contacto_1: 1,
+        clase_prueba_1_obs: observacion,
+        clase_prueba_1_fecha: clase_prueba_1_fecha ? new Date(clase_prueba_1_fecha) : null,
+        clase_prueba_1_tipo: clase_prueba_1_tipo || 'Clase de prueba'
+      },
+      { transaction: t }
+    );
+
+    // ✅ Capturar ID del prospecto creado automáticamente
+    const prospecto_id = nuevoProspecto.id;
+
+    // 2️⃣ CREAR HORARIO ASOCIADO
+    const nuevoHorario = await VentasProspectosHorariosModel.create(
+      {
+        prospecto_id,
+        hhmm: hhmm.trim(),
+        grp: grp.trim(),
+        clase_num: Number(clase_num)
+      },
+      { transaction: t }
+    );
+
+    // ✅ Confirmar transacción
+    await t.commit();
+
+    return res.status(201).json({
+      message: 'Prospecto y horario creados correctamente',
+      prospecto_id,
+      data: {
+        prospecto: nuevoProspecto,
+        horario: nuevoHorario
+      }
+    });
+
+  } catch (error) {
+    try {
+      await t.rollback();
+    } catch {}
+
+    console.error('Error en SYNC_ProspectoConHorario_CTS:', error);
+
+    return res.status(500).json({
+      mensajeError: 'Error en la sincronización',
+      detalle: error.message
+    });
+  }
+};
+
+
+VentasProspectosModel.hasMany(VentasProspectosHorariosModel, {
+  foreignKey: 'prospecto_id',
+  as: 'horarios'
+});
 // Asociación con UserModel
 VentasProspectosModel.belongsTo(UserModel, {
   foreignKey: 'usuario_id',

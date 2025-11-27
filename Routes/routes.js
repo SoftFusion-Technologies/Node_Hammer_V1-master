@@ -322,7 +322,8 @@ import {
   CR_VentasProspecto_CTS,
   ER_VentasProspecto_CTS,
   UR_VentasProspecto_CTS,
-  OBRS_ColaboradoresConVentasProspectos
+  OBRS_ColaboradoresConVentasProspectos,
+  CR_VentasProspectoConHorario_CTS
 } from '../Controllers/CTS_TB_VentasProspectos.js';
 
 import {
@@ -1001,6 +1002,8 @@ router.get(
   '/ventas_prospectos_colaboradores',
   OBRS_ColaboradoresConVentasProspectos
 );
+
+router.post('/ventas-prospectos/sincronizar-completo', CR_VentasProspectoConHorario_CTS);
 
 import {
   OBRS_PreguntasIA_CTS,
