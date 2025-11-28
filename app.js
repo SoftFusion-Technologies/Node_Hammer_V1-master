@@ -38,6 +38,15 @@ import { login, login_profesores_pilates, authenticateToken } from './Security/a
 import { crearAsistenciasDiariasAusentes } from './Controllers/CTS_TB_AsistenciasPilates.js';
 import {reiniciarContactosPorInasistencia} from "./Controllers/CTS_TB_ClientesPilates.js"
 
+// Imports de Remarketing
+import { SCHEDULE_VentasRemarketingCron } from './Controllers/CTS_TB_VentasRemarketing.js';
+import Users from './Models/MD_TB_Users.js';
+import VentasRemarketingModel from './Models/MD_TB_VentasRemarketing.js';
+import { VentasProspectosModel } from './Models/MD_TB_ventas_prospectos.js';
+import { SedeModel } from './Models/MD_TB_sedes.js';
+import { VentasComisionesModel } from './Models/MD_TB_ventas_comisiones.js';
+import remarketing_relaciones from './Models/remarketing_relaciones.js';
+
 import setupAssociations from './Models/Asociaciones.js';
 
 import sharp from 'sharp';
@@ -62,6 +71,13 @@ if (process.env.NODE_ENV !== 'production') {
 
 // inicia cron diario (09:00 Tucumán)
 SCHEDULE_VentasAgendaCron();
+
+//---------- COMIENZO DE CODIGO HECHO POR MATIAS PALLERO. FECHA 27/11/2025
+// Inicia cron mensual para Remarketing, se ejecuta el día 1 de cada mes a las 00:10 AM
+
+SCHEDULE_VentasRemarketingCron();
+
+//---------- FIN DE CODIGO HECHO POR MATIAS PALLERO. FECHA 27/11/2025
 
 const app = express();
 app.use(cors()); // aca configuramos cors para no tener errores
@@ -239,7 +255,7 @@ cron.schedule('0 0 * * *', () => {
 const pool = mysql.createPool({
   host: 'localhost', // Configurar según tu base de datos
   user: 'root', // Configurar según tu base de datos
-  password: '123456', // Configurar según tu base de datos
+  password: 'matyotto29', // Configurar según tu base de datos
   database: 'DB_HammerDESA_c1841398'
 });
 

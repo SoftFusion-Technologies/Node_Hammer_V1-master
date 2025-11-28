@@ -941,6 +941,69 @@ router.put('/quejas-pilates/:id/no-resuelto', MARCAR_NoResuelto_QuejaPilates); /
 /* ---------------------------------------------------------------------- */
 /* ---------------------------------------------------------------------- */
 
+//--------------------- SECCION DE REMARKETING ---------------------------//
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+/* COMIENZO DE CODIGO HECHO POR MATIAS PALLERO. FECHA 27/11/2025 */
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+import { 
+    OBRS_VentasRemarketing_CTS,
+    OBR_VentaRemarketing_CTS,
+    CR_VentaRemarketing_CTS,
+    UR_VentaRemarketing_CTS,
+    ER_VentaRemarketing_CTS,
+    UR_MarcarEnviado_CTS,
+    UR_MarcarRespondido_CTS,
+    UR_AgendarVenta_CTS,
+    UR_MarcarConvertido_CTS,
+    UR_RegistrarComision_CTS,
+    OBRS_VentasPorUsuario_CTS,
+    OBRS_VentasPorSede_CTS,
+    OBRS_VentasPorFecha_CTS,
+    CR_ProcesoAutomaticoRemarketing_CTS,
+    OBRS_ClasesHoy_CTS,
+    MOVER_ClientePilatesARemarketing,
+} from '../Controllers/CTS_TB_VentasRemarketing.js';
+
+// Rutas CRUD básicas
+router.get('/ventas-remarketing', OBRS_VentasRemarketing_CTS);
+router.post('/ventas-remarketing', CR_VentaRemarketing_CTS); // -- Crear general
+
+// Ruta para el proceso automático de remarketing
+router.post('/ventas-remarketing/proceso-automatico', CR_ProcesoAutomaticoRemarketing_CTS);
+
+// Ruta para mover un cliente de pilates a remarketing
+router.post('/ventas-remarketing/mover-cliente-pilates', MOVER_ClientePilatesARemarketing);
+
+// Ruta para obtener las clases del día
+router.get('/ventas-remarketing/clases-hoy', OBRS_ClasesHoy_CTS);
+
+// Rutas que usan :id
+router.get('/ventas-remarketing/:id', OBR_VentaRemarketing_CTS);
+router.put('/ventas-remarketing/:id', UR_VentaRemarketing_CTS);
+router.delete('/ventas-remarketing/:id', ER_VentaRemarketing_CTS);
+
+
+// Rutas de estados (Estas también usan :id, así que están bien después de la específica)
+router.patch('/ventas-remarketing/:id/marcar-enviado', UR_MarcarEnviado_CTS);
+router.patch('/ventas-remarketing/:id/marcar-respondido', UR_MarcarRespondido_CTS);
+router.patch('/ventas-remarketing/:id/agendar', UR_AgendarVenta_CTS);
+router.patch('/ventas-remarketing/:id/marcar-convertido', UR_MarcarConvertido_CTS);
+router.patch('/ventas-remarketing/:id/registrar-comision', UR_RegistrarComision_CTS);
+
+// Rutas de consultas específicas
+router.get('/ventas-remarketing/usuario/:usuario_id', OBRS_VentasPorUsuario_CTS);
+router.get('/ventas-remarketing/sede/:sede', OBRS_VentasPorSede_CTS);
+router.get('/ventas-remarketing/fecha/rango', OBRS_VentasPorFecha_CTS);
+
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+/* FIN DE CODIGO HECHO POR MATIAS PALLERO. FECHA 27/11/2025 */
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+//--------------------- FIN SECCION DE REMARKETING -----------------------//
+
 router.get('/tareasdiarias', OBRS_TareasDiarias_CTS);
 router.get('/tareasdiarias/:id', OBR_TareaDiaria_CTS);
 router.post('/tareasdiarias', CR_TareaDiaria_CTS);
