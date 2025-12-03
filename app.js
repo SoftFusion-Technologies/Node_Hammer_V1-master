@@ -255,7 +255,7 @@ cron.schedule('0 0 * * *', () => {
 const pool = mysql.createPool({
   host: 'localhost', // Configurar según tu base de datos
   user: 'root', // Configurar según tu base de datos
-  password: 'matyotto29', // Configurar según tu base de datos
+  password: '123456', // Configurar según tu base de datos
   database: 'DB_HammerDESA_c1841398'
 });
 

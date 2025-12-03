@@ -162,14 +162,19 @@ export const VentasProspectosModel = db.define(
       type: DataTypes.VIRTUAL,
       get() {
         const fecha = this.getDataValue('fecha');
-        return fecha ? new Date(fecha).getMonth() + 1 : null;
+        if (!fecha) return null;
+
+        // fecha ya es un Date; usamos métodos UTC para evitar TZ local
+        return fecha.getUTCMonth() + 1; // 0-based +1
       }
     },
     anio: {
       type: DataTypes.VIRTUAL,
       get() {
         const fecha = this.getDataValue('fecha');
-        return fecha ? new Date(fecha).getFullYear() : null;
+        if (!fecha) return null;
+
+        return fecha.getUTCFullYear();
       }
     },
     campania_origen: {

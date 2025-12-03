@@ -18,40 +18,40 @@ import MD_TB_VentasProspectosHorarios from '../Models/MD_TB_VentasProspectosHora
 const { VentasProspectosHorariosModel } = MD_TB_VentasProspectosHorarios;
 
 import UserModel from '../Models/MD_TB_Users.js';
-import { Op } from 'sequelize';
+import { Op, fn, col } from 'sequelize';
 import { VentasComisionesModel } from '../Models/MD_TB_ventas_comisiones.js';
 import db from '../DataBase/db.js';
 
 // Obtener todos los registros (puede filtrar por usuario_id o sede)
 export const OBRS_VentasProspectos_CTS = async (req, res) => {
-  const { usuario_id, sede, mes, anio } = req.query;
+  const { usuario_id, sede } = req.query;
+  const mes = req.query.mes ? Number(req.query.mes) : null;
+  const anio = req.query.anio ? Number(req.query.anio) : null;
 
   try {
     let whereClause = {};
+
     if (usuario_id) whereClause.usuario_id = usuario_id;
     if (sede) whereClause.sede = sede;
 
-    // Si mes y año están presentes, filtramos por rango de fechas
     if (mes && anio) {
-      const startDate = new Date(anio, mes - 1, 1); // Primer día del mes
-      const endDate = new Date(anio, mes, 1); // Primer día del mes siguiente
-
-      whereClause.fecha = {
-        [Op.gte]: startDate,
-        [Op.lt]: endDate
-      };
+      whereClause[Op.and] = [
+        db.where(fn('MONTH', col('fecha')), mes),
+        db.where(fn('YEAR', col('fecha')), anio)
+      ];
     }
 
     const registros = await VentasProspectosModel.findAll({
-      where: whereClause
+      where: whereClause,
+      order: [['fecha', 'ASC']]
     });
 
     res.json(registros);
   } catch (error) {
+    console.error('Error en OBRS_VentasProspectos_CTS:', error);
     res.status(500).json({ mensajeError: error.message });
   }
 };
-
 
 // Obtener un solo prospecto por ID
 export const OBR_VentasProspecto_CTS = async (req, res) => {
