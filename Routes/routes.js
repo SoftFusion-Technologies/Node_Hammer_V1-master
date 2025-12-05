@@ -381,6 +381,19 @@ import {
   UR_InstructorHorarioPilates_CTS
 } from '../Controllers/CTS_TB_HorariosPilates.js';
 
+/* --------------------------------------------
+-------CÓDIGO AGREGADO POR Sergio Manrique---------
+-------------------------------------------- */
+
+import {
+  OBRS_HorariosDeshabilitadosPilates_CTS, 
+  CR_HorarioDeshabilitadoPilates_CTS, 
+  ER_HorarioDeshabilitadoPilates_CTS 
+} from '../Controllers/CTS_TB_HorariosDeshabilitadosPilates.js';
+
+/* --------------------------------------------
+-------FIN DE CODIGO MODIFICADO Sergio Manrique---------
+-------------------------------------------- */
 import {
   OBRS_VentasProspectosHorario_CTS,
   CR_VentasProspectosHorario_CTS,
@@ -1172,6 +1185,14 @@ router.get("/asistencias-pilates/ausencias-mensuales", OBRS_AusenciasMensualesPo
 router.put("/asistencias-pilates/marcar", UR_AsistenciaCliente_CTS);
 router.get("/asistencias-pilates/crear-diarias", DEBUG_DispararCreacionAsistencias_CTS);
 router.get("/asistencias-pilates/reportes/asistencia-clases-prueba", OBRS_ReporteAsistenciaPrueba_CTS);
+
+// Horarios deshabilitados de pilates
+//--INICIO: Sergio Manrique
+router.get('/horarios-deshabilitados/:sedeId', OBRS_HorariosDeshabilitadosPilates_CTS);
+router.post('/horarios-deshabilitados', CR_HorarioDeshabilitadoPilates_CTS);
+router.delete('/horarios-deshabilitados', ER_HorarioDeshabilitadoPilates_CTS); 
+router.delete('/horarios-deshabilitados/:id', ER_HorarioDeshabilitadoPilates_CTS);
+//--FIN: Sergio Manrique
 
 router.post("/ventas-prospectos-horarios", CR_VentasProspectosHorario_CTS);
 router.get("/ventas-prospectos-horarios/:prospecto_id", OBRS_VentasProspectosHorario_CTS);
