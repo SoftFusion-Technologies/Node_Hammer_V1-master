@@ -13,7 +13,7 @@
  * ER_   eliminarRegistro (DELETE - Mostrar horario)
  */
 
-import HorariosOcultosPilatesModel from '../Models/MD_TB-Horarios_deshabilitados_pilates.js';
+import HorariosOcultosPilatesModel from '../Models/MD_TB_Horarios_deshabilitados_pilates.js';
 import UsersModel from '../Models/MD_TB_Users.js';
 
 // Obtener horarios ocultos de una sede específica
