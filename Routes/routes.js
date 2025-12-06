@@ -1190,7 +1190,6 @@ router.get("/asistencias-pilates/reportes/asistencia-clases-prueba", OBRS_Report
 //--INICIO: Sergio Manrique
 router.get('/horarios-deshabilitados/:sedeId', OBRS_HorariosDeshabilitadosPilates_CTS);
 router.post('/horarios-deshabilitados', CR_HorarioDeshabilitadoPilates_CTS);
-router.delete('/horarios-deshabilitados', ER_HorarioDeshabilitadoPilates_CTS); 
 router.delete('/horarios-deshabilitados/:id', ER_HorarioDeshabilitadoPilates_CTS);
 //--FIN: Sergio Manrique
 
