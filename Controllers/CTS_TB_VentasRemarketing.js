@@ -27,12 +27,14 @@ import { VentasProspectosModel } from "../Models/MD_TB_ventas_prospectos.js";
 import { RecaptacionModel } from "../Models/MD_TB_Recaptacion.js";
 import UsersModel from "../Models/MD_TB_Users.js";
 import { SedeModel } from "../Models/MD_TB_sedes.js";
-import VentasComisionesModel from "../Models/MD_TB_ventas_comisiones.js";
+import { VentasComisionesModel } from "../Models/MD_TB_ventas_comisiones.js";
 
 import ClientesPilatesModel from "../Models/MD_TB_ClientesPilates.js";
 import InscripcionesPilatesModel from "../Models/MD_TB_InscripcionesPilates.js";
 import AsistenciasPilatesModel from "../Models/MD_TB_AsistenciasPilates.js";
 import { HorariosPilatesModel } from "../Models/MD_TB_HorariosPilates.js";
+
+import ListaEsperaPilates from "../Models/MD_TB_ListaEsperaPilates.js";
 
 // Obtener todos los registros de ventas remarketing con paginación y filtros
 export const OBRS_VentasRemarketing_CTS = async (req, res) => {
@@ -48,6 +50,7 @@ export const OBRS_VentasRemarketing_CTS = async (req, res) => {
       comision_estado,
       nombre,
       canal,
+      dni,
       contacto,
       limit,
       offset,
@@ -123,13 +126,14 @@ export const OBRS_VentasRemarketing_CTS = async (req, res) => {
       return {
         ...plainRow,
         nombre: plainRow.nombre_socio,
+        dni: plainRow.dni,
         asesor_nombre:
           plainRow.usuario?.name || plainRow.usuario?.usuario || "N/A",
 
         // 🔧 NORMALIZAR BOOLEANOS
         contactado: Boolean(plainRow.contactado),
         convertido: Boolean(plainRow.convertido),
-        comision: Boolean(plainRow.comision),
+        comision: Boolean(plainRow.comision_id),
         n_contacto_1: Boolean(plainRow.n_contacto_1),
         n_contacto_2: Boolean(plainRow.n_contacto_2),
         n_contacto_3: Boolean(plainRow.n_contacto_3),
@@ -182,6 +186,7 @@ export const CR_VentaRemarketing_CTS = async (req, res) => {
       usuario_id: req.body.usuario_id,
       sede: req.body.sede,
       nombre_socio: req.body.nombre_socio,
+      dni: req.body.dni,
       tipo_prospecto: req.body.tipo_prospecto || "Nuevo",
       canal_contacto: req.body.canal_contacto,
       contacto: req.body.contacto,
@@ -242,52 +247,197 @@ export const CR_VentaRemarketing_CTS = async (req, res) => {
 
 // Actualizar un registro de venta remarketing por su ID
 export const UR_VentaRemarketing_CTS = async (req, res) => {
+  const t = await db.transaction();
   try {
-    const { id } = req.params;
-
-    // 🔧 LOG para ver qué llega del frontend
-    console.log("📝 Datos recibidos en PUT:", req.body);
-
-    const registroExistente = await VentasRemarketingModel.findByPk(
-      parseInt(id, 10)
-    );
+    const id = req.params.id;
+    const registroExistente = await VentasRemarketingModel.findByPk(id, {
+      transaction: t,
+      lock: t.LOCK.UPDATE
+    });
 
     if (!registroExistente) {
+      await t.rollback();
       return res.status(404).json({
-        success: false,
-        mensajeError: "Registro no encontrado",
+        mensajeError: "Registro de remarketing no encontrado",
       });
     }
 
-    // 🆕 IMPORTANTE: Actualizar con TODOS los campos que vienen en req.body
+    // 🔍 Detectar si es una actualización de comisión
+    const esActualizacionComision = 
+      req.body.comision_estado || 
+      req.body.comision_monto !== undefined || 
+      req.body.comision_tipo_plan;
+
+    console.log("📋 Registro existente:", {
+      id: registroExistente.id,
+      comision_id: registroExistente.comision_id,
+      comision_estado: registroExistente.comision_estado
+    });
+
+    console.log("🔍 Detección:", {
+      esActualizacionComision,
+      tieneComisionId: !!registroExistente.comision_id,
+      body: req.body
+    });
+
+    // Auto-crear comisión si no existe
+    if (esActualizacionComision && !registroExistente.comision_id) {
+      console.log("🆕 Auto-creando comisión porque no existe...");
+
+      // Validar datos requeridos
+      const tipo_plan = req.body.comision_tipo_plan?.trim();
+      const tipo_plan_custom = req.body.comision_tipo_plan_custom?.trim();
+      const monto_comision = req.body.comision_monto;
+
+      if (!tipo_plan) {
+        await t.rollback();
+        return res.status(400).json({
+          mensajeError: "Debe indicar el tipo de plan para crear la comisión"
+        });
+      }
+
+      if (tipo_plan.toLowerCase() === 'otros' && !tipo_plan_custom) {
+        await t.rollback();
+        return res.status(400).json({
+          mensajeError: "Debe especificar el detalle cuando el plan es 'Otros'"
+        });
+      }
+
+      // Determinar vendedor_id (quien registra la comisión)
+      const vendedor_id = Number(req.body.usuario_id) || Number(req.user?.id) || registroExistente.usuario_id;
+      const sede = String(registroExistente.sede || '').trim().toLowerCase() || 'monteros';
+
+      // Crear comisión en ventas_comisiones
+      const nuevaComision = await VentasComisionesModel.create({
+        remarketing_id: registroExistente.id,
+        vendedor_id: vendedor_id,
+        sede: sede,
+        tipo_plan: tipo_plan,
+        tipo_plan_custom: tipo_plan.toLowerCase() === 'otros' ? tipo_plan_custom : null,
+        monto_comision: monto_comision || null,
+        observacion: req.body.observacion || registroExistente.observacion || null,
+        estado: req.body.comision_estado || 'en_revision',
+        moneda: 'ARS'
+      }, { transaction: t });
+
+      console.log("✅ Comisión creada con ID:", nuevaComision.id);
+
+      // Actualizar remarketing con comision_id
+      const now = new Date();
+      await VentasRemarketingModel.update({
+        comision_id: nuevaComision.id,
+        comision_estado: nuevaComision.estado,
+        comision_usuario_id: vendedor_id,
+        comision_registrada_at: now,
+        convertido: 1,
+        convertido_at: now
+      }, {
+        where: { id },
+        transaction: t
+      });
+
+      // Si es aprobación/rechazo, actualizar la comisión inmediatamente
+      const actorId = Number(req.user?.id) || vendedor_id;
+      
+      if (req.body.comision_estado === 'aprobado') {
+        await VentasComisionesModel.update({
+          estado: 'aprobado',
+          aprobado_por: actorId,
+          aprobado_at: now
+        }, {
+          where: { id: nuevaComision.id },
+          transaction: t
+        });
+      } else if (req.body.comision_estado === 'rechazado') {
+        await VentasComisionesModel.update({
+          estado: 'rechazado',
+          rechazado_por: actorId,
+          rechazado_at: now,
+          motivo_rechazo: req.body.motivo_rechazo || null
+        }, {
+          where: { id: nuevaComision.id },
+          transaction: t
+        });
+      }
+
+      await t.commit();
+      console.log("✅ Comisión auto-creada y actualizada exitosamente");
+
+      const remarketingActualizado = await VentasRemarketingModel.findByPk(id);
+      return res.json({
+        message: "Comisión creada y actualizada exitosamente",
+        registro: remarketingActualizado
+      });
+    }
+
+    // Si tiene comision_id, actualizar en ventas_comisiones
+    if (esActualizacionComision && registroExistente.comision_id) {
+      console.log("🔄 RUTA: Actualización de comisión existente");
+
+      const updates = {};
+      
+      if (req.body.comision_tipo_plan) updates.tipo_plan = req.body.comision_tipo_plan;
+      if (req.body.comision_tipo_plan_custom) updates.tipo_plan_custom = req.body.comision_tipo_plan_custom;
+      if (req.body.comision_monto !== undefined) updates.monto_comision = req.body.comision_monto;
+      if (req.body.observacion !== undefined) updates.observacion = req.body.observacion;
+
+      const actorId = Number(req.user?.id) || Number(req.body.usuario_id);
+      const now = new Date();
+
+      if (req.body.comision_estado) {
+        updates.estado = req.body.comision_estado;
+        
+        if (req.body.comision_estado === 'aprobado') {
+          updates.aprobado_por = actorId;
+          updates.aprobado_at = now;
+        } else if (req.body.comision_estado === 'rechazado') {
+          updates.rechazado_por = actorId;
+          updates.rechazado_at = now;
+          updates.motivo_rechazo = req.body.motivo_rechazo || null;
+        }
+      }
+
+      await VentasComisionesModel.update(updates, {
+        where: { id: registroExistente.comision_id },
+        transaction: t
+      });
+
+      // Sincronizar estado en remarketing
+      if (req.body.comision_estado) {
+        await VentasRemarketingModel.update({
+          comision_estado: req.body.comision_estado
+        }, {
+          where: { id },
+          transaction: t
+        });
+      }
+
+      await t.commit();
+      console.log("✅ Comisión existente actualizada");
+
+      const remarketingActualizado = await VentasRemarketingModel.findByPk(id);
+      return res.json({
+        message: "Comisión actualizada exitosamente",
+        registro: remarketingActualizado
+      });
+    }
+
+    // Actualización normal de remarketing (sin comisión)
+    console.log("🔄 RUTA: Actualización normal de remarketing");
+    
     await VentasRemarketingModel.update(req.body, {
-      where: { id: parseInt(id, 10) },
-      individualHooks: true,
+      where: { id },
+      transaction: t
     });
 
-    // Obtener el registro actualizado
-    const registroActualizado = await VentasRemarketingModel.findByPk(
-      parseInt(id, 10)
-    );
+    await t.commit();
+    const registroActualizado = await VentasRemarketingModel.findByPk(id);
+    res.json(registroActualizado);
 
-    // 🔧 LOG para confirmar lo que se guardó
-    console.log("✅ Registro actualizado:", {
-      id: registroActualizado.id,
-      contactado: registroActualizado.contactado,
-      convertido: registroActualizado.convertido,
-    });
-
-    res.json({
-      success: true,
-      message: "Registro actualizado correctamente",
-      registroActualizado,
-    });
   } catch (error) {
-    console.error("❌ Error al actualizar venta remarketing:", error);
-    res.status(500).json({
-      success: false,
-      mensajeError: error.message,
-    });
+    await t.rollback();
+    console.error("❌ Error en UR_VentaRemarketing_CTS:", error);
+    res.status(500).json({ mensajeError: error.message });
   }
 };
 
@@ -911,14 +1061,49 @@ const ejecutarCopiaDeRemarketing = async () => {
       if (p.clase_prueba_2_fecha) visitas++;
       if (p.clase_prueba_3_fecha) visitas++;
 
+      const CANALES_VALIDOS = {
+        'Desde pilates': 'Baja Pilates',
+        'Baja Pilates': 'Baja Pilates',
+        'Mostrador': 'Mostrador',
+        'Whatsapp': 'Whatsapp',
+        'Instagram': 'Instagram',
+        'Facebook': 'Facebook',
+        'Pagina web': 'Pagina web',
+        'Campaña': 'Campaña',
+        'Comentarios/Stickers': 'Comentarios/Stickers'
+      };
+
+      // Función para normalizar canal de contacto
+      const normalizarCanal = (canal) => {
+        if (!canal) return 'Mostrador'; // Default
+        
+        // Si el canal está en el mapeo, usarlo
+        if (CANALES_VALIDOS[canal]) {
+          return CANALES_VALIDOS[canal];
+        }
+        
+        // Si es uno de los valores válidos directamente
+        const valoresValidos = Object.values(CANALES_VALIDOS);
+        if (valoresValidos.includes(canal)) {
+          return canal;
+        }
+        
+        // Caso por defecto
+        return 'Mostrador';
+      };
+
+      const canalContacto = normalizarCanal(p.canal_contacto);
+
       const registroNuevo = {
         ventas_prospecto_id: p.id,
         usuario_id: p.usuario_id,
         sede: p.sede,
         nombre_socio: p.nombre,
-        canal_contacto: p.canal_contacto,
+        dni: p.dni,
+        canal_contacto: canalContacto,
         contacto: p.contacto,
         actividad: p.actividad,
+        tipo_prospecto: p.tipo_prospecto,
         observacion: p.observacion,
         fecha: fechaNormalizada, // Fecha del MES ACTUAL
         visitas: visitas,
@@ -1022,6 +1207,7 @@ export const OBRS_ClasesHoy_CTS = async (req, res) => {
         "id",
         "usuario_id",
         "nombre_socio",
+        "dni",
         "contacto",
         "actividad",
         "sede",
@@ -1084,6 +1270,7 @@ export const OBRS_ClasesHoy_CTS = async (req, res) => {
         prospecto_id: plain.id,
         usuario_id: plain.usuario_id,
         nombre: plain.nombre_socio,
+        dni: plain.dni,
         contacto: plain.contacto,
         actividad: plain.actividad,
         sede: plain.sede,
@@ -1118,111 +1305,217 @@ export const OBRS_ClasesHoy_CTS = async (req, res) => {
   }
 };
 
+// Se la utiliza en CTS_TB_ClientesPilates.js
 // Mover cliente de Pilates a Remarketing y eliminarlo de Pilates
-export const MOVER_ClientePilatesARemarketing = async (req, res) => {
-  const t = await db.transaction();
-  
+export const MOVER_ClientePilatesARemarketing = async (id_cliente_pilates) => {
   try {
-    const { id_cliente_pilates, usuario_id_destino } = req.body;
-
-    if (!id_cliente_pilates) {
-      await t.rollback();
-      return res.status(400).json({ mensajeError: "Se requiere el ID del cliente de Pilates" });
-    }
-
-    // 1. Buscar Datos del Cliente Pilates
-    const cliente = await ClientesPilatesModel.findByPk(id_cliente_pilates, { transaction: t });
+    // 1. Buscar Datos del Cliente
+    const cliente = await ClientesPilatesModel.findByPk(id_cliente_pilates);
     
-    if (!cliente) {
-      await t.rollback();
-      return res.status(404).json({ mensajeError: "Cliente de Pilates no encontrado" });
-    }
+    // Si no existe el cliente, salimos sin hacer nada (o lanzamos error si prefieres)
+    if (!cliente) return; 
 
-    // 2. Determinar la SEDE dinámicamente (Soporta sedes futuras automáticas)
+    // 2. Determinar la SEDE
     let nombreSede = "Sede Desconocida";
 
-    // A. Buscar la última inscripción del cliente para saber a dónde iba
+    // Buscamos la inscripción más reciente para ver de dónde viene
     const ultimaInscripcion = await InscripcionesPilatesModel.findOne({
       where: { id_cliente: id_cliente_pilates },
-      order: [['id', 'DESC']], // La más reciente
-      transaction: t
+      order: [['id', 'DESC']],
     });
 
-    // B. Buscar el horario y la sede asociada
     if (ultimaInscripcion && ultimaInscripcion.id_horario) {
-        const horario = await HorariosPilatesModel.findByPk(ultimaInscripcion.id_horario, { transaction: t });
-        
+        // Buscamos horario y sede usando los modelos importados
+        const horario = await HorariosPilatesModel.findByPk(ultimaInscripcion.id_horario);
         if (horario && horario.id_sede) {
-            // Buscamos el nombre real en la tabla de Sedes
-            const sedeData = await SedeModel.findByPk(horario.id_sede, { transaction: t });
-            
+            const sedeData = await SedeModel.findByPk(horario.id_sede);
             if (sedeData) {
-                // Obtenemos el nombre tal cual está en la base de datos (Ej: "Barrio Sur", "Monteros")
-                // El .trim() elimina espacios en blanco accidentales al inicio o final
                 nombreSede = (sedeData.nombre || sedeData.sede || "Sede Encontrada").trim();
             }
         }
     }
 
-    // 3. Determinar el Usuario Responsable
-    let usuarioResponsable = usuario_id_destino || cliente.id_usuario_contacto;
+    // 3. Determinar el Usuario Responsable (ID 36 si es null)
+    let usuarioResponsable = cliente.id_usuario_contacto;
     if (!usuarioResponsable) usuarioResponsable = 36; 
 
     // 4. Crear registro en Ventas Remarketing
-    const nuevoLead = await VentasRemarketingModel.create({
+    await VentasRemarketingModel.create({
       usuario_id: usuarioResponsable,
-      sede: nombreSede, // Aquí se guardará "Monteros", "Barrio Sur", etc. automáticamente
+      sede: nombreSede,
       nombre_socio: cliente.nombre, 
+      dni: cliente.dni,
       canal_contacto: "Baja Pilates", 
       contacto: cliente.telefono,
       actividad: "Pilates",
       tipo_prospecto: "ExSocio",
-      observacion: `Alumno de Pilates. Obs original: ${cliente.observaciones || "Ninguna"}`,
+      observacion: `Eliminado de la grilla de Pilates. Obs original: ${cliente.observaciones || "Ninguna"}`,
       fecha: new Date(),
-      
+      // Defaults obligatorios
       contactado: 0, visitas: 0, enviado: 0, respondido: 0, agendado: 0, convertido: 0
-    }, { transaction: t });
-
-    // 5. ELIMINAR DATOS DE PILATES (Limpieza en cascada)
-    
-    // A. Buscar todas las inscripciones para borrar sus asistencias
-    const inscripciones = await InscripcionesPilatesModel.findAll({
-      where: { id_cliente: id_cliente_pilates },
-      attributes: ["id"],
-      transaction: t
     });
-    const inscripcionesIds = inscripciones.map((i) => i.id);
 
-    // B. Borrar asistencias
-    if (inscripcionesIds.length > 0) {
-      await AsistenciasPilatesModel.destroy({
-        where: { id_inscripcion: inscripcionesIds },
-        transaction: t
-      });
+    console.log(`[Remarketing] Cliente ${id_cliente_pilates} copiado exitosamente.`);
+    return true;
+
+  } catch (error) {
+    // Solo logueamos el error para no romper el proceso de eliminación principal
+    console.error("Error al copiar cliente a Remarketing:", error);
+    return false;
+  }
+};
+
+// Se la utiliza en CTS_TB_ListaEsperaPilates.js
+// Mover lista de clientes de Pilates a Remarketing
+export const MOVER_ListaEsperaPilatesARemarketing = async (idListaEspera) => {
+  try {
+    // 1. Buscar el registro en la lista de espera
+    const registroEspera = await ListaEsperaPilates.findByPk(idListaEspera);
+    if (!registroEspera) return;
+
+    // 2. Obtener el nombre de la Sede
+    let nombreSede = "Sede Desconocida";
+    if (registroEspera.id_sede) {
+        const sedeData = await SedeModel.findByPk(registroEspera.id_sede);
+        if (sedeData) {
+            // Normalizamos el nombre (trim)
+            nombreSede = (sedeData.nombre || sedeData.sede || "Sede Encontrada").trim();
+        }
     }
 
-    // C. Borrar inscripciones
-    await InscripcionesPilatesModel.destroy({ 
-        where: { id_cliente: id_cliente_pilates },
-        transaction: t 
-    });
+    // 3. Determinar usuario responsable (Default Admin 36 si viene null)
+    let usuarioResponsable = registroEspera.id_usuario_cargado || 36;
 
-    // D. Borrar cliente
-    await cliente.destroy({ transaction: t });
+    // 4. Construir observación detallada (para no perder datos de plan/horarios)
+    const detalleObservacion = `Eliminado de Lista de Espera de Pilates. Obs original: ${registroEspera.observaciones || "Ninguna"}`;
 
-    // 6. Confirmar transacción
-    await t.commit();
-
-    res.json({
-      success: true,
-      message: `Cliente movido a Remarketing (Sede: ${nombreSede}) y eliminado correctamente`,
-      nuevo_id_remarketing: nuevoLead.id
+    // 5. Crear registro en Remarketing
+    await VentasRemarketingModel.create({
+        usuario_id: usuarioResponsable,
+        sede: nombreSede,
+        nombre_socio: registroEspera.nombre,
+        dni: registroEspera.dni,
+        canal_contacto: "Baja Pilates", // Usamos este canal para identificar origen
+        contacto: registroEspera.contacto,
+        actividad: "Pilates",
+        tipo_prospecto: "ExSocio",
+        observacion: detalleObservacion, // Aquí guardamos toda la info extra
+        fecha: new Date(),
+        // Valores por defecto
+        contactado: 0, visitas: 0, enviado: 0, respondido: 0, agendado: 0, convertido: 0
     });
 
   } catch (error) {
+    console.error("Error al mover Lista Espera a Remarketing (Continuando eliminación):", error);
+  }
+};
+
+export const POST_convertirRemarketing_CTS = async (req, res) => {
+  const t = await db.transaction();
+  try {
+    const remarketing_id = Number(req.params.id);
+    if (!Number.isInteger(remarketing_id) || remarketing_id <= 0) {
+      throw new Error('ID de remarketing inválido');
+    }
+
+    const actorId = Number(req.user?.id) || Number(req.body?.actor_id);
+    if (!Number.isInteger(actorId) || actorId <= 0) {
+      throw new Error('No se pudo determinar el usuario que convierte (actor_id)');
+    }
+
+    const remarketing = await VentasRemarketingModel.findByPk(remarketing_id, {
+      transaction: t,
+      lock: t.LOCK.UPDATE
+    });
+    if (!remarketing) throw new Error('Registro de remarketing no encontrado');
+
+    const esComision = !!req.body?.esComision;
+    const now = new Date();
+
+    // 1. Marcar como convertido en remarketing
+    await VentasRemarketingModel.update(
+      {
+        convertido: 1,
+        convertido_at: now
+      },
+      { where: { id: remarketing_id }, transaction: t }
+    );
+
+    // 2. Si NO es comisión, terminar aquí
+    if (!esComision) {
+    // Ya se marcó como convertido arriba (línea 1437-1443)
+      const data = await VentasRemarketingModel.findByPk(remarketing_id, {
+        transaction: t
+      });
+
+      await t.commit();
+      return res.json({
+        message: 'Remarketing convertido sin comisión',
+        remarketing: data
+      });
+    }
+
+    // 3. Validar datos de comisión
+    const tipo_plan = req.body?.tipo_plan?.trim();
+    const tipo_plan_custom = req.body?.tipo_plan_custom?.trim();
+    const observacion = req.body?.observacion?.trim() || null;
+
+    if (!tipo_plan) {
+      throw new Error('Debe indicar el tipo de plan');
+    }
+    if (tipo_plan.toLowerCase() === 'otros' && !tipo_plan_custom) {
+      throw new Error('Debe completar el detalle cuando el plan es "Otros"');
+    }
+
+    // 4. Verificar que no exista comisión pendiente
+    const yaPendiente = await VentasComisionesModel.findOne({
+      where: { remarketing_id, estado: 'en_revision' },
+      transaction: t,
+      lock: t.LOCK.UPDATE
+    });
+    if (yaPendiente) {
+      throw new Error('Ya existe una comisión en revisión para este remarketing');
+    }
+
+    // 5. Crear comisión en ventas_comisiones
+    const vendedor_id = actorId;
+    const sede = String(remarketing.sede || '').trim().toLowerCase() || 'monteros';
+
+    const comision = await VentasComisionesModel.create({
+      remarketing_id: remarketing.id,
+      vendedor_id: vendedor_id,
+      sede: sede,
+      tipo_plan: tipo_plan,
+      tipo_plan_custom: tipo_plan.toLowerCase() === 'otros' ? tipo_plan_custom : null,
+      observacion: observacion,
+      estado: 'en_revision',
+      moneda: 'ARS',
+      monto_comision: null
+    }, { transaction: t });
+
+    // 6. Sincronizar remarketing con comision_id
+    await VentasRemarketingModel.update({
+      comision_id: comision.id,
+      comision_estado: 'en_revision',
+      comision_usuario_id: vendedor_id,
+      comision_registrada_at: now
+    }, { where: { id: remarketing_id }, transaction: t });
+
+    const remarketingActualizado = await VentasRemarketingModel.findByPk(
+      remarketing_id,
+      { transaction: t }
+    );
+
+    await t.commit();
+    return res.status(201).json({
+      message: 'Remarketing convertido y comisión creada en revisión',
+      remarketing: remarketingActualizado,
+      comision
+    });
+  } catch (err) {
     await t.rollback();
-    console.error("❌ Error en MOVER_ClientePilatesARemarketing:", error);
-    res.status(500).json({ mensajeError: error.message });
+    console.error('❌ Error en POST_convertirRemarketing_CTS:', err);
+    return res.status(400).json({ mensajeError: err.message });
   }
 };
 

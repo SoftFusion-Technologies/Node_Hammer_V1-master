@@ -55,6 +55,10 @@ const VentasRemarketingModel = db.define(
       type: DataTypes.STRING(255),
       allowNull: false,
     },
+    dni: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+    },
     canal_contacto: {
       type: DataTypes.ENUM(
         "Mostrador",

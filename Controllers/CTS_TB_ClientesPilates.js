@@ -13,6 +13,8 @@ import { SedeModel } from "../Models/MD_TB_sedes.js";
 import UsuarioPilatesModel from "../Models/MD_TB_UsuariosPilates.js";
 import { Op } from "sequelize";
 
+import { MOVER_ClientePilatesARemarketing } from "./CTS_TB_VentasRemarketing.js";
+
 if (!HorariosPilatesModel.associations?.instructor) {
   HorariosPilatesModel.belongsTo(UsuarioPilatesModel, {
     foreignKey: "id_instructor",
@@ -607,6 +609,9 @@ export const UR_ClientesPilates_PlanRenovacion_CTS = async (req, res) => {
 export const ER_ClienteConInscripciones_CTS = async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Mover el cliente a remarketing antes de eliminarlo
+    await MOVER_ClientePilatesARemarketing(id);
 
     // 1. Buscar inscripciones del cliente
     const inscripciones = await InscripcionesPilatesModel.findAll({

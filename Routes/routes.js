@@ -976,7 +976,6 @@ import {
     OBRS_VentasPorFecha_CTS,
     CR_ProcesoAutomaticoRemarketing_CTS,
     OBRS_ClasesHoy_CTS,
-    MOVER_ClientePilatesARemarketing,
 } from '../Controllers/CTS_TB_VentasRemarketing.js';
 
 // Rutas CRUD básicas
@@ -985,9 +984,6 @@ router.post('/ventas-remarketing', CR_VentaRemarketing_CTS); // -- Crear general
 
 // Ruta para el proceso automático de remarketing
 router.post('/ventas-remarketing/proceso-automatico', CR_ProcesoAutomaticoRemarketing_CTS);
-
-// Ruta para mover un cliente de pilates a remarketing
-router.post('/ventas-remarketing/mover-cliente-pilates', MOVER_ClientePilatesARemarketing);
 
 // Ruta para obtener las clases del día
 router.get('/ventas-remarketing/clases-hoy', OBRS_ClasesHoy_CTS);

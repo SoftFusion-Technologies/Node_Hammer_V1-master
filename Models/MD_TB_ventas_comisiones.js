@@ -18,7 +18,8 @@ VentasComisionesModel.init(
       primaryKey: true
     },
 
-    prospecto_id: { type: DataTypes.BIGINT.UNSIGNED, allowNull: false },
+    prospecto_id: { type: DataTypes.BIGINT.UNSIGNED, allowNull: true },
+    remarketing_id: { type: DataTypes.BIGINT.UNSIGNED, allowNull: true },
     vendedor_id: { type: DataTypes.BIGINT.UNSIGNED, allowNull: false },
     sede: { type: DataTypes.STRING(50), allowNull: false },
 
@@ -54,7 +55,8 @@ VentasComisionesModel.init(
     indexes: [
       { fields: ['estado'] },
       { fields: ['vendedor_id', 'created_at'] },
-      { fields: ['prospecto_id'] }
+      { fields: ['prospecto_id'] },
+      { fields: ['remarketing_id'] }
     ]
   }
 );

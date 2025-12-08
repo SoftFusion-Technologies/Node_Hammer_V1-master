@@ -4165,6 +4165,273 @@ app.get('/stats-ventas', async (req, res) => {
   }
 });
 
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+// ----- BLOQUE HECHO POR MATIAS PALLERO 06/12/2025 -----
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+app.get('/stats-remarketing', async (req, res) => {
+  try {
+    const { sede, mes, anio } = req.query;
+    let whereClauses = [];
+    let params = [];
+
+    // Normaliza la sede y la agrega al filtro
+    if (sede) {
+      whereClauses.push('LOWER(REPLACE(sede, " ", "")) = ?');
+      params.push(sede.toLowerCase().replace(/\s/g, ''));
+    }
+    // Filtro por mes y año (rango de fechas)
+    if (mes && anio) {
+      const startDate = new Date(anio, mes - 1, 1);
+      const endDate = new Date(anio, mes, 1);
+      whereClauses.push('fecha >= ? AND fecha < ?');
+      params.push(startDate, endDate);
+    }
+
+    const whereSQL = whereClauses.length
+      ? 'WHERE ' + whereClauses.join(' AND ')
+      : '';
+
+    // 1. Total de remarketing
+    const [[{ total_remarketing }]] = await pool.query(
+      `SELECT COUNT(*) AS total_remarketing FROM ventas_remarketing ${whereSQL}`,
+      params
+    );
+
+    // 2. Remarketing por tipo (alias 'prospectos' para compatibilidad con el frontend)
+    const [prospectos] = await pool.query(
+      `SELECT tipo_prospecto AS tipo, COUNT(*) AS cantidad
+       FROM ventas_remarketing ${whereSQL}
+       GROUP BY tipo_prospecto`,
+      params
+    );
+
+    // 3. Canales
+    const [canales] = await pool.query(
+      `SELECT canal_contacto AS canal, COUNT(*) AS cantidad
+       FROM ventas_remarketing ${whereSQL}
+       GROUP BY canal_contacto`,
+      params
+    );
+
+    // 4. Actividades
+    const [actividades] = await pool.query(
+      `SELECT actividad, COUNT(*) AS cantidad
+       FROM ventas_remarketing ${whereSQL}
+       GROUP BY actividad`,
+      params
+    );
+
+    // 5. Contactos (SUM)
+    const [[contactos]] = await pool.query(
+      `SELECT
+        SUM(n_contacto_1) AS total_contacto_1,
+        SUM(n_contacto_2) AS total_contacto_2,
+        SUM(n_contacto_3) AS total_contacto_3
+       FROM ventas_remarketing ${whereSQL}`,
+      params
+    );
+
+    // 6. Estados de remarketing
+    const [[estados]] = await pool.query(
+      `SELECT
+        SUM(enviado) AS total_enviados,
+        SUM(respondido) AS total_respondidos,
+        SUM(agendado) AS total_agendados
+       FROM ventas_remarketing ${whereSQL}`,
+      params
+    );
+
+    // 7. Remarketing por sede
+    const [remarketingPorSede] = await pool.query(
+      `SELECT sede, COUNT(*) AS cantidad
+       FROM ventas_remarketing ${whereSQL}
+       GROUP BY sede`,
+      params
+    );
+
+    // 8. Total clases de prueba (sumando todas)
+    const [[{ total_clases_prueba }]] = await pool.query(
+      `SELECT
+        SUM(CASE WHEN clase_prueba_1_fecha IS NOT NULL THEN 1 ELSE 0 END) +
+        SUM(CASE WHEN clase_prueba_2_fecha IS NOT NULL THEN 1 ELSE 0 END) +
+        SUM(CASE WHEN clase_prueba_3_fecha IS NOT NULL THEN 1 ELSE 0 END)
+        AS total_clases_prueba
+       FROM ventas_remarketing ${whereSQL}`,
+      params
+    );
+
+    const whereConvertidos = [...whereClauses];
+    const paramsConvertidos = [...params];
+
+    whereConvertidos.push('(convertido = 1 OR convertido = true)');
+
+    // 9. Convertidos
+    const convertidosSQL =
+      whereConvertidos.length > 0
+        ? 'WHERE ' + whereConvertidos.join(' AND ')
+        : '';
+
+    const [[{ total_convertidos }]] = await pool.query(
+      `SELECT COUNT(*) AS total_convertidos FROM ventas_remarketing ${convertidosSQL}`,
+      paramsConvertidos
+    );
+
+    // 10. Conversiones por canal
+    const [remarketingConvertidosPorCanal] = await pool.query(
+      `SELECT canal_contacto AS canal, COUNT(*) AS cantidad
+       FROM ventas_remarketing
+       ${convertidosSQL}
+       GROUP BY canal_contacto`,
+      paramsConvertidos
+    );
+
+    // 11. Serie temporal (por día)
+    const [remarketingPorDia] = await pool.query(
+      `SELECT DATE(fecha) AS dia, COUNT(*) AS cantidad
+       FROM ventas_remarketing
+       ${whereSQL}
+       GROUP BY DATE(fecha)
+       ORDER BY dia ASC`,
+      params
+    );
+
+    /* ---------------------------------------------------------
+       🔹 ESTADÍSTICAS DE COMISIONES DE REMARKETING
+       --------------------------------------------------------- */
+
+    // Criterio de comisión
+    const whereComision = [...whereClauses];
+    const paramsComision = [...params];
+    whereComision.push("comision_estado = 'aprobado'");
+    const comisionSQL = whereComision.length
+      ? 'WHERE ' + whereComision.join(' AND ')
+      : '';
+
+    // A) Total comisiones
+    const [[{ total_comisiones }]] = await pool.query(
+      `SELECT COUNT(*) AS total_comisiones
+       FROM ventas_remarketing
+       ${comisionSQL}`,
+      paramsComision
+    );
+
+    // B) Comisiones por asesor - CON PREFIJO vr. PARA EVITAR AMBIGÜEDAD
+    const whereClauses_conPrefijo = [];
+    const paramsComision_conPrefijo = [...params];
+
+    if (sede) {
+      whereClauses_conPrefijo.push('LOWER(REPLACE(vr.sede, " ", "")) = ?');
+    }
+    if (mes && anio) {
+      const startDate = new Date(anio, mes - 1, 1);
+      const endDate = new Date(anio, mes, 1);
+      whereClauses_conPrefijo.push('vr.fecha >= ? AND vr.fecha < ?');
+    }
+    whereClauses_conPrefijo.push("vr.comision_estado = 'aprobado'");
+
+    const comisionSQL_conPrefijo = whereClauses_conPrefijo.length
+      ? 'WHERE ' + whereClauses_conPrefijo.join(' AND ')
+      : '';
+
+    const [comisionesPorAsesor] = await pool.query(
+      `SELECT u.name AS asesor_nombre, COUNT(*) AS cantidad
+       FROM ventas_remarketing vr
+       INNER JOIN users u ON vr.usuario_id = u.id
+       ${comisionSQL_conPrefijo}
+       GROUP BY u.name
+       ORDER BY cantidad DESC`,
+      paramsComision_conPrefijo
+    );
+
+    // C) Comisiones por canal
+    const [comisionesPorCanal] = await pool.query(
+      `SELECT canal_contacto AS canal, COUNT(*) AS cantidad
+       FROM ventas_remarketing
+       ${comisionSQL}
+       GROUP BY canal_contacto
+       ORDER BY cantidad DESC`,
+      paramsComision
+    );
+
+    // D) Comisiones por actividad
+    const [comisionesPorActividad] = await pool.query(
+      `SELECT actividad, COUNT(*) AS cantidad
+       FROM ventas_remarketing
+       ${comisionSQL}
+       GROUP BY actividad
+       ORDER BY cantidad DESC`,
+      paramsComision
+    );
+
+    // E) Serie temporal (por día) de comisiones
+    const [comisionesPorDia] = await pool.query(
+      `SELECT DATE(fecha) AS dia, COUNT(*) AS cantidad
+       FROM ventas_remarketing
+       ${comisionSQL}
+       GROUP BY DATE(fecha)
+       ORDER BY dia ASC`,
+      paramsComision
+    );
+
+    // F) Tasa de comisión sobre convertidos
+    const tasa_comision_sobre_convertidos =
+      total_convertidos > 0
+        ? Number((total_comisiones / total_convertidos).toFixed(4))
+        : 0;
+
+    // G) Tasa de conversión general
+    const tasa_conversion =
+      total_remarketing > 0
+        ? Number((total_convertidos / total_remarketing).toFixed(4))
+        : 0;
+
+    // H) Tasa de respuesta
+    const tasa_respuesta =
+      (estados.total_enviados || 0) > 0
+        ? Number(((estados.total_respondidos || 0) / estados.total_enviados).toFixed(4))
+        : 0;
+
+    // RESPUESTA COMPLETA CON TODAS LAS PROPIEDADES
+    res.json({
+      total_ventas: total_remarketing, // Alias para compatibilidad
+      total_remarketing,
+      prospectos, // ✅ Agregado
+      canales, // ✅ Agregado
+      actividades, // ✅ Agregado
+      contactos,
+      estados,
+      remarketingPorSede,
+      total_clases_prueba,
+      total_convertidos,
+      remarketingConvertidosPorCanal,
+      remarketingPorDia,
+      total_comisiones,
+      tasa_comision_sobre_convertidos,
+      tasa_conversion,
+      tasa_respuesta,
+      comisionesPorAsesor,
+      comisionesPorCanal,
+      comisionesPorActividad,
+      comisionesPorDia,
+      // Agregar arrays vacíos por defecto para evitar errores de undefined
+      campaniasPorOrigen: [],
+      campaniasConvertidasPorOrigen: [],
+      comisionesPorOrigenCampania: []
+    });
+  } catch (error) {
+    console.error('Error obteniendo estadísticas de remarketing:', error);
+    res.status(500).json({ error: 'Error obteniendo estadísticas de remarketing' });
+  }
+});
+
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+/*--------- FINAL DE BLOQUE HECHO POR MATIAS PALLERO 06/12/2025 --------- */
+/* ---------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
+
 export async function generarAgendasAutomaticas() {
   // Día de hoy
   const today = new Date().toISOString().slice(0, 10);
@@ -4598,6 +4865,7 @@ cron.schedule('0 4 1 * *', () => {
 /* ---------------------------------------------------------------------- */
 /* ---------------------------------------------------------------------- */
 
+// CODIGO HECHO POR MATIAS PALLERO 06/12/2025
 
 
 app.listen(PORT, () => {

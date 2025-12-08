@@ -18,6 +18,8 @@ import ListaEsperaPilates from "../Models/MD_TB_ListaEsperaPilates.js";
 import ContactosListaEsperaPilatesModel from "../Models/MD_TB_ContactosListaEsperaPilates.js";
 import UsersModel from "../Models/MD_TB_Users.js";
 
+import { MOVER_ListaEsperaPilatesARemarketing } from "./CTS_TB_VentasRemarketing.js";
+
 // Obtener todos
 // Endpoint: GET /lista_espera_pilates?sedeId=<id>
 // - Permite filtrar por `id_sede` opcionalmente.
@@ -299,6 +301,10 @@ export const ER_ListaEsperaPilates = async (req, res) => {
     if (isNaN(id) || id <= 0) {
       return res.status(400).json({ error: "ID inválido." });
     }
+
+    // Mover el cliente a remarketing antes de eliminarlo
+    await MOVER_ListaEsperaPilatesARemarketing(id);
+
     const eliminado = await ListaEsperaPilates.destroy({
       where: { id },
     });

@@ -1,5 +1,6 @@
 import { VentasComisionesModel } from './MD_TB_ventas_comisiones.js';
 import { VentasProspectosModel } from './MD_TB_ventas_prospectos.js';
+import VentasRemarketingModel from './MD_TB_VentasRemarketing.js';
 import UsersModel from './MD_TB_Users.js';
 
 // ========== VentasComisiones -> Prospecto / Users ==========
@@ -40,3 +41,17 @@ VentasProspectosModel.hasOne(VentasComisionesModel, {
   onUpdate: 'CASCADE'
 });
 
+// ========== Remarketing -> VentasComisiones ==========
+VentasComisionesModel.belongsTo(VentasRemarketingModel, {
+  foreignKey: 'remarketing_id',
+  as: 'remarketing',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+
+VentasRemarketingModel.hasMany(VentasComisionesModel, {
+  foreignKey: 'remarketing_id',
+  as: 'comisiones',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
