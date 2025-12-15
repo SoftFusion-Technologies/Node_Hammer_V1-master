@@ -11,6 +11,8 @@ import AsistenciasPilatesModel from "../Models/MD_TB_AsistenciasPilates.js";
 import { HorariosPilatesModel } from "../Models/MD_TB_HorariosPilates.js";
 import { SedeModel } from "../Models/MD_TB_sedes.js";
 import UsuarioPilatesModel from "../Models/MD_TB_UsuariosPilates.js";
+import { CR_EventoHistorial_Alta_CTS} from "./CTS_TB_ClientesPilatesHistorial.js";
+import { ER_HistorialPorCliente } from "./CTS_TB_ClientesPilatesHistorial.js";
 import { Op } from "sequelize";
 
 import { MOVER_ClientePilatesARemarketing } from "./CTS_TB_VentasRemarketing.js";
@@ -373,10 +375,18 @@ export const OBR_ClientesPilates_CTS = async (req, res) => {
 // Crea un nuevo cliente Pilates con los datos recibidos en el cuerpo de la solicitud.
 export const CR_ClientesPilates_CTS = async (req, res) => {
   try {
-    const { nombre, telefono, estado, fecha_inicio, fecha_fin, observaciones } =
-      req.body;
-
-    console.log("Datos recibidos para crear cliente:", req.body);
+    const {
+      nombre,
+      telefono,
+      estado,
+      fecha_inicio,
+      fecha_fin,
+      observaciones,
+      cambios_especificos,
+      resumen,
+      tipo_evento,
+      usuario_id,
+    } = req.body;
 
     if (!nombre) {
       return res.status(400).json({ mensajeError: "El nombre es requerido" });
@@ -411,6 +421,14 @@ export const CR_ClientesPilates_CTS = async (req, res) => {
       fecha_inicio,
       fecha_fin,
       observaciones,
+    });
+
+    await CR_EventoHistorial_Alta_CTS({
+      cliente_id: nuevoCliente.id,
+      tipo_evento: tipo_evento ? tipo_evento : "ALTA",
+      usuario_id: usuario_id,
+      resumen: resumen || "Alta de nuevo alumno", 
+      cambios_especificos,
     });
 
     res.status(201).json({
@@ -553,6 +571,8 @@ export const UR_ClientesPilates_PlanRenovacion_CTS = async (req, res) => {
       fecha_fin: fechaFin,
       observaciones,
       fecha_prometido_pago: fechaPrometidoPago,
+      nombre,
+      telefono,
     } = req.body;
 
     // Buscar al cliente por ID
@@ -566,8 +586,10 @@ export const UR_ClientesPilates_PlanRenovacion_CTS = async (req, res) => {
     const updates = {};
 
     // 1. Manejar los campos que se actualizan siempre, como las observaciones
-    if (observaciones !== undefined) {
+    if (observaciones !== undefined || nombre !== undefined || telefono !== undefined) {
       updates.observaciones = observaciones;
+      updates.nombre = nombre;
+      updates.telefono = telefono;
     }
 
     // 2. Manejar la lógica de estados de forma separada
@@ -609,9 +631,6 @@ export const UR_ClientesPilates_PlanRenovacion_CTS = async (req, res) => {
 export const ER_ClienteConInscripciones_CTS = async (req, res) => {
   try {
     const { id } = req.params;
-    
-    // Mover el cliente a remarketing antes de eliminarlo
-    await MOVER_ClientePilatesARemarketing(id);
 
     // 1. Buscar inscripciones del cliente
     const inscripciones = await InscripcionesPilatesModel.findAll({
@@ -637,6 +656,8 @@ export const ER_ClienteConInscripciones_CTS = async (req, res) => {
         .status(404)
         .json({ success: false, message: "Cliente no encontrado" });
     }
+
+    await ER_HistorialPorCliente(id);
     await cliente.destroy();
 
     res.json({

@@ -419,6 +419,11 @@ import {
   UR_AuditoriaFechaFin_CTS
 }from "../Controllers/CTS_TB_AuditoriaFechaFinModificadaPilates.js";
 
+import { 
+    OBRS_HistorialPorCliente_CTS, 
+    CR_EventoHistorial_CTS 
+} from '../Controllers/CTS_TB_ClientesPilatesHistorial.js';
+
 // Crea un enrutador de Express
 const router = express.Router();
 
@@ -1181,6 +1186,11 @@ router.get("/asistencias-pilates/ausencias-mensuales", OBRS_AusenciasMensualesPo
 router.put("/asistencias-pilates/marcar", UR_AsistenciaCliente_CTS);
 router.get("/asistencias-pilates/crear-diarias", DEBUG_DispararCreacionAsistencias_CTS);
 router.get("/asistencias-pilates/reportes/asistencia-clases-prueba", OBRS_ReporteAsistenciaPrueba_CTS);
+// Historial de clientes pilates 15/12/2025
+//--INICIO: Sergio Manrique
+router.get('/clientes-pilates/:cliente_id/historial', OBRS_HistorialPorCliente_CTS);
+router.post('/clientes-pilates/historial', CR_EventoHistorial_CTS);
+//--FIN: Sergio Manrique
 
 // Horarios deshabilitados de pilates
 //--INICIO: Sergio Manrique
