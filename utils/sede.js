@@ -26,6 +26,13 @@ export function mapUserSedeToVp(userSede = '') {
   if (s === 'smt') return 'barrio sur';
   if (s === 'barrio sur' || s === 'barriosur') return 'barrio sur';
 
+  // Barrio Norte (San Miguel BN)
+  if (
+    s === 'barrionorte' ||
+    s === 'sanmiguelbn' ||
+    s === 'sanmiguelbarrionorte'
+  )
+    return 'barrio norte';
   // Por defecto: sin filtro (evita romper si aparece algo nuevo)
   return null;
 }
