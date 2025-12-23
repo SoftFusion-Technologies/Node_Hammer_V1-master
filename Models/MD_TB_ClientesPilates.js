@@ -35,22 +35,6 @@ export const ClientesPilatesModel = db.define(
       type: DataTypes.STRING(50),
       allowNull: false,
     },
-    id_usuario_contacto: {
-      type: DataTypes.BIGINT.UNSIGNED,
-      allowNull: true,
-      references: {
-        model: "users", 
-        key: "id",
-      },
-    },
-    contactado: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-    },
-    fecha_contacto: {
-      type: DataTypes.DATE,
-      allowNull: true,
-    },
     fecha_prometido_pago: {
       type: DataTypes.DATEONLY,
       allowNull: true,

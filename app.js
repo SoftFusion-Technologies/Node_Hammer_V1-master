@@ -36,7 +36,6 @@ import moment from 'moment-timezone';
 
 import { login, login_profesores_pilates, authenticateToken } from './Security/auth.js';  // Importa las funciones del archivo auth.js
 import { crearAsistenciasDiariasAusentes } from './Controllers/CTS_TB_AsistenciasPilates.js';
-import {reiniciarContactosPorInasistencia} from "./Controllers/CTS_TB_ClientesPilates.js"
 
 // Imports de Remarketing
 import { SCHEDULE_VentasRemarketingCron } from './Controllers/CTS_TB_VentasRemarketing.js';
@@ -231,19 +230,6 @@ cron.schedule('1 0 * * *', () => {
   scheduled: true,
   timezone: "America/Argentina/Buenos_Aires" 
 });
-
-
-// Programar la tarea para que se ejecute el 1 de cada mes a la 01:00 AM para reiniciar contactos por inasistencia
-cron.schedule(
-  "0 1 1 * *", // Se ejecuta a la 01:00 AM del día 1 de cada mes.
-  () => {
-    reiniciarContactosPorInasistencia();
-  },
-  {
-    scheduled: true,
-    timezone: "America/Argentina/Buenos_Aires",
-  }
-);
 
 
 // Programar la tarea para que se ejecute cada día a medianoche

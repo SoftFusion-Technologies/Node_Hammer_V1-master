@@ -780,54 +780,6 @@ export const OBRS_ClientesProximosVencer_CTS = async (req, res) => {
   }
 };
 
-// Marca un cliente Pilates como contactado y actualiza la fecha y usuario de contacto.
-export const UR_ContactarCliente_CTS = async (req, res) => {
-  try {
-    // id preferentemente por params, si no viene, tomar del body (compatibilidad)
-    const id = req.params.id || req.body.id;
-    const { nombre, contacto, fecha_contacto, id_usuario_contacto } = req.body;
-
-    // Validación de datos requeridos para marcar contacto
-    if (!id || !fecha_contacto || !id_usuario_contacto) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Faltan datos: id (en URL o body), fecha_contacto e id_usuario_contacto",
-      });
-    }
-
-    // Busca el cliente por ID
-    const cliente = await ClientesPilatesModel.findByPk(id);
-    if (!cliente) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Cliente no encontrado" });
-    }
-
-    // Marca como contactado y actualiza datos
-    cliente.contactado = true;
-    cliente.fecha_contacto = fecha_contacto;
-    cliente.id_usuario_contacto = id_usuario_contacto;
-    // opcional: actualizar nombre u otros campos recibidos si lo deseás
-    if (typeof nombre === "string" && nombre.trim() !== "")
-      cliente.nombre = nombre.trim();
-
-    await cliente.save();
-
-    return res.json({
-      success: true,
-      message: "Cliente marcado como contactado",
-      cliente: {
-        id: cliente.id,
-        nombre: cliente.nombre,
-        fecha_contacto: cliente.fecha_contacto,
-      },
-    });
-  } catch (error) {
-    // Manejo de errores
-    return res.status(500).json({ success: false, message: error.message });
-  }
-};
 
 // Obtener horarios disponibles with cupo e inscriptos por sede para el apartado de ventas, así sepan cuántos lugares quedan en cada horario y grupo
 // Devuelve los horarios disponibles por sede, agrupando LMV/MJ, con cupo y cantidad de inscriptos para ventas.
@@ -1013,33 +965,5 @@ export const EXISTE_ClientePruebaPorNombre_CTS = async (req, res) => {
     }
   } catch (error) {
     return res.status(500).json({ existe: false, mensajeError: error.message });
-  }
-};
-
-export const reiniciarContactosPorInasistencia = async () => {
-  try {
-    console.log(
-      "[CRON MENSUAL] Iniciando reinicio de estado de contacto de clientes..."
-    );
-    const [affectedRows] = await ClientesPilatesModel.update(
-      {
-        contactado: false,
-        fecha_contacto: null,
-        id_usuario_contacto: null,
-      },
-      {
-        where: {
-          contactado: true, // Solo actualizamos los que realmente necesitan ser reiniciados
-        },
-      }
-    );
-    console.log(
-      `[CRON MENSUAL] Proceso finalizado. Se reiniciaron ${affectedRows} registros de contacto.`
-    );
-  } catch (error) {
-    console.error(
-      "[CRON MENSUAL] Error al reiniciar los contactos de clientes:",
-      error
-    );
   }
 };

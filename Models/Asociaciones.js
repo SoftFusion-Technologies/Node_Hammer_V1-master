@@ -1,4 +1,4 @@
-// Archivo: /DataBase/asociaciones.js
+// Archivo: /Models/Asociaciones.js
 
 // 1. Importamos todos los modelos que vamos a relacionar
 import ClientesPilatesModel from "./MD_TB_ClientesPilates.js";
@@ -9,6 +9,7 @@ import UsersModel from "./MD_TB_Users.js";
 import AuditoriaFechaFinModificadaPilatesModel from "./MD_TB_AuditoriaFechaFinModificadaPilates.js";
 import ClientesPilatesHistorialModel from "./MD_TB_ClientesPilatesHistorial.js";
 import ClientesPilatesHistorialDetalleModel from "./MD_TB_ClientesPilatesHistorialDetalle.js";
+import HistorialContactosPilatesModel from "./MD_TB_HistorialContactosPilates.js"; 
 
 // 2. Creamos una función para configurar las asociaciones
 const setupAssociations = () => {
@@ -106,6 +107,34 @@ const setupAssociations = () => {
   ClientesPilatesHistorialModel.belongsTo(UsersModel, {
     foreignKey: "usuario_id",
     as: "informacion_usuario",
+  });
+
+  // =================================================================
+  //  NUEVAS RELACIONES: HISTORIAL DE CONTACTOS (Ausentes/Seguimiento)
+  // =================================================================
+
+  // 1. Un Cliente tiene MUCHOS registros en el historial de contactos
+  ClientesPilatesModel.hasMany(HistorialContactosPilatesModel, {
+    foreignKey: 'id_cliente',
+    as: 'historial_contactos' 
+  });
+
+  // 2. Un registro de historial pertenece a UN Cliente
+  HistorialContactosPilatesModel.belongsTo(ClientesPilatesModel, {
+    foreignKey: 'id_cliente',
+    as: 'cliente' 
+  });
+
+  // 3. Un registro de historial es creado por UN Usuario
+  HistorialContactosPilatesModel.belongsTo(UsersModel, {
+    foreignKey: 'id_usuario',
+    as: 'usuario' 
+  });
+
+  // 4. (Opcional) Un Usuario puede tener muchos contactos realizados
+  UsersModel.hasMany(HistorialContactosPilatesModel, {
+    foreignKey: 'id_usuario',
+    as: 'contactos_realizados_pilates'
   });
 
   console.log("Relaciones de Sequelize configuradas correctamente.");

@@ -344,7 +344,6 @@ import {
   OBRS_ClientesProximosVencer_CTS,
   ESP_OBRS_HorarioClientesPilates_CTS,
   ER_ClienteConInscripciones_CTS,
-  UR_ContactarCliente_CTS,
   ESP_OBRS_HorariosDisponibles_CTS,
   EXISTE_ClientePruebaPorNombre_CTS,
   UR_ClientesPilates_PlanRenovacion_CTS
@@ -404,7 +403,6 @@ import {
   OBRS_AsistenciasFormato_CTS,
   UR_AsistenciaCliente_CTS,
   DEBUG_DispararCreacionAsistencias_CTS,
-  OBRS_AusenciasMensualesPorSede_CTS,
   OBRS_ReporteAsistenciaPrueba_CTS
 } from "../Controllers/CTS_TB_AsistenciasPilates.js";
 
@@ -418,6 +416,12 @@ import {
   OBR_AuditoriaPorCliente_CTS,
   UR_AuditoriaFechaFin_CTS
 }from "../Controllers/CTS_TB_AuditoriaFechaFinModificadaPilates.js";
+
+import {
+  OBRS_AlumnosAusentes_Dashboard_CTS,
+  CR_HistorialContacto_CTS,
+  OBR_HistorialContacto_PorIdCliente_CTS
+} from '../Controllers/CTS_TB_HistorialContactosPilates.js';
 
 import { 
     OBRS_HistorialPorCliente_CTS, 
@@ -1145,7 +1149,6 @@ router.get('/clientes-pilates/existe-prueba-por-nombre', EXISTE_ClientePruebaPor
 router.get('/clientes-pilates/:id', OBR_ClientesPilates_CTS);
 router.get('/clientes-pilates/horarios-disponibles/ventas', ESP_OBRS_HorariosDisponibles_CTS);
 router.put('/clientes-pilates/:id', UR_ClientesPilates_CTS);
-router.put('/clientes-pilates/contactar/:id', UR_ContactarCliente_CTS);
 router.put('/clientes-pilates/plan-renovacion/:id', UR_ClientesPilates_PlanRenovacion_CTS);
 router.patch('/clientesPilates/:id/observaciones', UR_ClientesPilates_Observaciones_CTS);
 router.post('/clientes/insertar', CR_ClientesPilates_CTS);
@@ -1182,7 +1185,6 @@ router.put('/horarios-pilates/cambiar-instructor', UR_InstructorHorarioPilates_C
 
 
 router.get("/asistencias-pilates/formato", OBRS_AsistenciasFormato_CTS);
-router.get("/asistencias-pilates/ausencias-mensuales", OBRS_AusenciasMensualesPorSede_CTS);
 router.put("/asistencias-pilates/marcar", UR_AsistenciaCliente_CTS);
 router.get("/asistencias-pilates/crear-diarias", DEBUG_DispararCreacionAsistencias_CTS);
 router.get("/asistencias-pilates/reportes/asistencia-clases-prueba", OBRS_ReporteAsistenciaPrueba_CTS);
@@ -1198,6 +1200,18 @@ router.get('/horarios-deshabilitados/:sedeId', OBRS_HorariosDeshabilitadosPilate
 router.post('/horarios-deshabilitados', CR_HorarioDeshabilitadoPilates_CTS);
 router.delete('/horarios-deshabilitados/:id', ER_HorarioDeshabilitadoPilates_CTS);
 //--FIN: Sergio Manrique
+
+// =======================================================
+//  HECHO POR SERGIO MANRIQUE, FECHA: 22/12/2025
+//  MÓDULO: ALUMNOS AUSENTES Y SEGUIMIENTO (Pilates)
+// =======================================================
+router.get("/pilates/ausentes-dashboard", OBRS_AlumnosAusentes_Dashboard_CTS);
+router.get("/pilates/historial-contactos/:id", OBR_HistorialContacto_PorIdCliente_CTS);
+router.post("/pilates/historial-contactos", CR_HistorialContacto_CTS);
+// =======================================================
+//  HECHO POR SERGIO MANRIQUE, FECHA: 22/12/2025
+//  FIN DE MODULO: ALUMNOS AUSENTES Y SEGUIMIENTO (Pilates)
+// =======================================================
 
 router.post("/ventas-prospectos-horarios", CR_VentasProspectosHorario_CTS);
 router.get("/ventas-prospectos-horarios/:prospecto_id", OBRS_VentasProspectosHorario_CTS);
