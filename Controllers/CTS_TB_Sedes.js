@@ -62,7 +62,7 @@ export const CR_Sede_CTS = async (req, res) => {
     const { nombre, estado, cupo_maximo_pilates, es_ciudad } = req.body;
     const registro = await SedeModel.create({ nombre, estado, cupo_maximo_pilates, es_ciudad });
     if (es_ciudad === 1) {
-      horariosResult = await insertarHorariosPorDefectoParaSedeCiudad(registro.id);
+      const horariosResult = await insertarHorariosPorDefectoParaSedeCiudad(registro.id);
       if (!horariosResult.success) {
         return res
           .status(500)

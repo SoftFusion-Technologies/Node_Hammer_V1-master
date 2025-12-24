@@ -29,6 +29,18 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
   try {
     // Validaciones de parámetros recibidos
     const { sedeId, instructorId, hhmm } = req.query;
+
+    let cupoMaximoSede = null;
+      if (sedeId) {
+          const sedeInfo = await SedeModel.findByPk(sedeId);
+          if (sedeInfo && sedeInfo.cupo_maximo_pilates) {
+              cupoMaximoSede = sedeInfo.cupo_maximo_pilates;
+          }
+      }
+      if(cupoMaximoSede === null){
+        throw new Error("No se pudo obtener el cupo máximo de la sede.");
+      }
+
     const isNumeric = (value) => /^\d+$/.test(value);
     const isHHMM = (value) => /^\d{2}:\d{2}$/.test(value);
 
@@ -260,6 +272,7 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
     };
 
     // Construcción final del objeto de horarios con alumnos
+// ... código anterior ...
     const schedule = {};
 
     for (const horario of horarios) {
@@ -275,60 +288,78 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
         : "";
       const coachUpper = coachName ? coachName.toUpperCase() : null;
 
-      const alumnos = [];
+      // --- CAMBIO PRINCIPAL: UNIFICAR, ORDENAR Y MARCAR ---
+      
+      let listaUnificada = [];
 
+      // 1. Recopilar Planes
       const planEntries = planGroupMap.get(groupKey) ?? [];
-      for (const planEntry of planEntries) {
-        const estadoLower = (planEntry.estado ?? "").toLowerCase();
-        const fechaInicio = formatDate(planEntry.fecha_inicio);
-        const fechaFin = formatDate(planEntry.fecha_fin);
-        const fechaPrometidoPago = formatDate(planEntry.fecha_prometido_pago);
+      planEntries.forEach(p => listaUnificada.push({ ...p, tipo: 'plan', sortId: p.id })); 
+      // Nota: p.id debe ser el ID de inscripción o algo incremental. 
+      // Si p.id es ID de cliente, el orden será por antigüedad de cliente, no de inscripción. 
+      // *Idealmente*, en la consulta SQL de arriba deberías traer el ID de la tabla inscripciones_pilates como 'inscripcion_id' y usar ese.
+      // Pero si usas 'p.id' (id cliente) ordenará por quien se registró primero en el sistema, lo cual suele ser aceptable.
 
-        alumnos.push({
-          id: planEntry.id,
-          name: (planEntry.nombre ?? "").toUpperCase(),
-          contact: planEntry.telefono,
-          observation: planEntry.observaciones,
-          status:
-            estadoLower === "renovacion programada"
-              ? "programado"
-              : estadoLower,
-          planDetails:
-            estadoLower === "plan" || estadoLower === "renovacion programada"
-              ? {
+      // 2. Recopilar Pruebas
+      const trialEntries = trialMap.get(horario.id) ?? [];
+      trialEntries.forEach(t => listaUnificada.push({ ...t, tipo: 'prueba', sortId: t.id }));
+
+      // 3. Ordenar (FIFO - Primero en llegar, primero en la fila)
+      listaUnificada.sort((a, b) => a.sortId - b.sortId);
+
+      const alumnosProcesados = [];
+
+      // 4. Procesar y marcar Sobrecupo
+      listaUnificada.forEach((entry, index) => {
+        // La magia: Si su posición es mayor al cupo, es extra
+        const esExtra = (index + 1) > cupoMaximoSede;
+
+        const estadoLower = (entry.estado ?? "").toLowerCase();
+        const fechaInicio = formatDate(entry.fecha_inicio);
+        const fechaFin = formatDate(entry.fecha_fin);
+        const fechaPrometidoPago = formatDate(entry.fecha_prometido_pago);
+
+        // Construir detalles según tipo
+        let planDetails = null;
+        let trialDetails = null;
+        let scheduledDetails = null;
+
+        if (entry.tipo === 'plan') {
+             if(estadoLower === "plan" || estadoLower === "renovacion programada") {
+                planDetails = {
                   type: planTypeByGroup(group),
                   startDate: fechaInicio,
                   endDate: fechaFin,
                   promisedDate: fechaPrometidoPago,
-                }
-              : null,
-          trialDetails: null,
-          scheduledDetails:
-            estadoLower === "renovacion programada"
-              ? { date: fechaInicio, promisedDate: fechaPrometidoPago }
-              : null,
-        });
-      }
+                };
+             }
+             if(estadoLower === "renovacion programada") {
+                scheduledDetails = { date: fechaInicio, promisedDate: fechaPrometidoPago };
+             }
+        } else {
+             trialDetails = { date: formatDate(entry.fecha_inicio) };
+        }
 
-      const trialEntries = trialMap.get(horario.id) ?? [];
-      for (const trialEntry of trialEntries) {
-        alumnos.push({
-          id: trialEntry.id,
-          name: (trialEntry.nombre ?? "").toUpperCase(),
-          contact: trialEntry.telefono,
-          observation: trialEntry.observaciones,
-          status: "prueba",
-          planDetails: null,
-          trialDetails: { date: formatDate(trialEntry.fecha_inicio) },
-          scheduledDetails: null,
+        alumnosProcesados.push({
+          id: entry.id,
+          name: (entry.nombre ?? "").toUpperCase(),
+          contact: entry.telefono,
+          observation: entry.observaciones,
+          status: entry.tipo === 'prueba' ? "prueba" : (estadoLower === "renovacion programada" ? "programado" : estadoLower),
+          planDetails: planDetails,
+          trialDetails: trialDetails,
+          scheduledDetails: scheduledDetails,
+          
+          // NUEVA PROPIEDAD PARA EL FRONT
+          es_cupo_extra: esExtra 
         });
-      }
+      });
 
       schedule[horarioKey] = {
         coach: coachUpper,
         horarioId: horario.id,
         coachId: instructor?.id ?? null,
-        alumnos,
+        alumnos: alumnosProcesados,
       };
     }
 
