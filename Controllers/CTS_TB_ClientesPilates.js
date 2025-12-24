@@ -33,8 +33,12 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
     let cupoMaximoSede = null;
       if (sedeId) {
           const sedeInfo = await SedeModel.findByPk(sedeId);
-          if (sedeInfo && sedeInfo.cupo_maximo_pilates) {
-              cupoMaximoSede = sedeInfo.cupo_maximo_pilates;
+          if (
+            sedeInfo &&
+            sedeInfo.cupo_maximo_pilates !== null &&
+            sedeInfo.cupo_maximo_pilates !== undefined
+          ) {
+            cupoMaximoSede = sedeInfo.cupo_maximo_pilates;
           }
       }
       if(cupoMaximoSede === null){
@@ -153,6 +157,10 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
     const buildGroupKey = (sede, hhmmValue, group) =>
       `${sede}|${hhmmValue}|${group}`;
 
+    // Mapa auxiliar para agrupar IDs de horarios bajo el mismo "grupo lógico" (LMV/MJ + hora)
+    // Ej: "1|07:00|LMV" -> [id_lunes, id_miercoles, id_viernes]
+    const horariosPorGrupoLogico = new Map();
+
     for (const horario of horarios) {
       const hhmmValue = formatTime(horario.hora_inicio);
       const dayUpper = (horario.dia_semana ?? "").toString().toUpperCase();
@@ -169,6 +177,11 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
       horarioIdSet.add(horario.id);
       sedeIdsSet.add(horario.id_sede);
       if (timeWithSeconds) horaInicioSet.add(timeWithSeconds);
+
+      if (!horariosPorGrupoLogico.has(groupKey)) {
+        horariosPorGrupoLogico.set(groupKey, []);
+      }
+      horariosPorGrupoLogico.get(groupKey).push(horario.id);
     }
 
     // Consulta de inscripciones relevantes (plan, renovación, prueba)
@@ -238,6 +251,7 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
       // Manejo de errores
       const baseCliente = {
         id: cliente.id,
+        sortId: inscripcion.id, 
         nombre: cliente.nombre ?? "",
         telefono: cliente.telefono ?? null,
         estado: cliente.estado ?? "",
@@ -271,8 +285,36 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
       return "Otro";
     };
 
+    // Pre-calcular cupo excedente global por grupo lógico (LMV/MJ + hora)
+    // Mapa: inscripcionId -> esExtra
+    const extraStatusMap = new Map();
+
+    for (const [groupKey, horarioIds] of horariosPorGrupoLogico.entries()) {
+      let listaGlobalGrupo = [];
+
+      // Planes (agrupados por groupKey)
+      const planes = planGroupMap.get(groupKey) ?? [];
+      planes.forEach((p) => listaGlobalGrupo.push(p));
+
+      // Pruebas (de todos los días del grupo)
+      horarioIds.forEach((hid) => {
+        const pruebasDia = trialMap.get(hid) ?? [];
+        pruebasDia.forEach((t) => listaGlobalGrupo.push(t));
+      });
+
+      // Orden FIFO por inscripción
+      listaGlobalGrupo.sort((a, b) => (a.sortId ?? 0) - (b.sortId ?? 0));
+
+      // Marcar excedentes por cupo
+      listaGlobalGrupo.forEach((alumno, index) => {
+        const esExtra = index + 1 > cupoMaximoSede;
+        if (alumno.sortId !== null && alumno.sortId !== undefined) {
+          extraStatusMap.set(alumno.sortId, esExtra);
+        }
+      });
+    }
+
     // Construcción final del objeto de horarios con alumnos
-// ... código anterior ...
     const schedule = {};
 
     for (const horario of horarios) {
@@ -288,31 +330,25 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
         : "";
       const coachUpper = coachName ? coachName.toUpperCase() : null;
 
-      // --- CAMBIO PRINCIPAL: UNIFICAR, ORDENAR Y MARCAR ---
-      
-      let listaUnificada = [];
+      // Lista para ESTE horario (día) + marcar excedente con cálculo global del grupo
+      let listaDelDia = [];
 
-      // 1. Recopilar Planes
+      // Planes
       const planEntries = planGroupMap.get(groupKey) ?? [];
-      planEntries.forEach(p => listaUnificada.push({ ...p, tipo: 'plan', sortId: p.id })); 
-      // Nota: p.id debe ser el ID de inscripción o algo incremental. 
-      // Si p.id es ID de cliente, el orden será por antigüedad de cliente, no de inscripción. 
-      // *Idealmente*, en la consulta SQL de arriba deberías traer el ID de la tabla inscripciones_pilates como 'inscripcion_id' y usar ese.
-      // Pero si usas 'p.id' (id cliente) ordenará por quien se registró primero en el sistema, lo cual suele ser aceptable.
+      planEntries.forEach((p) => listaDelDia.push({ ...p, tipo: "plan" }));
 
-      // 2. Recopilar Pruebas
+      // Pruebas (solo de este día)
       const trialEntries = trialMap.get(horario.id) ?? [];
-      trialEntries.forEach(t => listaUnificada.push({ ...t, tipo: 'prueba', sortId: t.id }));
+      trialEntries.forEach((t) => listaDelDia.push({ ...t, tipo: "prueba" }));
 
-      // 3. Ordenar (FIFO - Primero en llegar, primero en la fila)
-      listaUnificada.sort((a, b) => a.sortId - b.sortId);
+      // Orden visual FIFO
+      listaDelDia.sort((a, b) => (a.sortId ?? 0) - (b.sortId ?? 0));
 
       const alumnosProcesados = [];
 
-      // 4. Procesar y marcar Sobrecupo
-      listaUnificada.forEach((entry, index) => {
-        // La magia: Si su posición es mayor al cupo, es extra
-        const esExtra = (index + 1) > cupoMaximoSede;
+      listaDelDia.forEach((entry) => {
+        // Estado excedente calculado globalmente por grupo lógico
+        const esExtra = extraStatusMap.get(entry.sortId) ?? false;
 
         const estadoLower = (entry.estado ?? "").toLowerCase();
         const fechaInicio = formatDate(entry.fecha_inicio);
@@ -324,20 +360,23 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
         let trialDetails = null;
         let scheduledDetails = null;
 
-        if (entry.tipo === 'plan') {
-             if(estadoLower === "plan" || estadoLower === "renovacion programada") {
-                planDetails = {
-                  type: planTypeByGroup(group),
-                  startDate: fechaInicio,
-                  endDate: fechaFin,
-                  promisedDate: fechaPrometidoPago,
-                };
-             }
-             if(estadoLower === "renovacion programada") {
-                scheduledDetails = { date: fechaInicio, promisedDate: fechaPrometidoPago };
-             }
+        if (entry.tipo === "plan") {
+          if (estadoLower === "plan" || estadoLower === "renovacion programada") {
+            planDetails = {
+              type: planTypeByGroup(group),
+              startDate: fechaInicio,
+              endDate: fechaFin,
+              promisedDate: fechaPrometidoPago,
+            };
+          }
+          if (estadoLower === "renovacion programada") {
+            scheduledDetails = {
+              date: fechaInicio,
+              promisedDate: fechaPrometidoPago,
+            };
+          }
         } else {
-             trialDetails = { date: formatDate(entry.fecha_inicio) };
+          trialDetails = { date: formatDate(entry.fecha_inicio) };
         }
 
         alumnosProcesados.push({
@@ -345,13 +384,18 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
           name: (entry.nombre ?? "").toUpperCase(),
           contact: entry.telefono,
           observation: entry.observaciones,
-          status: entry.tipo === 'prueba' ? "prueba" : (estadoLower === "renovacion programada" ? "programado" : estadoLower),
+          status:
+            entry.tipo === "prueba"
+              ? "prueba"
+              : estadoLower === "renovacion programada"
+              ? "programado"
+              : estadoLower,
           planDetails: planDetails,
           trialDetails: trialDetails,
           scheduledDetails: scheduledDetails,
-          
+
           // NUEVA PROPIEDAD PARA EL FRONT
-          es_cupo_extra: esExtra 
+          es_cupo_extra: esExtra,
         });
       });
 
