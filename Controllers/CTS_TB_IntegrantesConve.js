@@ -143,6 +143,28 @@ async function getOpenMonthStart(convenio_id, transaction) {
   return rows[0]?.openMonth || null; // null si no hay registros
 }
 
+// Devuelve true/false según adm_convenios.permiteFec (0/1)
+// Esto nos permite saber si el convenio permite o no manejar fechas de creacion y vencimiento
+// si no permite, anulamos el filtro en el OBRS
+async function getConvenioPermiteFec(convenio_id, transaction) {
+  const rows = await db.query(
+    `
+    SELECT permiteFec
+    FROM adm_convenios
+    WHERE id = :convenio_id
+    LIMIT 1
+    `,
+    {
+      replacements: { convenio_id },
+      type: db.QueryTypes.SELECT,
+      transaction
+    }
+  );
+
+  // Si no existe el convenio, por seguridad tratamos como "sin fechas"
+  return Number(rows[0]?.permiteFec ?? 0) === 1;
+}
+
 // Validación estricta: inicio de mes
 function assertMonthStartFormat(v) {
   const ok = /^\d{4}-\d{2}-01 00:00:00$/.test(String(v || ''));
@@ -273,144 +295,193 @@ export const OBRS_IntegrantesConve_CTS = async (req, res) => {
         .json({ mensajeError: 'id_conv es obligatorio (query param).' });
     }
 
-    // monthStart: si no viene, usar el mes abierto
-    let monthStart = req.query.monthStart ? String(req.query.monthStart) : null;
-    if (monthStart) assertMonthStartFormat(monthStart);
+    const permiteFec = await getConvenioPermiteFec(id_conv, t);
 
-    if (!monthStart) {
-      monthStart = await getOpenMonthStart(id_conv, t);
+    // openMonth siempre lo calculamos (sirve para meta)
+    const openMonth = await getOpenMonthStart(id_conv, t);
 
+    // monthStart solo aplica como filtro si permiteFec = 1
+    let monthStart = null;
+
+    if (permiteFec) {
+      monthStart = req.query.monthStart ? String(req.query.monthStart) : null;
+      if (monthStart) assertMonthStartFormat(monthStart);
+
+      if (!monthStart) monthStart = openMonth;
+
+      // Si no hay registros aún
       if (!monthStart) {
         await t.commit();
         return res.json({
           registros: [],
           meta: {
             id_conv,
+            permiteFec: 1,
             monthStart: null,
+            nextMonth: null,
             openMonth: null,
-            isFrozen: false
+            isFrozen: false,
+            isOpenMonth: false,
+            filterMode: 'monthly'
           }
         });
       }
+    } else {
+      // Si NO permite fechas: anulamos filtro por fechaCreacion.
+      // Igual devolvemos openMonth en meta (si existe) para no romper el front.
+      monthStart = openMonth || null;
     }
 
-    const nextMonth = await getNextMonth(monthStart, t);
+    const nextMonth = monthStart ? await getNextMonth(monthStart, t) : null;
 
     // acá usamos SQL CRUDO para que NO haya corrimiento por timezone de Sequelize
-    const rows = await db.query(
-      `
-  SELECT
-    ic.*,
+    let rows = [];
 
-    p.id              AS plan__id,
-    p.nombre_plan     AS plan__nombre_plan,
-    p.duracion_dias   AS plan__duracion_dias,
-    p.precio_lista    AS plan__precio_lista,
-    p.descuento_valor AS plan__descuento_valor,
-    p.precio_final    AS plan__precio_final,
-    p.activo          AS plan__activo,
-
-    /* Opcional: locked calculado por backend (evita timezone/parsing en front) */
-    CASE
-      WHEN ic.convenio_plan_id IS NULL THEN 0
-      WHEN ic.fecha_vencimiento IS NULL THEN 1
-      WHEN :monthStart < ic.fecha_vencimiento THEN 1
-      ELSE 0
-    END AS locked_este_mes,
-
-    /* Flag clave: cobrar solo el primer mes del ciclo del plan */
-  CASE
-    WHEN ic.convenio_plan_id IS NULL THEN 1
-    /* Si ya venció para este mes visible, vuelve a cobrar */
-    WHEN ic.fecha_vencimiento IS NOT NULL AND :monthStart >= ic.fecha_vencimiento THEN 1
-    WHEN fm.first_month IS NULL THEN 1
-    WHEN DATE_FORMAT(ic.fechaCreacion, '%Y-%m') = fm.first_month THEN 1
-    ELSE 0
-  END AS cobrar_este_mes
-
-  FROM integrantes_conve ic
-  LEFT JOIN convenios_planes_disponibles p
-    ON p.id = ic.convenio_plan_id
-
-  /* Calcula el primer mes histórico para ESA persona+plan+vencimiento,
-     pero limitado a las personas/planes presentes en el mes consultado */
-  LEFT JOIN (
+    if (permiteFec) {
+      // === MODO MENSUAL (igual a tu query actual) ===
+      rows = await db.query(
+        `
+    /* TU MISMA QUERY ACTUAL COMPLETA (LA LARGA) */
     SELECT
-      s.convenio_plan_id,
-      s.person_key,
-      s.fecha_vencimiento,
-      MIN(s.month_ym) AS first_month
-    FROM (
+      ic.*,
+
+      p.id              AS plan__id,
+      p.nombre_plan     AS plan__nombre_plan,
+      p.duracion_dias   AS plan__duracion_dias,
+      p.precio_lista    AS plan__precio_lista,
+      p.descuento_valor AS plan__descuento_valor,
+      p.precio_final    AS plan__precio_final,
+      p.activo          AS plan__activo,
+
+      CASE
+        WHEN ic.convenio_plan_id IS NULL THEN 0
+        WHEN ic.fecha_vencimiento IS NULL THEN 1
+        WHEN :monthStart < ic.fecha_vencimiento THEN 1
+        ELSE 0
+      END AS locked_este_mes,
+
+      CASE
+        WHEN ic.convenio_plan_id IS NULL THEN 1
+        WHEN ic.fecha_vencimiento IS NOT NULL AND :monthStart >= ic.fecha_vencimiento THEN 1
+        WHEN fm.first_month IS NULL THEN 1
+        WHEN DATE_FORMAT(ic.fechaCreacion, '%Y-%m') = fm.first_month THEN 1
+        ELSE 0
+      END AS cobrar_este_mes
+
+    FROM integrantes_conve ic
+    LEFT JOIN convenios_planes_disponibles p
+      ON p.id = ic.convenio_plan_id
+
+    LEFT JOIN (
       SELECT
         s.convenio_plan_id,
-        /* person_key estable: DNI > Email > Teléfono > (fallback id) */
-        CASE
-          WHEN s.dni IS NOT NULL AND TRIM(s.dni) <> '' THEN CONCAT('D:', TRIM(s.dni))
-          WHEN s.email IS NOT NULL AND TRIM(s.email) <> '' THEN CONCAT('E:', LOWER(TRIM(s.email)))
-          WHEN s.telefono IS NOT NULL AND TRIM(s.telefono) <> '' THEN CONCAT('T:', TRIM(s.telefono))
-          ELSE CONCAT('I:', s.id)
-        END AS person_key,
+        s.person_key,
         s.fecha_vencimiento,
-        DATE_FORMAT(s.fechaCreacion, '%Y-%m') AS month_ym
-      FROM integrantes_conve s
-      JOIN (
-        SELECT DISTINCT
-          ic2.convenio_plan_id,
-          CASE
-            WHEN ic2.dni IS NOT NULL AND TRIM(ic2.dni) <> '' THEN CONCAT('D:', TRIM(ic2.dni))
-            WHEN ic2.email IS NOT NULL AND TRIM(ic2.email) <> '' THEN CONCAT('E:', LOWER(TRIM(ic2.email)))
-            WHEN ic2.telefono IS NOT NULL AND TRIM(ic2.telefono) <> '' THEN CONCAT('T:', TRIM(ic2.telefono))
-            ELSE CONCAT('I:', ic2.id)
-          END AS person_key,
-          ic2.fecha_vencimiento
-        FROM integrantes_conve ic2
-        WHERE ic2.id_conv = :id_conv
-          AND ic2.fechaCreacion >= :monthStart
-          AND ic2.fechaCreacion <  :nextMonth
-          AND ic2.convenio_plan_id IS NOT NULL
-      ) cur
-        ON cur.convenio_plan_id = s.convenio_plan_id
-       AND cur.person_key =
+        MIN(s.month_ym) AS first_month
+      FROM (
+        SELECT
+          s.convenio_plan_id,
           CASE
             WHEN s.dni IS NOT NULL AND TRIM(s.dni) <> '' THEN CONCAT('D:', TRIM(s.dni))
             WHEN s.email IS NOT NULL AND TRIM(s.email) <> '' THEN CONCAT('E:', LOWER(TRIM(s.email)))
             WHEN s.telefono IS NOT NULL AND TRIM(s.telefono) <> '' THEN CONCAT('T:', TRIM(s.telefono))
             ELSE CONCAT('I:', s.id)
-          END
-       AND (
-          (cur.fecha_vencimiento IS NULL AND s.fecha_vencimiento IS NULL)
-          OR cur.fecha_vencimiento = s.fecha_vencimiento
-       )
-      WHERE s.id_conv = :id_conv
-        AND s.convenio_plan_id IS NOT NULL
-    ) s
-    GROUP BY s.convenio_plan_id, s.person_key, s.fecha_vencimiento
-  ) fm
-    ON fm.convenio_plan_id = ic.convenio_plan_id
-   AND fm.person_key =
-      CASE
-        WHEN ic.dni IS NOT NULL AND TRIM(ic.dni) <> '' THEN CONCAT('D:', TRIM(ic.dni))
-        WHEN ic.email IS NOT NULL AND TRIM(ic.email) <> '' THEN CONCAT('E:', LOWER(TRIM(ic.email)))
-        WHEN ic.telefono IS NOT NULL AND TRIM(ic.telefono) <> '' THEN CONCAT('T:', TRIM(ic.telefono))
-        ELSE CONCAT('I:', ic.id)
-      END
-   AND (
-      (fm.fecha_vencimiento IS NULL AND ic.fecha_vencimiento IS NULL)
-      OR fm.fecha_vencimiento = ic.fecha_vencimiento
-   )
+          END AS person_key,
+          s.fecha_vencimiento,
+          DATE_FORMAT(s.fechaCreacion, '%Y-%m') AS month_ym
+        FROM integrantes_conve s
+        JOIN (
+          SELECT DISTINCT
+            ic2.convenio_plan_id,
+            CASE
+              WHEN ic2.dni IS NOT NULL AND TRIM(ic2.dni) <> '' THEN CONCAT('D:', TRIM(ic2.dni))
+              WHEN ic2.email IS NOT NULL AND TRIM(ic2.email) <> '' THEN CONCAT('E:', LOWER(TRIM(ic2.email)))
+              WHEN ic2.telefono IS NOT NULL AND TRIM(ic2.telefono) <> '' THEN CONCAT('T:', TRIM(ic2.telefono))
+              ELSE CONCAT('I:', ic2.id)
+            END AS person_key,
+            ic2.fecha_vencimiento
+          FROM integrantes_conve ic2
+          WHERE ic2.id_conv = :id_conv
+            AND ic2.fechaCreacion >= :monthStart
+            AND ic2.fechaCreacion <  :nextMonth
+            AND ic2.convenio_plan_id IS NOT NULL
+        ) cur
+          ON cur.convenio_plan_id = s.convenio_plan_id
+         AND cur.person_key =
+            CASE
+              WHEN s.dni IS NOT NULL AND TRIM(s.dni) <> '' THEN CONCAT('D:', TRIM(s.dni))
+              WHEN s.email IS NOT NULL AND TRIM(s.email) <> '' THEN CONCAT('E:', LOWER(TRIM(s.email)))
+              WHEN s.telefono IS NOT NULL AND TRIM(s.telefono) <> '' THEN CONCAT('T:', TRIM(s.telefono))
+              ELSE CONCAT('I:', s.id)
+            END
+         AND (
+            (cur.fecha_vencimiento IS NULL AND s.fecha_vencimiento IS NULL)
+            OR cur.fecha_vencimiento = s.fecha_vencimiento
+         )
+        WHERE s.id_conv = :id_conv
+          AND s.convenio_plan_id IS NOT NULL
+      ) s
+      GROUP BY s.convenio_plan_id, s.person_key, s.fecha_vencimiento
+    ) fm
+      ON fm.convenio_plan_id = ic.convenio_plan_id
+     AND fm.person_key =
+        CASE
+          WHEN ic.dni IS NOT NULL AND TRIM(ic.dni) <> '' THEN CONCAT('D:', TRIM(ic.dni))
+          WHEN ic.email IS NOT NULL AND TRIM(ic.email) <> '' THEN CONCAT('E:', LOWER(TRIM(ic.email)))
+          WHEN ic.telefono IS NOT NULL AND TRIM(ic.telefono) <> '' THEN CONCAT('T:', TRIM(ic.telefono))
+          ELSE CONCAT('I:', ic.id)
+        END
+     AND (
+        (fm.fecha_vencimiento IS NULL AND ic.fecha_vencimiento IS NULL)
+        OR fm.fecha_vencimiento = ic.fecha_vencimiento
+     )
 
-  WHERE ic.id_conv = :id_conv
-    AND ic.fechaCreacion >= :monthStart
-    AND ic.fechaCreacion <  :nextMonth
+    WHERE ic.id_conv = :id_conv
+      AND ic.fechaCreacion >= :monthStart
+      AND ic.fechaCreacion <  :nextMonth
 
-  ORDER BY ic.id DESC
-  `,
-      {
-        replacements: { id_conv, monthStart, nextMonth },
-        type: db.QueryTypes.SELECT,
-        transaction: t
-      }
-    );
+    ORDER BY ic.id DESC
+    `,
+        {
+          replacements: { id_conv, monthStart, nextMonth },
+          type: db.QueryTypes.SELECT,
+          transaction: t
+        }
+      );
+    } else {
+      // === MODO GLOBAL (SIN FILTRO POR FECHA) ===
+      rows = await db.query(
+        `
+    SELECT
+      ic.*,
+
+      p.id              AS plan__id,
+      p.nombre_plan     AS plan__nombre_plan,
+      p.duracion_dias   AS plan__duracion_dias,
+      p.precio_lista    AS plan__precio_lista,
+      p.descuento_valor AS plan__descuento_valor,
+      p.precio_final    AS plan__precio_final,
+      p.activo          AS plan__activo,
+
+      /* Sin lógica mensual */
+      0 AS locked_este_mes,
+      1 AS cobrar_este_mes
+
+    FROM integrantes_conve ic
+    LEFT JOIN convenios_planes_disponibles p
+      ON p.id = ic.convenio_plan_id
+
+    WHERE ic.id_conv = :id_conv
+    ORDER BY ic.id DESC
+    `,
+        {
+          replacements: { id_conv },
+          type: db.QueryTypes.SELECT,
+          transaction: t
+        }
+      );
+    }
+
     // reconstruimos el shape que el front ya consume: { ...integrante, plan: {...} | null }
     const registros = (rows || []).map((r) => {
       const {
@@ -440,19 +511,26 @@ export const OBRS_IntegrantesConve_CTS = async (req, res) => {
       return { ...rest, plan };
     });
 
-    const openMonth = await getOpenMonthStart(id_conv, t);
-    const frozen = await isMonthFrozen(id_conv, monthStart, t);
+    const frozen =
+      permiteFec && monthStart
+        ? await isMonthFrozen(id_conv, monthStart, t)
+        : false;
 
     await t.commit();
     return res.json({
       registros,
       meta: {
         id_conv,
+        permiteFec: permiteFec ? 1 : 0,
+        filterMode: permiteFec ? 'monthly' : 'all',
         monthStart,
         nextMonth,
         openMonth,
         isFrozen: frozen,
-        isOpenMonth: String(openMonth) === String(monthStart)
+        isOpenMonth:
+          permiteFec && monthStart
+            ? String(openMonth) === String(monthStart)
+            : false
       }
     });
   } catch (error) {
@@ -937,7 +1015,7 @@ const buildIntegrantesPdfHtml = ({ meta, registros, totals }) => {
 };
 
 // ==============================
-// ENDPOINT PDF 
+// ENDPOINT PDF
 // ==============================
 export const OBRS_IntegrantesConve_PDF_CTS = async (req, res) => {
   const t = await db.transaction();
@@ -945,6 +1023,18 @@ export const OBRS_IntegrantesConve_PDF_CTS = async (req, res) => {
 
   try {
     const id_conv = Number(req.query.id_conv || 0);
+    // Buscar nombre del convenio (adm_convenios.nameConve)
+    const convenio = await AdmConveniosModel.findByPk(id_conv, {
+      attributes: ['id', 'nameConve', 'permiteFec'],
+      transaction: t
+    });
+
+    const convenioNombre = convenio?.nameConve
+      ? String(convenio.nameConve)
+      : null;
+    const permiteFec = Number(convenio?.permiteFec ?? 0) === 1;
+    const filterMode = permiteFec ? 'monthly' : 'all';
+
     if (!Number.isFinite(id_conv) || id_conv <= 0) {
       await t.rollback();
       return res
@@ -952,35 +1042,36 @@ export const OBRS_IntegrantesConve_PDF_CTS = async (req, res) => {
         .json({ mensajeError: 'id_conv es obligatorio (query param).' });
     }
 
-    // monthStart: si no viene, usar mes abierto
+    // monthStart: si no viene, usar mes abierto (solo es obligatorio si permiteFec=1)
     let monthStart = req.query.monthStart ? String(req.query.monthStart) : null;
     if (monthStart) assertMonthStartFormat(monthStart);
 
-    if (!monthStart) {
-      monthStart = await getOpenMonthStart(id_conv, t);
+    // openMonth lo usamos para meta/consistencia (y como ancla si hace falta)
+    const openMonth = await getOpenMonthStart(id_conv, t);
+
+    if (permiteFec) {
+      // En modo mensual, monthStart es obligatorio (si no viene, es el openMonth)
       if (!monthStart) {
-        await t.commit();
-        return res
-          .status(404)
-          .json({ mensajeError: 'No hay registros para generar el PDF.' });
+        monthStart = openMonth;
+        if (!monthStart) {
+          await t.commit();
+          return res
+            .status(404)
+            .json({ mensajeError: 'No hay registros para generar el PDF.' });
+        }
       }
+    } else {
+      // En modo "all", ignoramos el filtro mensual: monthStart es solo informativo
+      if (!monthStart) monthStart = openMonth || null;
     }
 
-    const nextMonth = await getNextMonth(monthStart, t);
-
-    // Buscar nombre del convenio (adm_convenios.nameConve)
-    const convenio = await AdmConveniosModel.findByPk(id_conv, {
-      attributes: ['id', 'nameConve'],
-      transaction: t
-    });
-
-    const convenioNombre = convenio?.nameConve
-      ? String(convenio.nameConve)
-      : null;
+    const nextMonth =
+      permiteFec && monthStart ? await getNextMonth(monthStart, t) : null;
 
     // Traer integrantes del mes + plan
-   const rows = await db.query(
-     `
+    const anchorMonthStart = monthStart || openMonth || '1970-01-01 00:00:00';
+
+    const sqlMonthly = `
   SELECT
     ic.*,
 
@@ -992,7 +1083,6 @@ export const OBRS_IntegrantesConve_PDF_CTS = async (req, res) => {
     p.precio_final    AS plan__precio_final,
     p.activo          AS plan__activo,
 
-    /* Opcional: locked calculado por backend (evita timezone/parsing en front) */
     CASE
       WHEN ic.convenio_plan_id IS NULL THEN 0
       WHEN ic.fecha_vencimiento IS NULL THEN 1
@@ -1000,22 +1090,18 @@ export const OBRS_IntegrantesConve_PDF_CTS = async (req, res) => {
       ELSE 0
     END AS locked_este_mes,
 
-    /* Flag clave: cobrar solo el primer mes del ciclo del plan */
-  CASE
-    WHEN ic.convenio_plan_id IS NULL THEN 1
-    /* Si ya venció para este mes visible, vuelve a cobrar */
-    WHEN ic.fecha_vencimiento IS NOT NULL AND :monthStart >= ic.fecha_vencimiento THEN 1
-    WHEN fm.first_month IS NULL THEN 1
-    WHEN DATE_FORMAT(ic.fechaCreacion, '%Y-%m') = fm.first_month THEN 1
-    ELSE 0
-  END AS cobrar_este_mes
+    CASE
+      WHEN ic.convenio_plan_id IS NULL THEN 1
+      WHEN ic.fecha_vencimiento IS NOT NULL AND :monthStart >= ic.fecha_vencimiento THEN 1
+      WHEN fm.first_month IS NULL THEN 1
+      WHEN DATE_FORMAT(ic.fechaCreacion, '%Y-%m') = fm.first_month THEN 1
+      ELSE 0
+    END AS cobrar_este_mes
 
   FROM integrantes_conve ic
   LEFT JOIN convenios_planes_disponibles p
     ON p.id = ic.convenio_plan_id
 
-  /* Calcula el primer mes histórico para ESA persona+plan+vencimiento,
-     pero limitado a las personas/planes presentes en el mes consultado */
   LEFT JOIN (
     SELECT
       s.convenio_plan_id,
@@ -1025,7 +1111,6 @@ export const OBRS_IntegrantesConve_PDF_CTS = async (req, res) => {
     FROM (
       SELECT
         s.convenio_plan_id,
-        /* person_key estable: DNI > Email > Teléfono > (fallback id) */
         CASE
           WHEN s.dni IS NOT NULL AND TRIM(s.dni) <> '' THEN CONCAT('D:', TRIM(s.dni))
           WHEN s.email IS NOT NULL AND TRIM(s.email) <> '' THEN CONCAT('E:', LOWER(TRIM(s.email)))
@@ -1086,13 +1171,49 @@ export const OBRS_IntegrantesConve_PDF_CTS = async (req, res) => {
     AND ic.fechaCreacion <  :nextMonth
 
   ORDER BY ic.id DESC
-  `,
-     {
-       replacements: { id_conv, monthStart, nextMonth },
-       type: db.QueryTypes.SELECT,
-       transaction: t
-     }
-   );
+`;
+
+    const sqlAll = `
+  SELECT
+    ic.*,
+
+    p.id              AS plan__id,
+    p.nombre_plan     AS plan__nombre_plan,
+    p.duracion_dias   AS plan__duracion_dias,
+    p.precio_lista    AS plan__precio_lista,
+    p.descuento_valor AS plan__descuento_valor,
+    p.precio_final    AS plan__precio_final,
+    p.activo          AS plan__activo,
+
+    CASE
+      WHEN ic.convenio_plan_id IS NULL THEN 0
+      WHEN ic.fecha_vencimiento IS NULL THEN 1
+      WHEN :anchorMonthStart < ic.fecha_vencimiento THEN 1
+      ELSE 0
+    END AS locked_este_mes,
+
+    1 AS cobrar_este_mes
+
+  FROM integrantes_conve ic
+  LEFT JOIN convenios_planes_disponibles p
+    ON p.id = ic.convenio_plan_id
+
+  WHERE ic.id_conv = :id_conv
+
+  ORDER BY ic.id DESC
+`;
+
+    const sql = permiteFec ? sqlMonthly : sqlAll;
+
+    const replacements = permiteFec
+      ? { id_conv, monthStart, nextMonth }
+      : { id_conv, anchorMonthStart };
+
+    const rows = await db.query(sql, {
+      replacements,
+      type: db.QueryTypes.SELECT,
+      transaction: t
+    });
 
     const registros = (rows || []).map((r) => {
       const {
@@ -1150,8 +1271,26 @@ export const OBRS_IntegrantesConve_PDF_CTS = async (req, res) => {
       { count: 0, countCobrables: 0, sumMonto: 0, sumDescuento: 0, sumFinal: 0 }
     );
 
+    const frozen = permiteFec
+      ? await isMonthFrozen(id_conv, monthStart, t)
+      : false;
+
+    const metaPdf = {
+      id_conv,
+      permiteFec: permiteFec ? 1 : 0,
+      filterMode,
+      monthStart,
+      nextMonth,
+      openMonth,
+      isFrozen: frozen,
+      isOpenMonth: permiteFec
+        ? String(openMonth) === String(monthStart)
+        : false,
+      convenioNombre
+    };
+
     const html = buildIntegrantesPdfHtml({
-      meta: { id_conv, monthStart, nextMonth, convenioNombre },
+      meta: metaPdf,
       registros,
       totals
     });
