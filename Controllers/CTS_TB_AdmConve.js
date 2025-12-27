@@ -50,9 +50,15 @@ export const OBR_AdmConve_CTS = async (req, res) => {
 export const CR_AdmConve_CTS = async (req, res) => {
   try {
     const registro = await AdmConveniosModel.create(req.body);
-    res.json({ message: 'Registro creado correctamente' });
+
+    //BENJAMIN ORELLANA - 22-12-2026 */
+    // Devuelve el registro creado (incluye id) para que el front pueda abrir el modal de planes
+    res.status(201).json({
+      message: 'Registro creado correctamente',
+      registro
+    });
   } catch (error) {
-    res.json({ mensajeError: error.message });
+    res.status(500).json({ mensajeError: error.message });
   }
 };
 

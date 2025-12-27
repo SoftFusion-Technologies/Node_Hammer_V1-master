@@ -34,17 +34,23 @@ import { SCHEDULE_VentasAgendaCron } from './Controllers/CTS_TB_VentasAgenda.js'
 
 import moment from 'moment-timezone';
 
-import { login, login_profesores_pilates, authenticateToken } from './Security/auth.js';  // Importa las funciones del archivo auth.js
+import {
+  login,
+  login_profesores_pilates,
+  authenticateToken
+} from './Security/auth.js'; // Importa las funciones del archivo auth.js
 import { crearAsistenciasDiariasAusentes } from './Controllers/CTS_TB_AsistenciasPilates.js';
 
 // Imports de Remarketing
 import { SCHEDULE_VentasRemarketingCron } from './Controllers/CTS_TB_VentasRemarketing.js';
-import Users from './Models/MD_TB_Users.js';
-import VentasRemarketingModel from './Models/MD_TB_VentasRemarketing.js';
-import { VentasProspectosModel } from './Models/MD_TB_ventas_prospectos.js';
-import { SedeModel } from './Models/MD_TB_sedes.js';
-import { VentasComisionesModel } from './Models/MD_TB_ventas_comisiones.js';
-import remarketing_relaciones from './Models/remarketing_relaciones.js';
+// SE COMENTAN IMPORTS OBSTOLETOS DE REMARKETING BENJAMIN ORELLANA 22-12-2025 
+// import Users from './Models/MD_TB_Users.js';
+// import VentasRemarketingModel from './Models/MD_TB_VentasRemarketing.js';
+// import { VentasProspectosModel } from './Models/MD_TB_ventas_prospectos.js';
+// import { SedeModel } from './Models/MD_TB_sedes.js';
+// import { VentasComisionesModel } from './Models/MD_TB_ventas_comisiones.js';
+// import remarketing_relaciones from './Models/remarketing_relaciones.js';
+// SE COMENTAN IMPORTS OBSTOLETOS DE REMARKETING BENJAMIN ORELLANA 22-12-2025 
 
 import setupAssociations from './Models/Asociaciones.js';
 
@@ -54,11 +60,28 @@ import dayjs from 'dayjs';
 import { mapUserSedeToVp, norm } from './utils/sede.js';
 
 import initHxRelaciones from './Models/hx_relaciones.js';
-import './Models/ventas_relaciones.js'
+// BENJAMIN ORELLANA 22-12-2025  SE ADICIONA RELACIONES EN CONVENIOS
+import initConveniosRelaciones from './Models/convenios_relaciones.js';
+// BENJAMIN ORELLANA 22-12-2025  SE ADICIONA RELACIONES EN CONVENIOS
+
+import './Models/ventas_relaciones.js';
 // … importar db y modelos antes si corresponde …
 
 // Inicializar asociaciones (una sola vez)
 initHxRelaciones();
+// BENJAMIN ORELLANA 22-12-2025  SE ADICIONA RELACIONES EN CONVENIOS
+initConveniosRelaciones();
+// BENJAMIN ORELLANA 22-12-2025  SE ADICIONA RELACIONES EN CONVENIOS
+
+// BENJAMIN ORELLANA 22-12-2025  IMPORTACIÓN DE MODELOS DE CONVENIOS INI
+import MD_TB_IntegrantesConve from './Models/MD_TB_IntegrantesConve.js';
+import MD_TB_ConveniosPlanesDisponibles from './Models/MD_TB_ConveniosPlanesDisponibles.js';
+
+const IntegrantesConveModel = MD_TB_IntegrantesConve.IntegrantesConveModel;
+const ConveniosPlanesDisponiblesModel =
+  MD_TB_ConveniosPlanesDisponibles.ConveniosPlanesDisponiblesModel;
+// BENJAMIN ORELLANA 22-12-2025  IMPORTACIÓN DE MODELOS DE CONVENIOS FIN
+
 // CONFIGURACION PRODUCCION
 if (process.env.NODE_ENV !== 'production') {
   dotenv.config();
@@ -115,32 +138,41 @@ app.get('/', (req, res) => {
     res.end('404 ERROR');
   }
 });
-
-// Función para obtener el mes y año actual y el anterior
-const getMesYAnioActual = () => {
-  const now = new Date();
-  const mesActual = now.getMonth() + 1; // Los meses en JS son 0-11, así que sumamos 1
-  const anioActual = now.getFullYear();
-
-  // Si el mes actual es enero (mes 1), entonces el mes anterior será diciembre (mes 12 del año anterior)
-  const mesAnterior = mesActual === 1 ? 12 : mesActual - 1;
-  const anioAnterior = mesActual === 1 ? anioActual - 1 : anioActual;
-
-  return { mesActual, anioActual, mesAnterior, anioAnterior };
-};
-
-// Ruta para obtener convenio y sus integrantes
+// BENJAMIN ORELLANA 22-12-2025  ACTUALIZACION DE ENDPOINT PARA OBTENER INTEGRANTES DE CONVENIOS INI
+// Antes hacia un select pelado, ahora por modelo y 
+// trae datos del plan asociado al integrante 
 app.get('/admconvenios/:id_conv/integrantes', async (req, res) => {
   const { id_conv } = req.params;
 
   try {
-    const results = await db.query(
-      'SELECT * FROM integrantes_conve i WHERE i.id_conv = :id_conv',
-      {
-        replacements: { id_conv },
-        type: db.QueryTypes.SELECT
-      }
-    );
+        // const results = await db.query(
+        //   'SELECT * FROM integrantes_conve i WHERE i.id_conv = :id_conv',
+        //   {
+        //     replacements: { id_conv },
+        //     type: db.QueryTypes.SELECT
+        //   }
+        // );
+
+    const results = await IntegrantesConveModel.findAll({
+      where: { id_conv },
+      include: [
+        {
+          model: ConveniosPlanesDisponiblesModel,
+          as: 'plan',
+          required: false,
+          attributes: [
+            'id',
+            'nombre_plan',
+            'duracion_dias',
+            'precio_lista',
+            'descuento_valor',
+            'precio_final',
+            'activo'
+          ]
+        }
+      ],
+      order: [['id', 'DESC']]
+    });
 
     res.json(results);
   } catch (err) {
@@ -223,14 +255,19 @@ async function deleteOldNovedades() {
 
 deleteOldNovedades();
 // Programar la tarea para que se ejecute todos los días a las 00:01 AM para crear asistencias diarias ausentes
-cron.schedule('1 0 * * *', () => {
-  console.log('[CRON] Disparando la tarea programada diaria de asistencias...');
-  crearAsistenciasDiariasAusentes();
-}, {
-  scheduled: true,
-  timezone: "America/Argentina/Buenos_Aires" 
-});
-
+cron.schedule(
+  '1 0 * * *',
+  () => {
+    console.log(
+      '[CRON] Disparando la tarea programada diaria de asistencias...'
+    );
+    crearAsistenciasDiariasAusentes();
+  },
+  {
+    scheduled: true,
+    timezone: 'America/Argentina/Buenos_Aires'
+  }
+);
 
 // Programar la tarea para que se ejecute cada día a medianoche
 cron.schedule('0 0 * * *', () => {
@@ -239,18 +276,12 @@ cron.schedule('0 0 * * *', () => {
 });
 
 const pool = mysql.createPool({
-  host: 'localhost', // Configurar según tu base de datos
-  user: 'root', // Configurar según tu base de datos
-  password: '123456', // Configurar según tu base de datos
+  host: 'localhost',
+  user: 'root',
+  password: '123456',
   database: 'DB_HammerDESA_c1841398'
 });
 
-// const pool = mysql.createPool({
-//   host: '149.50.141.175', // Configurar según tu base de datos
-//   user: 'c1841398_hammer', // Configurar según tu base de datos
-//   password: 'bu21guPOfu', // Configurar según tu base de datos
-//   database: 'c1841398_hammer'
-// });
 
 const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
 console.log('Current Directory:', CURRENT_DIR);
@@ -293,6 +324,8 @@ const multerUpload = multer({
     fileSize: 70000000 // Tamaño máximo del archivo antes (30 MB) ahora 60
   }
 });
+
+//Para administrar las los comprobantes emitidas por el convenio
 
 app.post(
   '/upload/:convenio_id',
@@ -372,15 +405,17 @@ app.get('/images/:convenio_id', async (req, res) => {
   const { convenio_id } = req.params;
 
   try {
-    // Obtener las imágenes relacionadas al convenio
     const [rows] = await pool.query(
-      'SELECT image_path FROM adm_convenio_images WHERE convenio_id = ?',
+      `
+      SELECT id, convenio_id, image_path, created_at
+      FROM adm_convenio_images
+      WHERE convenio_id = ?
+      ORDER BY created_at DESC, id DESC
+      `,
       [convenio_id]
     );
 
-    // Enviar las rutas de las imágenes al frontend
-    const images = rows.map((row) => row.image_path.split('/').pop()); // Obtener solo el nombre del archivo
-    res.json({ images });
+    res.json({ images: rows });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error al obtener las imágenes.' });
@@ -408,6 +443,8 @@ app.post(
         'INSERT INTO adm_convenio_fac (convenio_id, image_path, created_at) VALUES (?, ?, ?)',
         [convenio_id, imagePath, fecha]
       );
+      const [dbRow] = await pool.query('SELECT DATABASE() db, @@hostname host');
+      console.log('[UPLOADFAC] DB:', dbRow?.[0]);
       res
         .status(200)
         .json({ message: 'Imagen subida y guardada correctamente.' });
@@ -466,15 +503,17 @@ app.get('/imagesfac/:convenio_id', async (req, res) => {
   const { convenio_id } = req.params;
 
   try {
-    // Obtener las imágenes relacionadas al convenio
     const [rows] = await pool.query(
-      'SELECT image_path FROM adm_convenio_fac WHERE convenio_id = ?',
+      `
+      SELECT id, convenio_id, image_path, created_at
+      FROM adm_convenio_fac
+      WHERE convenio_id = ?
+      ORDER BY created_at DESC, id DESC
+      `,
       [convenio_id]
     );
 
-    // Enviar las rutas de las imágenes al frontend
-    const images = rows.map((row) => row.image_path.split('/').pop()); // Obtener solo el nombre del archivo
-    res.json({ images });
+    res.json({ images: rows });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error al obtener las imágenes.' });
@@ -723,272 +762,472 @@ app.delete('/novedades-vencimientos/:id', async (req, res) => {
 });
 
 //R8 - SE AGREGAN FECHAS PARA TRABAJAR EN CONVENIOS INICIO - BENJAMIN ORELLANA */
-import IntegrantesConveModelClon from './Models/MD_TB_IntegrantesConveClon.js';
-import Meses from './Models/MD_TB_Meses.js';
+// import IntegrantesConveModelClon from './Models/MD_TB_IntegrantesConveClon.js';
+// import Meses from './Models/MD_TB_Meses.js';
+
+// Bloque comentado por BENJAMIN ORELLANA 22-12-2025  ya no clonamos los integrantes de esta forma
+// ahora los integrantes se clonan cuando presionan congelar en el convenio
+
 // const registros = await IntegrantesConveModelClon.findAll();
 // console.log(`Registros encontrados: ${JSON.stringify(registros, null, 2)}`);
 
 // Función para obtener el último mes de ejecución de la base de datos
-async function getLastExecutionMonth() {
-  const lastExecution = await Meses.findOne();
-  if (lastExecution) {
-    return new Date(lastExecution.fecha).getMonth();
-  }
-  return null;
-}
+// async function getLastExecutionMonth() {
+//   const lastExecution = await Meses.findOne();
+//   if (lastExecution) {
+//     return new Date(lastExecution.fecha).getMonth();
+//   }
+//   return null;
+// }
 
-// Función para actualizar la fecha de la última ejecución
-async function updateLastExecutionMonth() {
-  const currentDate = new Date();
-  await Meses.upsert({
-    id: 1, // Aseguramos que solo haya un registro con el id 1
-    fecha: currentDate
-  });
-}
+// // Función para actualizar la fecha de la última ejecución
+// async function updateLastExecutionMonth() {
+//   const currentDate = new Date();
+//   await Meses.upsert({
+//     id: 1, // Aseguramos que solo haya un registro con el id 1
+//     fecha: currentDate
+//   });
+// }
 
 // Función para clonar todos los registros de `integrantes_conve`
-async function cloneIntegrantes() {
-  try {
-    // Verificar si existe al menos un convenio con permiteFec igual a 1
+// async function cloneIntegrantes() {
+//   try {
+//     // Verificar si existe al menos un convenio con permiteFec igual a 1
 
-    // Obtener los convenios que permiten la clonación
-    const [conveniosPermitidos] = await pool.query(
-      `SELECT id FROM adm_convenios WHERE permiteFec = 1`
-    );
+//     // Obtener los convenios que permiten la clonación
+//     const [conveniosPermitidos] = await pool.query(
+//       `SELECT id FROM adm_convenios WHERE permiteFec = 1`
+//     );
 
-    // Log de convenios permitidos
-    console.log('Convenios permitidos:', conveniosPermitidos);
+//     // Log de convenios permitidos
+//     console.log('Convenios permitidos:', conveniosPermitidos);
 
-    // Si no hay convenios permitiendo la clonación, salimos
-    if (conveniosPermitidos.length === 0) {
-      console.log(
-        'La clonación no está permitida. No hay convenios con permiteFec igual a 1.'
-      );
-      return; // Salir si no se permite la clonación
-    }
+//     // Si no hay convenios permitiendo la clonación, salimos
+//     if (conveniosPermitidos.length === 0) {
+//       console.log(
+//         'La clonación no está permitida. No hay convenios con permiteFec igual a 1.'
+//       );
+//       return; // Salir si no se permite la clonación
+//     }
 
-    const registros = await IntegrantesConveModelClon.findAll(); // Todos los registros de la tabla original
-    const currentMonth = new Date().getMonth(); // Mes actual
-    const lastExecutionMonth = await getLastExecutionMonth(); // Obtiene el último mes de clonación
+//     const registros = await IntegrantesConveModelClon.findAll(); // Todos los registros de la tabla original
+//     const currentMonth = new Date().getMonth(); // Mes actual
+//     const lastExecutionMonth = await getLastExecutionMonth(); // Obtiene el último mes de clonación
 
-    // Si ya se ejecutó este mes, salir
-    if (currentMonth === lastExecutionMonth) {
-      console.log('La clonación ya se ejecutó este mes. Saliendo...');
-      return;
-    }
+//     // Si ya se ejecutó este mes, salir
+//     if (currentMonth === lastExecutionMonth) {
+//       console.log('La clonación ya se ejecutó este mes. Saliendo...');
+//       return;
+//     }
 
-    // Obtener solo los IDs de los convenios permitidos
-    const conveniosIdsPermitidos = conveniosPermitidos.map(
-      (convenio) => convenio.id
-    );
-    console.log('IDs de convenios permitidos:', conveniosIdsPermitidos);
+//     // Obtener solo los IDs de los convenios permitidos
+//     const conveniosIdsPermitidos = conveniosPermitidos.map(
+//       (convenio) => convenio.id
+//     );
+//     console.log('IDs de convenios permitidos:', conveniosIdsPermitidos);
 
-    // Filtrar los registros que se deben clonar basados en los convenios permitidos
-    const registrosAClonar = registros.filter((registro) => {
-      const shouldClone = conveniosIdsPermitidos.includes(registro.id_conv); // Asegúrate de que 'convenioId' es el nombre correcto
-      console.log(
-        `Registro ID: ${registro.id}, Conv ID: ${registro.id_conv}, Clonable: ${shouldClone}`
-      ); // Log para ver el estado de cada registro
-      return shouldClone; // Retorna solo aquellos que son clonables
-    });
+//     // Filtrar los registros que se deben clonar basados en los convenios permitidos
+//     const registrosAClonar = registros.filter((registro) => {
+//       const shouldClone = conveniosIdsPermitidos.includes(registro.id_conv); // Asegúrate de que 'convenioId' es el nombre correcto
+//       console.log(
+//         `Registro ID: ${registro.id}, Conv ID: ${registro.id_conv}, Clonable: ${shouldClone}`
+//       ); // Log para ver el estado de cada registro
+//       return shouldClone; // Retorna solo aquellos que son clonables
+//     });
 
-    // Verifica los registros a clonar
-    console.log('Registros a clonar:', registrosAClonar);
+//     // Verifica los registros a clonar
+//     console.log('Registros a clonar:', registrosAClonar);
 
-    // Log de registros que se intentan clonar
-    console.log('Registros a clonar:', registrosAClonar);
+//     // Log de registros que se intentan clonar
+//     console.log('Registros a clonar:', registrosAClonar);
 
-    // Si hay registros para clonar
-    if (registrosAClonar.length > 0) {
-      console.log(
-        `${registrosAClonar.length} registros encontrados. Comenzando a clonar...`
-      );
+//     // Si hay registros para clonar
+//     if (registrosAClonar.length > 0) {
+//       console.log(
+//         `${registrosAClonar.length} registros encontrados. Comenzando a clonar...`
+//       );
 
-      const fechaCreacion = new Date(new Date().getFullYear(), currentMonth, 1);
+//       const fechaCreacion = new Date(new Date().getFullYear(), currentMonth, 1);
 
-      // Eliminar registros antiguos de la tabla clonada que coincidan con la fecha actual
-      await IntegrantesConveModelClon.destroy({
-        where: {
-          fechaCreacion: fechaCreacion // Eliminar registros de la fecha de clonación
-        }
-      });
+//       // Eliminar registros antiguos de la tabla clonada que coincidan con la fecha actual
+//       await IntegrantesConveModelClon.destroy({
+//         where: {
+//           fechaCreacion: fechaCreacion // Eliminar registros de la fecha de clonación
+//         }
+//       });
 
-      // Clonar cada registro que está permitido por el convenio
-      for (let registro of registrosAClonar) {
-        // Verificar si el registro ya existe en la tabla clonada
-        const existingRegistro = await IntegrantesConveModelClon.findOne({
-          where: {
-            nombre: registro.nombre,
-            dni: registro.dni,
-            telefono: registro.telefono,
-            email: registro.email,
-            fechaCreacion: fechaCreacion
-          }
-        });
+//       // Clonar cada registro que está permitido por el convenio
+//       for (let registro of registrosAClonar) {
+//         // Verificar si el registro ya existe en la tabla clonada
+//         const existingRegistro = await IntegrantesConveModelClon.findOne({
+//           where: {
+//             nombre: registro.nombre,
+//             dni: registro.dni,
+//             telefono: registro.telefono,
+//             email: registro.email,
+//             fechaCreacion: fechaCreacion
+//           }
+//         });
 
-        // Solo crear un nuevo registro si no existe uno igual
-        if (!existingRegistro) {
-          await IntegrantesConveModelClon.create({
-            ...registro.dataValues, // Copia los valores del registro original
-            id: undefined, // Evita conflictos con el ID
-            fechaCreacion: fechaCreacion // Fecha del primer día del mes actual
-          });
-        } else {
-          console.log(
-            `El registro con ${registro.nombre} ya existe y no será duplicado.`
-          );
-        }
-      }
+//         // Solo crear un nuevo registro si no existe uno igual
+//         if (!existingRegistro) {
+//           await IntegrantesConveModelClon.create({
+//             ...registro.dataValues, // Copia los valores del registro original
+//             id: undefined, // Evita conflictos con el ID
+//             fechaCreacion: fechaCreacion // Fecha del primer día del mes actual
+//           });
+//         } else {
+//           console.log(
+//             `El registro con ${registro.nombre} ya existe y no será duplicado.`
+//           );
+//         }
+//       }
 
-      console.log('Registros duplicados con éxito.');
-      await updateLastExecutionMonth(); // Actualiza la fecha de la última clonación
-    } else {
-      console.log('No se encontraron registros para clonar.');
-    }
-  } catch (error) {
-    console.error('Error en la clonación:', error);
-  }
-}
+//       console.log('Registros duplicados con éxito.');
+//       await updateLastExecutionMonth(); // Actualiza la fecha de la última clonación
+//     } else {
+//       console.log('No se encontraron registros para clonar.');
+//     }
+//   } catch (error) {
+//     console.error('Error en la clonación:', error);
+//   }
+// }
 
-cloneIntegrantes();
+// cloneIntegrantes();
 
-// Programar la tarea para que se ejecute el 1 de cada mes a las 00:00
-cron.schedule('0 0 1 * *', () => {
-  console.log(
-    'Cron job ejecutado - Comenzando a clonar registros de IntegrantesConve...'
-  );
-  cloneIntegrantes();
-});
+// // Programar la tarea para que se ejecute el 1 de cada mes a las 00:00
+// cron.schedule('0 0 1 * *', () => {
+//   console.log(
+//     'Cron job ejecutado - Comenzando a clonar registros de IntegrantesConve...'
+//   );
+//   cloneIntegrantes();
+// });
+// Bloque comentado por BENJAMIN ORELLANA 22-12-2025  ya no clonamos los integrantes de esta forma
+// ahora los integrantes se clonan cuando presionan congelar en el convenio
 
 //R8 - SE AGREGAN FECHAS PARA TRABAJAR EN CONVENIOS FINAL - BENJAMIN ORELLANA */
 
-app.post('/congelamientos/:convenio_id', async (req, res) => {
-  const { convenio_id } = req.params;
-  const { estado, vencimiento } = req.body;
 
-  if (typeof estado === 'undefined' || typeof vencimiento === 'undefined') {
-    return res.status(400).json({ error: 'Faltan parámetros en la solicitud' });
-  }
+// Congelar (clonar) mes abierto -> mes siguiente (por MES, ignora horas)
+app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
+  const { convenio_id } = req.params;
+  const { vencimiento } = req.body;
+
+  const t = await db.transaction();
+
+  const lockName = `freeze_convenio_${convenio_id}`;
+  let lockAcquired = false;
+
+  const releaseLockSafe = async () => {
+    if (!lockAcquired) return;
+    try {
+      await db.query(`SELECT RELEASE_LOCK(:lockName) AS released`, {
+        replacements: { lockName },
+        type: db.QueryTypes.SELECT,
+        transaction: t
+      });
+    } catch (_) {
+      // noop
+    } finally {
+      lockAcquired = false;
+    }
+  };
+
+  const abort = (status, payload) => {
+    const e = new Error('ABORT');
+    e.httpStatus = status;
+    e.payload = payload;
+    throw e;
+  };
+
+  // Helpers de “clave de mes”
+  const monthKey = (s) => (s ? String(s).slice(0, 7) : null); // 'YYYY-MM'
 
   try {
-    // Verifica si ya existe un registro congelado para el mismo convenio y mes
-    const existingRecord = await db.query(
-      'SELECT * FROM congelamiento_integrantes WHERE convenio_id = :convenio_id AND MONTH(vencimiento) = MONTH(:vencimiento) AND YEAR(vencimiento) = YEAR(:vencimiento)',
+    // 0) Lock
+    const lockRows = await db.query(`SELECT GET_LOCK(:lockName, 10) AS got`, {
+      replacements: { lockName },
+      type: db.QueryTypes.SELECT,
+      transaction: t
+    });
+
+    const got = Number(lockRows?.[0]?.got ?? 0);
+    if (got !== 1) {
+      abort(409, {
+        error:
+          'No se pudo congelar en este momento (otro proceso está congelando este convenio). Intente nuevamente.'
+      });
+    }
+    lockAcquired = true;
+
+    // 1) Determinar mes abierto por CLAVE DE MES (YYYY-MM-01 00:00:00) + mes actual por clave
+    const openRows = await db.query(
+      `
+      SELECT
+        DATE_FORMAT(MAX(fechaCreacion), '%Y-%m-01 00:00:00') AS openMonthKey,
+        DATE_FORMAT(NOW(),            '%Y-%m-01 00:00:00') AS currentMonthKey
+      FROM integrantes_conve
+      WHERE id_conv = :convenio_id
+      `,
       {
-        replacements: { convenio_id, vencimiento },
-        type: db.QueryTypes.SELECT
+        replacements: { convenio_id },
+        type: db.QueryTypes.SELECT,
+        transaction: t
       }
     );
 
-    if (existingRecord.length > 0) {
-      // Si ya existe, actualizamos el estado contrario (congelar o descongelar)
-      const results = await db.query(
-        'UPDATE congelamiento_integrantes SET estado = :estado WHERE convenio_id = :convenio_id AND vencimiento = :vencimiento',
-        {
-          replacements: { estado, convenio_id, vencimiento },
-          type: db.QueryTypes.UPDATE
-        }
-      );
+    const openMonthKey = openRows?.[0]?.openMonthKey;     // 'YYYY-MM-01 00:00:00'
+    const currentMonthKey = openRows?.[0]?.currentMonthKey;
 
-      return res.status(200).json({
-        message:
-          estado === 1
-            ? 'Congelamiento activado correctamente'
-            : 'Congelamiento desactivado correctamente',
-        data: results
+    if (!openMonthKey) {
+      abort(409, {
+        error: 'No hay registros para este convenio. No se puede congelar.'
       });
-    } else {
-      // Si no existe, crear nuevo registro
-      const results = await db.query(
-        'INSERT INTO congelamiento_integrantes (convenio_id, estado, vencimiento) VALUES (:convenio_id, :estado, :vencimiento)',
-        {
-          replacements: { convenio_id, estado, vencimiento },
-          type: db.QueryTypes.INSERT
-        }
-      );
-
-      return res
-        .status(201)
-        .json({ message: 'Congelamiento creado con éxito', data: results });
     }
-  } catch (err) {
-    console.log('Error ejecutando la consulta', err);
-    res.status(500).json({ error: 'Error ejecutando la consulta' });
-  }
-});
 
-app.put('/congelamientos/:convenio_id', async (req, res) => {
-  const { convenio_id } = req.params;
-  const { estado, vencimiento } = req.body;
+    // 1.1) Validación: NO congelar meses anteriores al mes actual (por clave)
+    if (String(openMonthKey) < String(currentMonthKey)) {
+      abort(403, {
+        error: 'No se puede congelar un mes anterior al mes actual.',
+        openMonth: openMonthKey,
+        currentMonth: currentMonthKey
+      });
+    }
 
-  if (typeof estado === 'undefined' || typeof vencimiento === 'undefined') {
-    return res.status(400).json({ error: 'Faltan parámetros en la solicitud' });
-  }
+    // (Opcional) Si el cliente pide prohibir futuro, reactivar:
+    // if (String(openMonthKey) > String(currentMonthKey)) {
+    //   abort(403, {
+    //     error: 'No se puede congelar un mes futuro. Solo se permite congelar el mes actual.',
+    //     openMonth: openMonthKey,
+    //     currentMonth: currentMonthKey
+    //   });
+    // }
 
-  try {
-    // Si el estado es 0, descongelar
-    if (estado === 0) {
-      const results = await db.query(
-        'UPDATE congelamiento_integrantes SET estado = :estado WHERE convenio_id = :convenio_id AND vencimiento = :vencimiento',
-        {
-          replacements: { estado, convenio_id, vencimiento },
-          type: db.QueryTypes.UPDATE
-        }
-      );
-
-      // Verificar si se realizó alguna actualización
-      if (results[1] > 0) {
-        // results[1] contiene el número de filas afectadas
-        return res
-          .status(200)
-          .json({ message: 'Congelamiento descongelado correctamente' });
-      } else {
-        return res.status(404).json({
-          message: 'No se encontró el congelamiento para descongelar'
+    // 1.2) Si el front manda vencimiento, validar por MES (YYYY-MM), no por hora
+    if (vencimiento) {
+      const vKey = monthKey(vencimiento);
+      const oKey = monthKey(openMonthKey);
+      if (!vKey || vKey !== oKey) {
+        abort(403, {
+          error:
+            'Mes no válido para congelar. Solo se puede congelar el mes abierto (último mes).',
+          openMonth: openMonthKey
         });
       }
-    } else {
-      // Si el estado es 1, congelar
-      const [existingRecord] = await db.query(
-        'SELECT * FROM congelamiento_integrantes WHERE convenio_id = :convenio_id AND vencimiento = :vencimiento',
-        {
-          replacements: { convenio_id, vencimiento },
-          type: db.QueryTypes.SELECT
-        }
-      );
-
-      if (existingRecord) {
-        // Si existe, actualizamos el registro
-        const results = await db.query(
-          'UPDATE congelamiento_integrantes SET estado = :estado WHERE convenio_id = :convenio_id AND vencimiento = :vencimiento',
-          {
-            replacements: { estado, convenio_id, vencimiento },
-            type: db.QueryTypes.UPDATE
-          }
-        );
-
-        return res.status(200).json({
-          message: 'Congelamiento actualizado correctamente',
-          data: results
-        });
-      } else {
-        // Si no existe, creamos un nuevo registro
-        const results = await db.query(
-          'INSERT INTO congelamiento_integrantes (convenio_id, estado, vencimiento) VALUES (:convenio_id, :estado, :vencimiento)',
-          {
-            replacements: { convenio_id, estado, vencimiento },
-            type: db.QueryTypes.INSERT
-          }
-        );
-
-        return res
-          .status(201)
-          .json({ message: 'Congelamiento creado con éxito', data: results });
-      }
     }
+
+    // 2) Ya congelado?
+    const alreadyFrozen = await db.query(
+      `
+      SELECT 1
+      FROM congelamiento_integrantes
+      WHERE convenio_id = :convenio_id
+        AND vencimiento = :openMonthKey
+        AND estado = 1
+      LIMIT 1
+      `,
+      {
+        replacements: { convenio_id, openMonthKey },
+        type: db.QueryTypes.SELECT,
+        transaction: t
+      }
+    );
+
+    if (alreadyFrozen.length > 0) {
+      abort(409, {
+        error: 'Ese mes ya está congelado.',
+        openMonth: openMonthKey
+      });
+    }
+
+    // 3) Mes siguiente (también 00:00:00)
+    const nextMonthRows = await db.query(
+      `SELECT DATE_ADD(:openMonthKey, INTERVAL 1 MONTH) AS nextMonthKey`,
+      {
+        replacements: { openMonthKey },
+        type: db.QueryTypes.SELECT,
+        transaction: t
+      }
+    );
+
+    const nextMonthKey = nextMonthRows?.[0]?.nextMonthKey; // 'YYYY-MM-01 00:00:00'
+    if (!nextMonthKey) {
+      abort(500, { error: 'No se pudo calcular el mes siguiente.' });
+    }
+
+    // 4) Verificar que el mes siguiente NO exista (por MES, ignora horas)
+    const nextExists = await db.query(
+      `
+      SELECT 1
+      FROM integrantes_conve
+      WHERE id_conv = :convenio_id
+        AND DATE_FORMAT(fechaCreacion, '%Y-%m') = DATE_FORMAT(:nextMonthKey, '%Y-%m')
+      LIMIT 1
+      `,
+      {
+        replacements: { convenio_id, nextMonthKey },
+        type: db.QueryTypes.SELECT,
+        transaction: t
+      }
+    );
+
+    if (nextExists.length > 0) {
+      abort(409, {
+        error:
+          'El mes siguiente ya existe (ya fue creado/editado). No se puede clonar encima.',
+        nextMonth: nextMonthKey
+      });
+    }
+
+    // 4.1) (Defensivo) Contar origen por MES, así evitamos congelar “mes vacío”
+    const srcCountRows = await db.query(
+      `
+      SELECT COUNT(*) AS cnt
+      FROM integrantes_conve
+      WHERE id_conv = :convenio_id
+        AND DATE_FORMAT(fechaCreacion, '%Y-%m') = DATE_FORMAT(:openMonthKey, '%Y-%m')
+      `,
+      {
+        replacements: { convenio_id, openMonthKey },
+        type: db.QueryTypes.SELECT,
+        transaction: t
+      }
+    );
+
+    const srcCount = Number(srcCountRows?.[0]?.cnt ?? 0);
+    if (srcCount <= 0) {
+      abort(409, {
+        error: 'El mes abierto no tiene integrantes para clonar. No se congeló el mes.',
+        openMonth: openMonthKey
+      });
+    }
+
+    // 5) Clonar openMonth -> nextMonth (por MES, ignora horas) + dedupe por persona
+    //    - Tomamos 1 registro por persona:
+    //      key = DNI si existe; si no, email normalizado; si no, el id.
+    const [insertResult, insertMeta] = await db.query(
+      `
+  INSERT INTO integrantes_conve (
+    id_conv, convenio_plan_id, nombre, telefono, dni, email, sede, notas,
+    precio, descuento, preciofinal, userName, fechaCreacion, fecha_vencimiento, estado_autorizacion
+  )
+  SELECT
+    src.id_conv,
+    src.convenio_plan_id,
+    src.nombre,
+    src.telefono,
+    src.dni,
+    src.email,
+    src.sede,
+    src.notas,
+    src.precio,
+    src.descuento,
+    src.preciofinal,
+    src.userName,
+    :nextMonthKey AS fechaCreacion,
+    CASE
+      WHEN src.convenio_plan_id IS NULL THEN NULL
+      WHEN src.fecha_vencimiento IS NOT NULL THEN src.fecha_vencimiento
+      WHEN p.duracion_dias IS NULL THEN NULL
+      ELSE DATE_ADD(src.fechaCreacion, INTERVAL p.duracion_dias DAY)
+    END AS fecha_vencimiento,
+    'sin_autorizacion' AS estado_autorizacion
+  FROM integrantes_conve src
+  JOIN (
+    SELECT MAX(id) AS pick_id
+    FROM integrantes_conve s
+    WHERE s.id_conv = :convenio_id
+      AND DATE_FORMAT(s.fechaCreacion, '%Y-%m') = DATE_FORMAT(:openMonthKey, '%Y-%m')
+    GROUP BY
+      CASE
+        WHEN s.dni IS NOT NULL AND TRIM(s.dni) <> '' THEN CONCAT('D:', TRIM(s.dni))
+        WHEN s.email IS NOT NULL AND TRIM(s.email) <> '' THEN CONCAT('E:', LOWER(TRIM(s.email)))
+        ELSE CONCAT('I:', s.id)
+      END
+  ) pick ON pick.pick_id = src.id
+  LEFT JOIN convenios_planes_disponibles p ON p.id = src.convenio_plan_id
+  WHERE src.id_conv = :convenio_id
+    AND DATE_FORMAT(src.fechaCreacion, '%Y-%m') = DATE_FORMAT(:openMonthKey, '%Y-%m')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM integrantes_conve dst
+      WHERE dst.id_conv = src.id_conv
+        AND DATE_FORMAT(dst.fechaCreacion, '%Y-%m') = DATE_FORMAT(:nextMonthKey, '%Y-%m')
+        AND (
+          (src.dni IS NOT NULL AND TRIM(src.dni) <> '' AND dst.dni = src.dni)
+          OR (
+            (src.dni IS NULL OR TRIM(src.dni) = '')
+            AND src.email IS NOT NULL AND TRIM(src.email) <> ''
+            AND LOWER(TRIM(dst.email)) = LOWER(TRIM(src.email))
+          )
+        )
+    )
+  `,
+      {
+        replacements: { convenio_id, openMonthKey, nextMonthKey },
+        type: db.QueryTypes.INSERT,
+        transaction: t
+      }
+    );
+
+    // En MySQL/Sequelize, affectedRows suele venir en el "metadata"
+    const clonados =
+      (typeof insertMeta === 'number'
+        ? insertMeta
+        : insertMeta?.affectedRows) ??
+      (typeof insertResult === 'number'
+        ? insertResult
+        : insertResult?.affectedRows) ??
+      0;
+
+    // console.log('INSERT result/meta =>', insertResult, insertMeta, 'clonados =>', clonados);
+
+    // 5.1) Si no clonó nada, no congelamos (evita “mes abierto congelado sin mes siguiente”)
+     if (clonados <= 0) {
+       abort(409, {
+         error:
+           'No se clonó ningún integrante (posible inconsistencia o datos duplicados). No se congeló el mes.',
+         openMonth: openMonthKey,
+         nextMonth: nextMonthKey
+       });
+     }
+
+    // 6) Marcar openMonth como congelado (key 00:00:00)
+    await db.query(
+      `
+      INSERT INTO congelamiento_integrantes (convenio_id, vencimiento, estado)
+      VALUES (:convenio_id, :openMonthKey, 1)
+      ON DUPLICATE KEY UPDATE estado = 1
+      `,
+      {
+        replacements: { convenio_id, openMonthKey },
+        type: db.QueryTypes.INSERT,
+        transaction: t
+      }
+    );
+
+    await releaseLockSafe();
+    await t.commit();
+
+    return res.status(200).json({
+      message: `Mes congelado. Se creó el mes siguiente con ${clonados} integrantes.`,
+      frozenMonth: openMonthKey,
+      nextMonth: nextMonthKey,
+      clonados
+    });
   } catch (err) {
-    console.log('Error executing query', err);
-    res.status(500).json({ error: 'Error ejecutando la consulta' });
+    try {
+      await releaseLockSafe();
+    } catch (_) {}
+
+    try {
+      await t.rollback();
+    } catch (_) {}
+
+    if (err?.httpStatus) return res.status(err.httpStatus).json(err.payload);
+
+    console.log('Error en congelar:', err);
+    return res.status(500).json({ error: 'Error ejecutando congelamiento' });
   }
 });
 
@@ -997,7 +1236,7 @@ app.get('/integrantes-congelados/:id_conv', async (req, res) => {
 
   try {
     const results = await db.query(
-      'SELECT estado, vencimiento FROM congelamiento_integrantes c WHERE c.convenio_id = :convenio_id',
+      'SELECT estado, vencimiento FROM congelamiento_integrantes WHERE convenio_id = :convenio_id ORDER BY vencimiento DESC',
       {
         replacements: { convenio_id: id_conv },
         type: db.QueryTypes.SELECT
@@ -1011,7 +1250,139 @@ app.get('/integrantes-congelados/:id_conv', async (req, res) => {
   }
 });
 
+// METODOS OBSOLETOS  BENJAMIN ORELLANA 22-12-2025  YA NO SE USAN PARA CONGELAMIENTOS
+// app.post('/congelamientos/:convenio_id', async (req, res) => {
+//   const { convenio_id } = req.params;
+//   const { estado, vencimiento } = req.body;
+
+//   if (typeof estado === 'undefined' || typeof vencimiento === 'undefined') {
+//     return res.status(400).json({ error: 'Faltan parámetros en la solicitud' });
+//   }
+
+//   try {
+//     // Verifica si ya existe un registro congelado para el mismo convenio y mes
+//     const existingRecord = await db.query(
+//       'SELECT * FROM congelamiento_integrantes WHERE convenio_id = :convenio_id AND MONTH(vencimiento) = MONTH(:vencimiento) AND YEAR(vencimiento) = YEAR(:vencimiento)',
+//       {
+//         replacements: { convenio_id, vencimiento },
+//         type: db.QueryTypes.SELECT
+//       }
+//     );
+
+//     if (existingRecord.length > 0) {
+//       // Si ya existe, actualizamos el estado contrario (congelar o descongelar)
+//       const results = await db.query(
+//         'UPDATE congelamiento_integrantes SET estado = :estado WHERE convenio_id = :convenio_id AND vencimiento = :vencimiento',
+//         {
+//           replacements: { estado, convenio_id, vencimiento },
+//           type: db.QueryTypes.UPDATE
+//         }
+//       );
+
+//       return res.status(200).json({
+//         message:
+//           estado === 1
+//             ? 'Congelamiento activado correctamente'
+//             : 'Congelamiento desactivado correctamente',
+//         data: results
+//       });
+//     } else {
+//       // Si no existe, crear nuevo registro
+//       const results = await db.query(
+//         'INSERT INTO congelamiento_integrantes (convenio_id, estado, vencimiento) VALUES (:convenio_id, :estado, :vencimiento)',
+//         {
+//           replacements: { convenio_id, estado, vencimiento },
+//           type: db.QueryTypes.INSERT
+//         }
+//       );
+
+//       return res
+//         .status(201)
+//         .json({ message: 'Congelamiento creado con éxito', data: results });
+//     }
+//   } catch (err) {
+//     console.log('Error ejecutando la consulta', err);
+//     res.status(500).json({ error: 'Error ejecutando la consulta' });
+//   }
+// });
+
+// app.put('/congelamientos/:convenio_id', async (req, res) => {
+//   const { convenio_id } = req.params;
+//   const { estado, vencimiento } = req.body;
+
+//   if (typeof estado === 'undefined' || typeof vencimiento === 'undefined') {
+//     return res.status(400).json({ error: 'Faltan parámetros en la solicitud' });
+//   }
+
+//   try {
+//     // Si el estado es 0, descongelar
+//     if (estado === 0) {
+//       const results = await db.query(
+//         'UPDATE congelamiento_integrantes SET estado = :estado WHERE convenio_id = :convenio_id AND vencimiento = :vencimiento',
+//         {
+//           replacements: { estado, convenio_id, vencimiento },
+//           type: db.QueryTypes.UPDATE
+//         }
+//       );
+
+//       // Verificar si se realizó alguna actualización
+//       if (results[1] > 0) {
+//         // results[1] contiene el número de filas afectadas
+//         return res
+//           .status(200)
+//           .json({ message: 'Congelamiento descongelado correctamente' });
+//       } else {
+//         return res.status(404).json({
+//           message: 'No se encontró el congelamiento para descongelar'
+//         });
+//       }
+//     } else {
+//       // Si el estado es 1, congelar
+//       const [existingRecord] = await db.query(
+//         'SELECT * FROM congelamiento_integrantes WHERE convenio_id = :convenio_id AND vencimiento = :vencimiento',
+//         {
+//           replacements: { convenio_id, vencimiento },
+//           type: db.QueryTypes.SELECT
+//         }
+//       );
+
+//       if (existingRecord) {
+//         // Si existe, actualizamos el registro
+//         const results = await db.query(
+//           'UPDATE congelamiento_integrantes SET estado = :estado WHERE convenio_id = :convenio_id AND vencimiento = :vencimiento',
+//           {
+//             replacements: { estado, convenio_id, vencimiento },
+//             type: db.QueryTypes.UPDATE
+//           }
+//         );
+
+//         return res.status(200).json({
+//           message: 'Congelamiento actualizado correctamente',
+//           data: results
+//         });
+//       } else {
+//         // Si no existe, creamos un nuevo registro
+//         const results = await db.query(
+//           'INSERT INTO congelamiento_integrantes (convenio_id, estado, vencimiento) VALUES (:convenio_id, :estado, :vencimiento)',
+//           {
+//             replacements: { convenio_id, estado, vencimiento },
+//             type: db.QueryTypes.INSERT
+//           }
+//         );
+
+//         return res
+//           .status(201)
+//           .json({ message: 'Congelamiento creado con éxito', data: results });
+//       }
+//     }
+//   } catch (err) {
+//     console.log('Error executing query', err);
+//     res.status(500).json({ error: 'Error ejecutando la consulta' });
+//   }
+// });
+
 // Función para eliminar asistencias futuras
+
 const eliminarAsistenciasFuturas = async (diaHoy, mesHoy, anioHoy) => {
   const fechaHoy = new Date();
   const diaHoyActual = fechaHoy.getDate(); // Obtener el día actual del mes
@@ -3545,10 +3916,11 @@ app.get('/notifications/clases-prueba/:userId', async (req, res) => {
     res.json(notis);
   } catch (error) {
     console.error('Error obteniendo notificaciones clase de prueba:', error);
-    res.status(500).json({ error: 'Error obteniendo notificaciones de clase de prueba' });
+    res
+      .status(500)
+      .json({ error: 'Error obteniendo notificaciones de clase de prueba' });
   }
 });
-
 
 app.patch(
   '/notifications/clases-prueba/:prospectoId/enviado',
@@ -3699,9 +4071,11 @@ app.post(
 
     // El archivo (imagen de título) es obligatorio en ambos casos
     if (!file) {
-      return res.status(400).json({ message: 'La imagen principal es obligatoria' });
+      return res
+        .status(400)
+        .json({ message: 'La imagen principal es obligatoria' });
     }
-    
+
     // Validar que el tipo sea uno de los valores esperados
     const tipoValido = tipo === 'IMAGEN_SIMPLE' || tipo === 'GRUPO_PROMOCION';
     if (!tipo || !tipoValido) {
@@ -3743,18 +4117,18 @@ app.post(
   }
 );
 
-app.get("/dashboard-images", async (req, res) => {
+app.get('/dashboard-images', async (req, res) => {
   try {
     // 1. Traemos los elementos "Padre" (de tu tabla 'imagenes_dashboard')
     const [elementos] = await pool.query(
-      "SELECT * FROM imagenes_dashboard WHERE activo = 1 ORDER BY orden ASC, id ASC"
+      'SELECT * FROM imagenes_dashboard WHERE activo = 1 ORDER BY orden ASC, id ASC'
     );
 
     // 2. Iteramos y buscamos los "Hijos" (las tarjetitas)
     const elementosCompletos = await Promise.all(
       elementos.map(async (elemento) => {
         // SI el tipo es GRUPO_PROMOCION, buscamos sus tarjetas
-        if (elemento.tipo === "GRUPO_PROMOCION") {
+        if (elemento.tipo === 'GRUPO_PROMOCION') {
           const [tarjetas] = await pool.query(
             `SELECT * FROM promocion_tarjetas 
              WHERE elemento_id = ? AND activo = 1 
@@ -3772,8 +4146,8 @@ app.get("/dashboard-images", async (req, res) => {
 
     res.json(elementosCompletos);
   } catch (e) {
-    console.error("Error trayendo elementos del dashboard:", e);
-    res.status(500).json({ error: "Error trayendo elementos del dashboard" });
+    console.error('Error trayendo elementos del dashboard:', e);
+    res.status(500).json({ error: 'Error trayendo elementos del dashboard' });
   }
 });
 
@@ -3788,8 +4162,6 @@ app.delete('/dashboard-images/:id', async (req, res) => {
   }
 });
 
-
-
 /* ---------------------------------------------------------------------- */
 /* ---------------------------------------------------------------------- */
 /* COMIENZO DE CODIGO HECHO POR SERGIO MANRIQUE 17/11/2025 ADICIONAR INSTRUCTIVOS A IMAGENES */
@@ -3801,7 +4173,7 @@ app.post(
   // Usamos .fields() para aceptar DOS archivos con nombres diferentes
   multerUpload.fields([
     { name: 'imagen_tarjeta', maxCount: 1 }, // El .jpg de la tarjetita
-    { name: 'instructivo', maxCount: 1 }     // El PDF o .jpg del instructivo
+    { name: 'instructivo', maxCount: 1 } // El PDF o .jpg del instructivo
   ]),
   async (req, res) => {
     const { elemento_id, orden } = req.body; // El ID del grupo padre
@@ -3809,7 +4181,9 @@ app.post(
     const instructivoFile = req.files?.['instructivo']?.[0];
 
     if (!elemento_id || !tarjetaFile) {
-      return res.status(400).json({ message: 'Falta el ID del elemento o la imagen de la tarjeta.' });
+      return res.status(400).json({
+        message: 'Falta el ID del elemento o la imagen de la tarjeta.'
+      });
     }
 
     // Función helper para guardar archivos (la usaremos dos veces)
@@ -3819,12 +4193,16 @@ app.post(
       const safeBase = cleanFileName(base);
       const uniqueName = `${safeBase}-${Date.now()}${ext}`;
       // ¡Guardamos en carpetas separadas para ordenar!
-      const subfolder = file.mimetype.includes('pdf') ? 'instructivos' : 'tarjetas';
+      const subfolder = file.mimetype.includes('pdf')
+        ? 'instructivos'
+        : 'tarjetas';
       const finalPath = path.join('uploads', subfolder, uniqueName);
-      
+
       // Asegurarse que la subcarpeta exista
-      await fs.promises.mkdir(path.join('uploads', subfolder), { recursive: true });
-      
+      await fs.promises.mkdir(path.join('uploads', subfolder), {
+        recursive: true
+      });
+
       await fs.promises.rename(file.path, finalPath);
       return `uploads/${subfolder}/${uniqueName}`;
     };
@@ -3832,7 +4210,7 @@ app.post(
     try {
       // Guardar la imagen de la tarjetita (obligatoria)
       const tarjetaUrl = await guardarArchivo(tarjetaFile);
-      
+
       // Guardar el instructivo (opcional)
       let instructivoUrl = null;
       if (instructivoFile) {
@@ -3846,7 +4224,9 @@ app.post(
         [elemento_id, tarjetaUrl, instructivoUrl, orden || 1]
       );
 
-      res.status(200).json({ message: 'Tarjeta de promoción subida correctamente.' });
+      res
+        .status(200)
+        .json({ message: 'Tarjeta de promoción subida correctamente.' });
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: 'Error al guardar la tarjetita.' });
@@ -3875,7 +4255,9 @@ app.put(
     const file = req.file;
 
     if (!file) {
-      return res.status(400).json({ message: 'Archivo de instructivo no proporcionado' });
+      return res
+        .status(400)
+        .json({ message: 'Archivo de instructivo no proporcionado' });
     }
 
     // (Usamos la misma función helper de arriba para guardar)
@@ -3886,7 +4268,9 @@ app.put(
       const uniqueName = `${safeBase}-${Date.now()}${ext}`;
       const subfolder = 'instructivos';
       const finalPath = path.join('uploads', subfolder, uniqueName);
-      await fs.promises.mkdir(path.join('uploads', subfolder), { recursive: true });
+      await fs.promises.mkdir(path.join('uploads', subfolder), {
+        recursive: true
+      });
       await fs.promises.rename(file.path, finalPath);
       return `uploads/${subfolder}/${uniqueName}`;
     };
@@ -4376,7 +4760,11 @@ app.get('/stats-remarketing', async (req, res) => {
     // H) Tasa de respuesta
     const tasa_respuesta =
       (estados.total_enviados || 0) > 0
-        ? Number(((estados.total_respondidos || 0) / estados.total_enviados).toFixed(4))
+        ? Number(
+            ((estados.total_respondidos || 0) / estados.total_enviados).toFixed(
+              4
+            )
+          )
         : 0;
 
     // RESPUESTA COMPLETA CON TODAS LAS PROPIEDADES
@@ -4408,7 +4796,9 @@ app.get('/stats-remarketing', async (req, res) => {
     });
   } catch (error) {
     console.error('Error obteniendo estadísticas de remarketing:', error);
-    res.status(500).json({ error: 'Error obteniendo estadísticas de remarketing' });
+    res
+      .status(500)
+      .json({ error: 'Error obteniendo estadísticas de remarketing' });
   }
 });
 
@@ -4715,21 +5105,26 @@ if (!PORT) {
  */
 const safeUnlink = async (filePath) => {
   // Ignorar si la URL es nula o vacía (ej: un instructivo opcional)
-  if (!filePath) return; 
+  if (!filePath) return;
 
   try {
     // Construimos la ruta absoluta al archivo
     const fullPath = path.join(CURRENT_DIR, filePath);
-    
+
     await fs.promises.unlink(fullPath);
     console.log(`[CRON LIMPIEZA] Archivo físico eliminado: ${fullPath}`);
   } catch (error) {
     // Si el archivo no existe, lo ignoramos (es el estado deseado)
     if (error.code === 'ENOENT') {
-      console.warn(`[CRON LIMPIEZA] Archivo no encontrado (ignorado): ${filePath}`);
+      console.warn(
+        `[CRON LIMPIEZA] Archivo no encontrado (ignorado): ${filePath}`
+      );
     } else {
       // Si es otro error (ej: permisos), lo logueamos pero no frenamos el cron
-      console.error(`[CRON LIMPIEZA] Error al borrar archivo ${filePath}:`, error.message);
+      console.error(
+        `[CRON LIMPIEZA] Error al borrar archivo ${filePath}:`,
+        error.message
+      );
     }
   }
 };
@@ -4744,14 +5139,18 @@ const limpiarImagenesInactivas = async () => {
 
   try {
     // --- FASE 1: Limpiar "Hijos" (Tarjetitas) marcadas como inactivas ---
-    console.log('[CRON LIMPIEZA] Fase 1: Buscando tarjetitas inactivas (activo = 0)...');
-    
+    console.log(
+      '[CRON LIMPIEZA] Fase 1: Buscando tarjetitas inactivas (activo = 0)...'
+    );
+
     const [tarjetasInactivas] = await pool.query(
       `SELECT id, imagen_tarjeta_url, instructivo_url FROM promocion_tarjetas WHERE activo = 0`
     );
 
     if (tarjetasInactivas.length > 0) {
-      console.log(`[CRON LIMPIEZA] Fase 1: ${tarjetasInactivas.length} tarjetitas inactivas encontradas.`);
+      console.log(
+        `[CRON LIMPIEZA] Fase 1: ${tarjetasInactivas.length} tarjetitas inactivas encontradas.`
+      );
       for (const tarjeta of tarjetasInactivas) {
         archivosABorrar.push(tarjeta.imagen_tarjeta_url);
         archivosABorrar.push(tarjeta.instructivo_url);
@@ -4761,16 +5160,20 @@ const limpiarImagenesInactivas = async () => {
     }
 
     // --- FASE 2: Limpiar "Padres" (Grupos/Imágenes) inactivos ---
-    console.log('[CRON LIMPIEZA] Fase 2: Buscando elementos "Padre" inactivos (activo = 0)...');
-    
+    console.log(
+      '[CRON LIMPIEZA] Fase 2: Buscando elementos "Padre" inactivos (activo = 0)...'
+    );
+
     const [padresInactivos] = await pool.query(
       `SELECT id, url FROM imagenes_dashboard WHERE activo = 0`
     );
 
     if (padresInactivos.length > 0) {
-      console.log(`[CRON LIMPIEZA] Fase 2: ${padresInactivos.length} elementos padre inactivos encontrados.`);
-      
-      const idsPadresInactivos = padresInactivos.map(p => {
+      console.log(
+        `[CRON LIMPIEZA] Fase 2: ${padresInactivos.length} elementos padre inactivos encontrados.`
+      );
+
+      const idsPadresInactivos = padresInactivos.map((p) => {
         archivosABorrar.push(p.url); // Añadir la imagen principal del grupo
         return p.id;
       });
@@ -4784,51 +5187,64 @@ const limpiarImagenesInactivas = async () => {
       );
 
       if (hijosDePadresInactivos.length > 0) {
-        console.log(`[CRON LIMPIEZA] Fase 2: ${hijosDePadresInactivos.length} archivos "Hijo" (de padres inactivos) también se borrarán.`);
+        console.log(
+          `[CRON LIMPIEZA] Fase 2: ${hijosDePadresInactivos.length} archivos "Hijo" (de padres inactivos) también se borrarán.`
+        );
         for (const hijo of hijosDePadresInactivos) {
           archivosABorrar.push(hijo.imagen_tarjeta_url);
           archivosABorrar.push(hijo.instructivo_url);
         }
       }
-
     } else {
-       console.log('[CRON LIMPIEZA] Fase 2: No hay elementos padre inactivos.');
+      console.log('[CRON LIMPIEZA] Fase 2: No hay elementos padre inactivos.');
     }
 
     // --- FASE 3: Borrado Físico de Archivos ---
     // Filtramos nulos/vacíos y duplicados
-    const archivosUnicos = [...new Set(archivosABorrar.filter(url => url))];
-    
+    const archivosUnicos = [...new Set(archivosABorrar.filter((url) => url))];
+
     if (archivosUnicos.length > 0) {
-        console.log(`[CRON LIMPIEZA] Fase 3: Total de ${archivosUnicos.length} archivos únicos a eliminar del disco...`);
-        // Usamos Promise.all para borrarlos en paralelo
-        await Promise.all(archivosUnicos.map(safeUnlink));
-        console.log('[CRON LIMPIEZA] Fase 3: Borrado de archivos físicos completado.');
+      console.log(
+        `[CRON LIMPIEZA] Fase 3: Total de ${archivosUnicos.length} archivos únicos a eliminar del disco...`
+      );
+      // Usamos Promise.all para borrarlos en paralelo
+      await Promise.all(archivosUnicos.map(safeUnlink));
+      console.log(
+        '[CRON LIMPIEZA] Fase 3: Borrado de archivos físicos completado.'
+      );
     } else {
-        console.log('[CRON LIMPIEZA] Fase 3: No hay archivos físicos para borrar.');
+      console.log(
+        '[CRON LIMPIEZA] Fase 3: No hay archivos físicos para borrar.'
+      );
     }
-    
+
     // --- FASE 4: Borrado Lógico (Base de Datos) ---
     // (Hacemos esto SIEMPRE al final)
-    
+
     if (tarjetasInactivas.length > 0) {
       // Borrado "Hard Delete" de las tarjetitas inactivas (Fase 1)
       await pool.query(`DELETE FROM promocion_tarjetas WHERE activo = 0`);
-      console.log(`[CRON LIMPIEZA] Fase 4: ${tarjetasInactivas.length} registros de tarjetitas (activo=0) eliminados de la DB.`);
+      console.log(
+        `[CRON LIMPIEZA] Fase 4: ${tarjetasInactivas.length} registros de tarjetitas (activo=0) eliminados de la DB.`
+      );
     }
 
     if (padresInactivos.length > 0) {
       // Borrado "Hard Delete" de los padres (Fase 2)
       // ON DELETE CASCADE se encargará de los hijos en la DB.
       await pool.query(`DELETE FROM imagenes_dashboard WHERE activo = 0`);
-      console.log(`[CRON LIMPIEZA] Fase 4: ${padresInactivos.length} registros de elementos padre (activo=0) eliminados de la DB.`);
+      console.log(
+        `[CRON LIMPIEZA] Fase 4: ${padresInactivos.length} registros de elementos padre (activo=0) eliminados de la DB.`
+      );
     }
 
     console.log('[CRON LIMPIEZA] ✅ Limpieza completada exitosamente.');
-
   } catch (error) {
     // Capturamos cualquier error grave del proceso
-    console.error('[CRON LIMPIEZA] ❌ Ha ocurrido un error grave durante la limpieza:', error);
+    console.error(
+      '[CRON LIMPIEZA] ❌ Ha ocurrido un error grave durante la limpieza:',
+      error
+    );
   }
 };
 
@@ -4836,14 +5252,17 @@ const limpiarImagenesInactivas = async () => {
  * Programar la tarea para que se ejecute el día 1 de cada mes a las 4:00 AM.
  * ('0 4 1 * *' = Minuto 0, Hora 4, Día 1 del mes, Cualquier mes, Cualquier día de la semana)
  */
-cron.schedule('0 4 1 * *', () => {
-  console.log('[CRON] Ejecutando limpieza mensual de imágenes inactivas...');
-  limpiarImagenesInactivas();
-}, {
-  scheduled: true,
-  timezone: "America/Argentina/Buenos_Aires"
-});
-
+cron.schedule(
+  '0 4 1 * *',
+  () => {
+    console.log('[CRON] Ejecutando limpieza mensual de imágenes inactivas...');
+    limpiarImagenesInactivas();
+  },
+  {
+    scheduled: true,
+    timezone: 'America/Argentina/Buenos_Aires'
+  }
+);
 
 /* ---------------------------------------------------------------------- */
 /* ---------------------------------------------------------------------- */
@@ -4852,7 +5271,6 @@ cron.schedule('0 4 1 * *', () => {
 /* ---------------------------------------------------------------------- */
 
 // CODIGO HECHO POR MATIAS PALLERO 06/12/2025
-
 
 app.listen(PORT, () => {
   console.log(`Servidor escuchando en el puerto ${PORT}`);

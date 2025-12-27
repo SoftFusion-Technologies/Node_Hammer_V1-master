@@ -30,6 +30,15 @@ const IntegrantesConveModel = db.define(
       type: DataTypes.BIGINT,
       allowNull: false
     },
+
+    // Plan asociado al integrante dentro del convenio (FK a convenios_planes_disponibles.id).
+    // Puede ser NULL si el integrante no tiene plan asignado (compatibilidad hacia atrás).
+    // Benjamin Orellana - Dic/2025
+    convenio_plan_id: {
+      type: DataTypes.BIGINT,
+      allowNull: true
+    },
+
     nombre: {
       type: DataTypes.STRING,
       allowNull: false
@@ -73,6 +82,15 @@ const IntegrantesConveModel = db.define(
     fechaCreacion: {
       type: DataTypes.DATE
     },
+
+    // Fecha de vencimiento calculada según el plan (duracion_dias) o lógica del sistema.
+    // Se usa para determinar vigencia y para “grisado” en el front.
+    // Benjamin Orellana - Dic/2025
+    fecha_vencimiento: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+
     estado_autorizacion: {
       type: DataTypes.ENUM('sin_autorizacion', 'pendiente', 'autorizado'),
       defaultValue: 'sin_autorizacion'

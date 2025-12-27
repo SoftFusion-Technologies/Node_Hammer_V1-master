@@ -68,6 +68,16 @@ const AdmConveniosModel = db.define(
       type: DataTypes.STRING,
       allowNull: true
     },
+
+    // Permite o bloquea que la empresa elija la sede al cargar integrantes.
+    // 0 = bloqueado (usa sede definida / lógica del sistema), 1 = puede elegir.
+    // Benjamin Orellana - Dic 21/2025
+    permiteElegirSedeEmpresa: {
+      type: DataTypes.TINYINT,
+      allowNull: false,
+      defaultValue: 0
+    },
+
     desc_usu: {
       type: DataTypes.STRING,
       allowNull: true

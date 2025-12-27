@@ -68,6 +68,16 @@ const AdmConveniosModel = db.define(
       type: DataTypes.STRING,
       allowNull: true
     },
+
+    // Permite o bloquea que la empresa elija la sede al cargar integrantes.
+    // 0 = bloqueado (usa sede definida / lógica del sistema), 1 = puede elegir.
+    // Benjamin Orellana - Dic 21/2025
+    permiteElegirSedeEmpresa: {
+      type: DataTypes.TINYINT,
+      allowNull: false,
+      defaultValue: 0
+    },
+
     desc_usu: {
       type: DataTypes.STRING,
       allowNull: true
@@ -76,10 +86,32 @@ const AdmConveniosModel = db.define(
     permiteFec: {
       type: DataTypes.TINYINT,
       allowNull: false,
-      defaultValue: 0 
+      defaultValue: 0
+    },
+    //R8 - Nuevo campo permiteFec para trabajar con fechas - Benjamin Orellana 29/09/2024
+    precio_concep: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    descuento_concep: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    preciofinal_concep: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    // R9 - Campo para controlar si el convenio está archivado o no - Benjamin Orellana 07/04/2025
+    archivado: {
+      type: DataTypes.TINYINT,
+      allowNull: false,
+      defaultValue: 1
+    },
+    agrupador: {
+      type: DataTypes.STRING,
+      allowNull: true
     }
   },
-
   {
     timestamps: false // Esto evita que Sequelize añada automáticamente los campos createdAt y updatedAt
   }

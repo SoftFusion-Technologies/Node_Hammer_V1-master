@@ -166,6 +166,7 @@ import {
 import {
   OBR_IntegrantesConve_CTS,
   OBRS_IntegrantesConve_CTS,
+  OBRS_IntegrantesConve_PDF_CTS,
   CR_IntegrantesConve_CTS,
   ER_IntegrantesConve_CTS,
   UR_IntegrantesConve_CTS,
@@ -173,6 +174,16 @@ import {
   Autorizar_Integrantes_Por_Convenio
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_IntegrantesConve.js';
+
+import {
+  OBRS_ConveniosMesAcciones_CTS,
+  OBR_ConveniosMesAcciones_CTS,
+  CR_ConveniosMesAcciones_CTS,
+  CR_ConveniosMesAcciones_Finalizar_CTS,
+  CR_ConveniosMesAcciones_Enviar_CTS,
+  MARCAR_LEIDO_ConveniosMesAcciones_CTS,
+  COUNT_PENDIENTES_ConveniosMesAcciones_CTS
+} from '../Controllers/CTS_TB_ConveniosMesAcciones.js';
 
 import {
   OBR_FamIntegrante_CTS,
@@ -280,12 +291,12 @@ import {
   MARCAR_NoResuelto_Queja_CTS
 } from '../Controllers/CTS_TB_QuejasInternas.js';
 
-import { 
-    CR_QuejaPilates_CTS, 
-    UR_QuejaPilates_CTS, 
-    ER_QuejaPilates_CTS, 
-    MARCAR_Resuelto_QuejaPilates, 
-    MARCAR_NoResuelto_QuejaPilates 
+import {
+  CR_QuejaPilates_CTS,
+  UR_QuejaPilates_CTS,
+  ER_QuejaPilates_CTS,
+  MARCAR_Resuelto_QuejaPilates,
+  MARCAR_NoResuelto_QuejaPilates
 } from '../Controllers/CTS_TB_QuejasPilates.js';
 
 import {
@@ -355,7 +366,7 @@ import {
   CR_InscripcionesPilates_CTS,
   UR_InscripcionesPilates_CTS,
   UR_CambiarTurnoInscripcion_CTS
-} from  '../Controllers/CTS_TB_InscripcionesPilates.js';
+} from '../Controllers/CTS_TB_InscripcionesPilates.js';
 
 import {
   OBRS_ListaEsperaPilates,
@@ -373,7 +384,7 @@ import {
   CR_UsuarioPilates_CTS,
   UR_UsuarioPilates_CTS,
   ER_UsuarioPilates_CTS
-} from "../Controllers/CTS_TB_UsuariosPilates.js";
+} from '../Controllers/CTS_TB_UsuariosPilates.js';
 
 import {
   OBRS_HorariosPilates_CTS,
@@ -385,9 +396,9 @@ import {
 -------------------------------------------- */
 
 import {
-  OBRS_HorariosDeshabilitadosPilates_CTS, 
-  CR_HorarioDeshabilitadoPilates_CTS, 
-  ER_HorarioDeshabilitadoPilates_CTS 
+  OBRS_HorariosDeshabilitadosPilates_CTS,
+  CR_HorarioDeshabilitadoPilates_CTS,
+  ER_HorarioDeshabilitadoPilates_CTS
 } from '../Controllers/CTS_TB_HorariosDeshabilitadosPilates.js';
 
 /* --------------------------------------------
@@ -396,26 +407,25 @@ import {
 import {
   OBRS_VentasProspectosHorario_CTS,
   CR_VentasProspectosHorario_CTS,
-  PUT_VentasProspectosHorarioPorProspecto_CTS,
-} from "../Controllers/CTS_TB_VentasProspectosHorarios.js";
+  PUT_VentasProspectosHorarioPorProspecto_CTS
+} from '../Controllers/CTS_TB_VentasProspectosHorarios.js';
 
 import {
   OBRS_AsistenciasFormato_CTS,
   UR_AsistenciaCliente_CTS,
   DEBUG_DispararCreacionAsistencias_CTS,
   OBRS_ReporteAsistenciaPrueba_CTS
-} from "../Controllers/CTS_TB_AsistenciasPilates.js";
+} from '../Controllers/CTS_TB_AsistenciasPilates.js';
 
 import {
   CR_crearContacto,
-  UR_modificarEstadoContacto,
-} from "../Controllers/CTS_TB_ContactosListaEsperaPilates.js";
-
+  UR_modificarEstadoContacto
+} from '../Controllers/CTS_TB_ContactosListaEsperaPilates.js';
 
 import {
   OBR_AuditoriaPorCliente_CTS,
   UR_AuditoriaFechaFin_CTS
-}from "../Controllers/CTS_TB_AuditoriaFechaFinModificadaPilates.js";
+} from '../Controllers/CTS_TB_AuditoriaFechaFinModificadaPilates.js';
 
 import {
   OBRS_AlumnosAusentes_Dashboard_CTS,
@@ -423,10 +433,29 @@ import {
   OBR_HistorialContacto_PorIdCliente_CTS
 } from '../Controllers/CTS_TB_HistorialContactosPilates.js';
 
-import { 
-    OBRS_HistorialPorCliente_CTS, 
-    CR_EventoHistorial_CTS 
+import {
+  OBRS_HistorialPorCliente_CTS,
+  CR_EventoHistorial_CTS
 } from '../Controllers/CTS_TB_ClientesPilatesHistorial.js';
+
+// BENJAMIN ORELLANA 21 DIC 2025 INI
+import {
+  OBR_ConveniosPlanesDisponibles_CTS,
+  OBRS_ConveniosPlanesDisponibles_CTS,
+  CR_ConveniosPlanesDisponibles_CTS,
+  ER_ConveniosPlanesDisponibles_CTS,
+  UR_ConveniosPlanesDisponibles_CTS
+} from '../Controllers/CTS_TB_ConveniosPlanesDisponibles.js';
+
+import {
+  OBR_IntegrantesConveNotas_CTS,
+  OBRS_IntegrantesConveNotas_CTS,
+  OBRS_IntegrantesConveNotasCounts_CTS,
+  CR_IntegrantesConveNotas_CTS,
+  ER_IntegrantesConveNotas_CTS,
+  UR_IntegrantesConveNotas_CTS
+} from '../Controllers/CTS_TB_IntegrantesConveNotas.js';
+// BENJAMIN ORELLANA 21 DIC 2025 FIN
 
 // Crea un enrutador de Express
 const router = express.Router();
@@ -738,6 +767,8 @@ router.put('/facget/:id', UR_AdmConveniosFac_CTS);
 // ----------------------------------------------------------------
 // Define las rutas para cada método del controlador de IntegrantesConve
 
+router.get('/integrantes-conve/descargar-pdf', OBRS_IntegrantesConve_PDF_CTS);
+
 router.get('/integrantes', OBRS_IntegrantesConve_CTS);
 
 // Obtener un registro específico de IntegrantesConve por su ID
@@ -777,6 +808,27 @@ router.delete('/integrantesfam/:id', ER_FamIntegrante_CTS);
 
 // Actualizar un registro en FamIntegrante por su ID
 router.put('/integrantesfam/:id', UR_FamIntegrante_CTS);
+
+router.get('/convenios-mes-acciones', OBRS_ConveniosMesAcciones_CTS);
+router.get(
+  '/convenios-mes-acciones/pendientes-count',
+  COUNT_PENDIENTES_ConveniosMesAcciones_CTS
+);
+router.get('/convenios-mes-acciones/:id', OBR_ConveniosMesAcciones_CTS);
+
+router.post('/convenios-mes-acciones', CR_ConveniosMesAcciones_CTS);
+router.post(
+  '/convenios-mes-acciones/finalizar',
+  CR_ConveniosMesAcciones_Finalizar_CTS
+);
+router.post(
+  '/convenios-mes-acciones/enviar',
+  CR_ConveniosMesAcciones_Enviar_CTS
+);
+router.patch(
+  '/convenios-mes-acciones/:id/leido',
+  MARCAR_LEIDO_ConveniosMesAcciones_CTS
+);
 
 // ----------------------------------------------------------------
 // Ruta para obtener todos los registros de AdmPrecio tb_15
@@ -969,22 +1021,22 @@ router.put('/quejas-pilates/:id/no-resuelto', MARCAR_NoResuelto_QuejaPilates); /
 /* COMIENZO DE CODIGO HECHO POR MATIAS PALLERO. FECHA 27/11/2025 */
 /* ---------------------------------------------------------------------- */
 /* ---------------------------------------------------------------------- */
-import { 
-    OBRS_VentasRemarketing_CTS,
-    OBR_VentaRemarketing_CTS,
-    CR_VentaRemarketing_CTS,
-    UR_VentaRemarketing_CTS,
-    ER_VentaRemarketing_CTS,
-    UR_MarcarEnviado_CTS,
-    UR_MarcarRespondido_CTS,
-    UR_AgendarVenta_CTS,
-    UR_MarcarConvertido_CTS,
-    UR_RegistrarComision_CTS,
-    OBRS_VentasPorUsuario_CTS,
-    OBRS_VentasPorSede_CTS,
-    OBRS_VentasPorFecha_CTS,
-    CR_ProcesoAutomaticoRemarketing_CTS,
-    OBRS_ClasesHoy_CTS,
+import {
+  OBRS_VentasRemarketing_CTS,
+  OBR_VentaRemarketing_CTS,
+  CR_VentaRemarketing_CTS,
+  UR_VentaRemarketing_CTS,
+  ER_VentaRemarketing_CTS,
+  UR_MarcarEnviado_CTS,
+  UR_MarcarRespondido_CTS,
+  UR_AgendarVenta_CTS,
+  UR_MarcarConvertido_CTS,
+  UR_RegistrarComision_CTS,
+  OBRS_VentasPorUsuario_CTS,
+  OBRS_VentasPorSede_CTS,
+  OBRS_VentasPorFecha_CTS,
+  CR_ProcesoAutomaticoRemarketing_CTS,
+  OBRS_ClasesHoy_CTS
 } from '../Controllers/CTS_TB_VentasRemarketing.js';
 
 // Rutas CRUD básicas
@@ -992,7 +1044,10 @@ router.get('/ventas-remarketing', OBRS_VentasRemarketing_CTS);
 router.post('/ventas-remarketing', CR_VentaRemarketing_CTS); // -- Crear general
 
 // Ruta para el proceso automático de remarketing
-router.post('/ventas-remarketing/proceso-automatico', CR_ProcesoAutomaticoRemarketing_CTS);
+router.post(
+  '/ventas-remarketing/proceso-automatico',
+  CR_ProcesoAutomaticoRemarketing_CTS
+);
 
 // Ruta para obtener las clases del día
 router.get('/ventas-remarketing/clases-hoy', OBRS_ClasesHoy_CTS);
@@ -1002,16 +1057,27 @@ router.get('/ventas-remarketing/:id', OBR_VentaRemarketing_CTS);
 router.put('/ventas-remarketing/:id', UR_VentaRemarketing_CTS);
 router.delete('/ventas-remarketing/:id', ER_VentaRemarketing_CTS);
 
-
 // Rutas de estados (Estas también usan :id, así que están bien después de la específica)
 router.patch('/ventas-remarketing/:id/marcar-enviado', UR_MarcarEnviado_CTS);
-router.patch('/ventas-remarketing/:id/marcar-respondido', UR_MarcarRespondido_CTS);
+router.patch(
+  '/ventas-remarketing/:id/marcar-respondido',
+  UR_MarcarRespondido_CTS
+);
 router.patch('/ventas-remarketing/:id/agendar', UR_AgendarVenta_CTS);
-router.patch('/ventas-remarketing/:id/marcar-convertido', UR_MarcarConvertido_CTS);
-router.patch('/ventas-remarketing/:id/registrar-comision', UR_RegistrarComision_CTS);
+router.patch(
+  '/ventas-remarketing/:id/marcar-convertido',
+  UR_MarcarConvertido_CTS
+);
+router.patch(
+  '/ventas-remarketing/:id/registrar-comision',
+  UR_RegistrarComision_CTS
+);
 
 // Rutas de consultas específicas
-router.get('/ventas-remarketing/usuario/:usuario_id', OBRS_VentasPorUsuario_CTS);
+router.get(
+  '/ventas-remarketing/usuario/:usuario_id',
+  OBRS_VentasPorUsuario_CTS
+);
 router.get('/ventas-remarketing/sede/:sede', OBRS_VentasPorSede_CTS);
 router.get('/ventas-remarketing/fecha/rango', OBRS_VentasPorFecha_CTS);
 
@@ -1084,7 +1150,10 @@ router.get(
   OBRS_ColaboradoresConVentasProspectos
 );
 
-router.post('/ventas-prospectos/sincronizar-completo', CR_VentasProspectoConHorario_CTS);
+router.post(
+  '/ventas-prospectos/sincronizar-completo',
+  CR_VentasProspectoConHorario_CTS
+);
 
 import {
   OBRS_PreguntasIA_CTS,
@@ -1137,25 +1206,45 @@ router.post(
   /* requireAuth, */ POST_GenerarAgendaHoy
 );
 
-
 // ----------------------------------------------------------------
 // Rutas para operaciones CRUD en la tabla 'inscripciones_pilates'
 router.get('/clientes-pilates/horarios', ESP_OBRS_HorarioClientesPilates_CTS);
 router.get('/clientes-pilates', OBRS_ClientesPilates_CTS);
 router.get('/clientes-pilates/buscar', BUSCAR_ClientesPilates_CTS);
 router.get('/clientes-pilates/estado/:estado', OBRS_ClientesPorEstado_CTS);
-router.get('/clientes-pilates/proximos-vencer', OBRS_ClientesProximosVencer_CTS);
-router.get('/clientes-pilates/existe-prueba-por-nombre', EXISTE_ClientePruebaPorNombre_CTS);
+router.get(
+  '/clientes-pilates/proximos-vencer',
+  OBRS_ClientesProximosVencer_CTS
+);
+router.get(
+  '/clientes-pilates/existe-prueba-por-nombre',
+  EXISTE_ClientePruebaPorNombre_CTS
+);
 router.get('/clientes-pilates/:id', OBR_ClientesPilates_CTS);
-router.get('/clientes-pilates/horarios-disponibles/ventas', ESP_OBRS_HorariosDisponibles_CTS);
+router.get(
+  '/clientes-pilates/horarios-disponibles/ventas',
+  ESP_OBRS_HorariosDisponibles_CTS
+);
 router.put('/clientes-pilates/:id', UR_ClientesPilates_CTS);
-router.put('/clientes-pilates/plan-renovacion/:id', UR_ClientesPilates_PlanRenovacion_CTS);
-router.patch('/clientesPilates/:id/observaciones', UR_ClientesPilates_Observaciones_CTS);
+router.put(
+  '/clientes-pilates/plan-renovacion/:id',
+  UR_ClientesPilates_PlanRenovacion_CTS
+);
+router.patch(
+  '/clientesPilates/:id/observaciones',
+  UR_ClientesPilates_Observaciones_CTS
+);
 router.post('/clientes/insertar', CR_ClientesPilates_CTS);
-router.delete("/clientes-pilates/con-inscripciones/:id", ER_ClienteConInscripciones_CTS);
+router.delete(
+  '/clientes-pilates/con-inscripciones/:id',
+  ER_ClienteConInscripciones_CTS
+);
 
-router.get("/auditoria-pilates/cliente/:cliente_id", OBR_AuditoriaPorCliente_CTS);
-router.put("/auditoria-pilates/cliente/:cliente_id", UR_AuditoriaFechaFin_CTS);
+router.get(
+  '/auditoria-pilates/cliente/:cliente_id',
+  OBR_AuditoriaPorCliente_CTS
+);
+router.put('/auditoria-pilates/cliente/:cliente_id', UR_AuditoriaFechaFin_CTS);
 
 // ----------------------------------------------------------------
 // Rutas para operaciones CRUD en la tabla 'inscripciones_pilates'
@@ -1163,8 +1252,10 @@ router.get('/inscripciones-pilates', OBRS_InscripcionesPilates_CTS);
 router.get('/inscripciones-pilates/:id', OBR_InscripcionesPilates_CTS);
 router.post('/inscripciones-pilates', CR_InscripcionesPilates_CTS);
 router.put('/inscripciones-pilates/:id', UR_InscripcionesPilates_CTS);
-router.patch('/inscripciones-pilates/cambiar-turno', UR_CambiarTurnoInscripcion_CTS);
-
+router.patch(
+  '/inscripciones-pilates/cambiar-turno',
+  UR_CambiarTurnoInscripcion_CTS
+);
 
 router.get('/lista-espera-pilates', OBRS_ListaEsperaPilates);
 router.get('/lista-espera-pilates/:id', OBR_ListaEsperaPilates);
@@ -1172,54 +1263,81 @@ router.post('/lista-espera-pilates', CR_ListaEsperaPilates);
 router.put('/lista-espera-pilates/:id', UR_ListaEsperaPilates);
 router.delete('/lista-espera-pilates/:id', ER_ListaEsperaPilates);
 
+router.get('/usuarios-pilates', OBRS_UsuariosPilates_CTS);
+router.get('/usuarios-pilates/nombres', OBRS_UsuariosPilatesNombreCompleto_CTS);
+router.get('/usuarios-pilates/sede', OBRS_UsuariosPilatesPorSede_CTS); // Nueva ruta para filtrar por sede
+router.get('/usuarios-pilates/:id', OBR_UsuarioPilates_CTS);
+router.post('/usuarios-pilates', CR_UsuarioPilates_CTS); // Crear
+router.put('/usuarios-pilates/:id', UR_UsuarioPilates_CTS); // Actualizar
+router.delete('/usuarios-pilates/:id', ER_UsuarioPilates_CTS); // Eliminar
 
-router.get("/usuarios-pilates", OBRS_UsuariosPilates_CTS);
-router.get("/usuarios-pilates/nombres", OBRS_UsuariosPilatesNombreCompleto_CTS);
-router.get("/usuarios-pilates/sede", OBRS_UsuariosPilatesPorSede_CTS); // Nueva ruta para filtrar por sede
-router.get("/usuarios-pilates/:id", OBR_UsuarioPilates_CTS);
-router.post("/usuarios-pilates", CR_UsuarioPilates_CTS);        // Crear
-router.put("/usuarios-pilates/:id", UR_UsuarioPilates_CTS);     // Actualizar
-router.delete("/usuarios-pilates/:id", ER_UsuarioPilates_CTS);  // Eliminar
+router.put(
+  '/horarios-pilates/cambiar-instructor',
+  UR_InstructorHorarioPilates_CTS
+);
 
-router.put('/horarios-pilates/cambiar-instructor', UR_InstructorHorarioPilates_CTS);
-
-
-router.get("/asistencias-pilates/formato", OBRS_AsistenciasFormato_CTS);
-router.put("/asistencias-pilates/marcar", UR_AsistenciaCliente_CTS);
-router.get("/asistencias-pilates/crear-diarias", DEBUG_DispararCreacionAsistencias_CTS);
-router.get("/asistencias-pilates/reportes/asistencia-clases-prueba", OBRS_ReporteAsistenciaPrueba_CTS);
+router.get('/asistencias-pilates/formato', OBRS_AsistenciasFormato_CTS);
+router.put('/asistencias-pilates/marcar', UR_AsistenciaCliente_CTS);
+router.get(
+  '/asistencias-pilates/crear-diarias',
+  DEBUG_DispararCreacionAsistencias_CTS
+);
+router.get(
+  '/asistencias-pilates/reportes/asistencia-clases-prueba',
+  OBRS_ReporteAsistenciaPrueba_CTS
+);
 // Historial de clientes pilates 15/12/2025
 //--INICIO: Sergio Manrique
-router.get('/clientes-pilates/:cliente_id/historial', OBRS_HistorialPorCliente_CTS);
+router.get(
+  '/clientes-pilates/:cliente_id/historial',
+  OBRS_HistorialPorCliente_CTS
+);
 router.post('/clientes-pilates/historial', CR_EventoHistorial_CTS);
 //--FIN: Sergio Manrique
 
 // Horarios deshabilitados de pilates
 //--INICIO: Sergio Manrique
-router.get('/horarios-deshabilitados/:sedeId', OBRS_HorariosDeshabilitadosPilates_CTS);
+router.get(
+  '/horarios-deshabilitados/:sedeId',
+  OBRS_HorariosDeshabilitadosPilates_CTS
+);
 router.post('/horarios-deshabilitados', CR_HorarioDeshabilitadoPilates_CTS);
-router.delete('/horarios-deshabilitados/:id', ER_HorarioDeshabilitadoPilates_CTS);
+router.delete(
+  '/horarios-deshabilitados/:id',
+  ER_HorarioDeshabilitadoPilates_CTS
+);
 //--FIN: Sergio Manrique
 
 // =======================================================
 //  HECHO POR SERGIO MANRIQUE, FECHA: 22/12/2025
 //  MÓDULO: ALUMNOS AUSENTES Y SEGUIMIENTO (Pilates)
 // =======================================================
-router.get("/pilates/ausentes-dashboard", OBRS_AlumnosAusentes_Dashboard_CTS);
-router.get("/pilates/historial-contactos/:id", OBR_HistorialContacto_PorIdCliente_CTS);
-router.post("/pilates/historial-contactos", CR_HistorialContacto_CTS);
+router.get('/pilates/ausentes-dashboard', OBRS_AlumnosAusentes_Dashboard_CTS);
+router.get(
+  '/pilates/historial-contactos/:id',
+  OBR_HistorialContacto_PorIdCliente_CTS
+);
+router.post('/pilates/historial-contactos', CR_HistorialContacto_CTS);
 // =======================================================
 //  HECHO POR SERGIO MANRIQUE, FECHA: 22/12/2025
 //  FIN DE MODULO: ALUMNOS AUSENTES Y SEGUIMIENTO (Pilates)
 // =======================================================
 
-router.post("/ventas-prospectos-horarios", CR_VentasProspectosHorario_CTS);
-router.get("/ventas-prospectos-horarios/:prospecto_id", OBRS_VentasProspectosHorario_CTS);
-router.put('/ventas-prospectos-horarios/modificar-por-prospecto', PUT_VentasProspectosHorarioPorProspecto_CTS);
+router.post('/ventas-prospectos-horarios', CR_VentasProspectosHorario_CTS);
+router.get(
+  '/ventas-prospectos-horarios/:prospecto_id',
+  OBRS_VentasProspectosHorario_CTS
+);
+router.put(
+  '/ventas-prospectos-horarios/modificar-por-prospecto',
+  PUT_VentasProspectosHorarioPorProspecto_CTS
+);
 
-router.post("/contactos-lista-espera", CR_crearContacto)
-router.put("/contactos-lista-espera/:id_lista_espera", UR_modificarEstadoContacto);
-
+router.post('/contactos-lista-espera', CR_crearContacto);
+router.put(
+  '/contactos-lista-espera/:id_lista_espera',
+  UR_modificarEstadoContacto
+);
 
 import { POST_InformeFromOCR } from '../Controllers/CTS_TB_HxController.js';
 
@@ -1294,20 +1412,43 @@ const {
 } = ComisionesVigentesCtrl;
 
 // --- Rutas Comisiones Vigentes ---
-router.get('/comisiones-vigentes', OBRS_ComisionesVigentes_CTS);           // list (filtros: mes,anio,solo_activas,codigo)
-router.get('/comisiones-vigentes/:id', OBR_ComisionVigente_CTS);           // get by id
-router.post('/comisiones-vigentes', CR_ComisionVigente_CTS);               // create
-router.put('/comisiones-vigentes/:id', UR_ComisionVigente_CTS);            // update
-router.delete('/comisiones-vigentes/:id', ER_ComisionVigente_CTS);         // delete (hard)
+router.get('/comisiones-vigentes', OBRS_ComisionesVigentes_CTS); // list (filtros: mes,anio,solo_activas,codigo)
+router.get('/comisiones-vigentes/:id', OBR_ComisionVigente_CTS); // get by id
+router.post('/comisiones-vigentes', CR_ComisionVigente_CTS); // create
+router.put('/comisiones-vigentes/:id', UR_ComisionVigente_CTS); // update
+router.delete('/comisiones-vigentes/:id', ER_ComisionVigente_CTS); // delete (hard)
 
 // Utilitarios de período
-router.post('/comisiones-vigentes/duplicar', DUP_Comisiones_Mes_CTS);      // body: origen_mes,origen_anio,destino_mes,destino_anio
+router.post('/comisiones-vigentes/duplicar', DUP_Comisiones_Mes_CTS); // body: origen_mes,origen_anio,destino_mes,destino_anio
 router.post('/comisiones-vigentes/desactivar', DESACTIVAR_Comisiones_Mes_CTS); // body/query: mes,anio o periodo_inicio
 
 // Búsqueda rápida por código
-router.get('/comisiones-vigentes/by-codigo', OBR_ComisionPorCodigo_CTS);   // query: codigo,mes,anio
+router.get('/comisiones-vigentes/by-codigo', OBR_ComisionPorCodigo_CTS); // query: codigo,mes,anio
 
+// SE ADICIONAN LAS RUTAS RELACIONADAS A CONVENIOS Y PLANES DE CONVENIO
+// BENJAMIN ORELLANA 21 DIC 2025 INI
+// =========================================================
+// Planes de convenio
+// =========================================================
+router.get('/convenios-planes', OBRS_ConveniosPlanesDisponibles_CTS); // ?convenio_id= &activo=
+router.get('/convenios-planes/:id', OBR_ConveniosPlanesDisponibles_CTS);
+router.post('/convenios-planes', CR_ConveniosPlanesDisponibles_CTS);
+router.delete('/convenios-planes/:id', ER_ConveniosPlanesDisponibles_CTS);
+router.put('/convenios-planes/:id', UR_ConveniosPlanesDisponibles_CTS);
 
+// =========================================================
+// Notas de integrante
+// =========================================================
+router.get(
+  '/integrantes-conve-notas/counts',
+  OBRS_IntegrantesConveNotasCounts_CTS
+);
+router.get('/integrantes-notas', OBRS_IntegrantesConveNotas_CTS); // ?integrante_conve_id=
+router.get('/integrantes-notas/:id', OBR_IntegrantesConveNotas_CTS);
+router.post('/integrantes-notas', CR_IntegrantesConveNotas_CTS);
+router.delete('/integrantes-notas/:id', ER_IntegrantesConveNotas_CTS);
+router.put('/integrantes-notas/:id', UR_IntegrantesConveNotas_CTS);
+// BENJAMIN ORELLANA 21 DIC 2025 FIN
 
 // Exporta el enrutador
 export default router;
