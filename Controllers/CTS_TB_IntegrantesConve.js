@@ -175,7 +175,12 @@ function assertMonthStartFormat(v) {
   }
 }
 
-async function assertMesEditable({ convenio_id, monthStart, transaction }) {
+async function assertMesEditable({
+  convenio_id,
+  monthStart,
+  transaction,
+  requireOpenMonth = true // <-- NUEVO
+}) {
   assertMonthStartFormat(monthStart);
 
   // 0) No permitir modificar meses anteriores al actual
@@ -192,6 +197,7 @@ async function assertMesEditable({ convenio_id, monthStart, transaction }) {
     e.statusCode = 403;
     throw e;
   }
+
   // 1) Mes no congelado
   const frozen = await db.query(
     `
@@ -208,13 +214,16 @@ async function assertMesEditable({ convenio_id, monthStart, transaction }) {
       transaction
     }
   );
+
   if (frozen.length) {
     const e = new Error('Mes congelado: no se permiten modificaciones.');
     e.statusCode = 423;
     throw e;
   }
 
-  // 2) Debe ser el mes abierto (último snapshot)
+  // 2) Debe ser el mes abierto (solo si requireOpenMonth = true)
+  if (!requireOpenMonth) return;
+
   const hasAny = await db.query(
     `SELECT 1 FROM integrantes_conve WHERE id_conv = :convenio_id LIMIT 1`,
     {
@@ -224,8 +233,7 @@ async function assertMesEditable({ convenio_id, monthStart, transaction }) {
     }
   );
 
-  // Si no hay registros (primer mes), es editable
-  if (!hasAny.length) return;
+  if (!hasAny.length) return; // primer mes editable
 
   const isOpen = await db.query(
     `
@@ -1384,27 +1392,61 @@ export const CR_IntegrantesConve_CTS = async (req, res) => {
       return res.status(400).json({ mensajeError: 'id_conv es obligatorio.' });
     }
 
-    // Mes abierto
-    let monthStart = await getOpenMonthStart(payload.id_conv, t);
+    // Permite fechas (1) o no (0)
+    const permiteFec = await getConvenioPermiteFec(payload.id_conv, t);
 
-    // Si no existe aún (primer mes), usar mes actual inicio:
-    if (!monthStart) {
-      const rows = await db.query(
-        `SELECT DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00') AS monthStart`,
-        { type: db.QueryTypes.SELECT, transaction: t }
-      );
-      monthStart = rows[0].monthStart;
+    // Mes pedido por el front (aceptamos que venga en fechaCreacion o monthStart)
+    let requestedMonthStart =
+      payload.monthStart ?? payload.fechaCreacion ?? null;
+    if (requestedMonthStart) {
+      requestedMonthStart = String(requestedMonthStart).trim();
+      // Normalizamos a inicio de mes si vino tipo 'YYYY-MM'
+      if (/^\d{4}-\d{2}$/.test(requestedMonthStart)) {
+        requestedMonthStart = `${requestedMonthStart}-01 00:00:00`;
+      }
+      // Si vino ISO o datetime, lo llevamos a YYYY-MM-01 00:00:00
+      if (
+        /^\d{4}-\d{2}-\d{2}T/.test(requestedMonthStart) ||
+        /^\d{4}-\d{2}-\d{2}\s/.test(requestedMonthStart)
+      ) {
+        requestedMonthStart = `${requestedMonthStart.slice(0, 7)}-01 00:00:00`;
+      }
+      assertMonthStartFormat(requestedMonthStart);
     }
 
-    // Bloqueo: solo mes abierto y no congelado
+    // monthStart efectivo
+    let monthStart = null;
+
+    if (permiteFec && requestedMonthStart) {
+      // Si permite fechas, usamos el mes seleccionado
+      monthStart = requestedMonthStart;
+    } else {
+      // Si NO permite fechas, usamos mes abierto (comportamiento actual)
+      monthStart = await getOpenMonthStart(payload.id_conv, t);
+
+      // Si no existe aún (primer mes), usar mes actual inicio:
+      if (!monthStart) {
+        const rows = await db.query(
+          `SELECT DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00') AS monthStart`,
+          { type: db.QueryTypes.SELECT, transaction: t }
+        );
+        monthStart = rows[0].monthStart;
+      }
+    }
+
+    // Bloqueo:
+    // - si permiteFec: no exigimos "mes abierto", pero sí validamos "no pasado" y "no congelado"
+    // - si no permiteFec: exigimos mes abierto (como hoy)
     await assertMesEditable({
       convenio_id: payload.id_conv,
       monthStart,
-      transaction: t
+      transaction: t,
+      requireOpenMonth: !permiteFec
     });
 
-    // Forzar fechaCreacion al inicio de mes (string)
+    // Forzar fechaCreacion al inicio de mes elegido
     payload.fechaCreacion = monthStart;
+    delete payload.monthStart;
 
     // Normalizar plan
     payload.convenio_plan_id = toIntOrNull(payload.convenio_plan_id);
@@ -1535,15 +1577,21 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
     const convenioId = Number(info.id_conv);
     const monthStart = info.monthStart; // 'YYYY-MM-01 00:00:00'
 
+    // Si permiteFec=1, no exigimos "mes abierto"; solo (no pasado) y (no congelado)
+    const permiteFec = await getConvenioPermiteFec(convenioId, t);
+
     await assertMesEditable({
       convenio_id: convenioId,
       monthStart,
-      transaction: t
+      transaction: t,
+      requireOpenMonth: !permiteFec
     });
 
-    // 2) Sanitizar: nunca permitir que cambien el convenio o el mes del snapshot
+    // Sanitizar: nunca permitir que cambien el convenio o el mes del snapshot
     delete payload.id_conv;
     delete payload.fechaCreacion;
+    delete payload.monthStart;
+    delete payload.monthCursor;
 
     // 3) Obtener registro actual (para comparar plan actual, etc.)
     const actual = await IntegrantesConveModel.findByPk(id, { transaction: t });

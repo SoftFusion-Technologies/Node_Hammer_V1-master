@@ -976,7 +976,7 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
       }
     );
 
-    const openMonthKey = openRows?.[0]?.openMonthKey;     // 'YYYY-MM-01 00:00:00'
+    const openMonthKey = openRows?.[0]?.openMonthKey; // 'YYYY-MM-01 00:00:00'
     const currentMonthKey = openRows?.[0]?.currentMonthKey;
 
     if (!openMonthKey) {
@@ -986,6 +986,7 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
     }
 
     // 1.1) Validación: NO congelar meses anteriores al mes actual (por clave)
+    // Nota: esta validación es sobre el MES ABIERTO (último snapshot).
     if (String(openMonthKey) < String(currentMonthKey)) {
       abort(403, {
         error: 'No se puede congelar un mes anterior al mes actual.',
@@ -1004,15 +1005,40 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
     // }
 
     // 1.2) Si el front manda vencimiento, validar por MES (YYYY-MM), no por hora
+    // - Se permite:
+    //   a) congelar el mes abierto (modo normal) => openMonth -> mes siguiente (crea mes nuevo)
+    //   b) congelar el mes inmediatamente anterior al abierto (modo catch-up) => (open-1) -> open (merge, completa el abierto)
+    const prevMonthRows = await db.query(
+      `SELECT DATE_ADD(:openMonthKey, INTERVAL -1 MONTH) AS prevMonthKey`,
+      {
+        replacements: { openMonthKey },
+        type: db.QueryTypes.SELECT,
+        transaction: t
+      }
+    );
+    const prevMonthKey = prevMonthRows?.[0]?.prevMonthKey; // 'YYYY-MM-01 00:00:00'
+
+    // Definir “mes fuente a congelar” (por defecto: el abierto)
+    let sourceMonthKey = openMonthKey;
+
     if (vencimiento) {
       const vKey = monthKey(vencimiento);
       const oKey = monthKey(openMonthKey);
-      if (!vKey || vKey !== oKey) {
+      const pKey = monthKey(prevMonthKey);
+
+      if (!vKey || (vKey !== oKey && vKey !== pKey)) {
         abort(403, {
           error:
-            'Mes no válido para congelar. Solo se puede congelar el mes abierto (último mes).',
+            'Mes no válido para congelar. Solo se puede congelar el mes abierto (último mes) o el mes inmediatamente anterior al mes abierto.',
           openMonth: openMonthKey
         });
+      }
+
+      // Si el usuario eligió el mes anterior, habilitamos modo catch-up
+      if (vKey === pKey) {
+        sourceMonthKey = prevMonthKey;
+      } else {
+        sourceMonthKey = openMonthKey;
       }
     }
 
@@ -1022,12 +1048,12 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
       SELECT 1
       FROM congelamiento_integrantes
       WHERE convenio_id = :convenio_id
-        AND vencimiento = :openMonthKey
+        AND vencimiento = :sourceMonthKey
         AND estado = 1
       LIMIT 1
       `,
       {
-        replacements: { convenio_id, openMonthKey },
+        replacements: { convenio_id, sourceMonthKey },
         type: db.QueryTypes.SELECT,
         transaction: t
       }
@@ -1036,15 +1062,19 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
     if (alreadyFrozen.length > 0) {
       abort(409, {
         error: 'Ese mes ya está congelado.',
-        openMonth: openMonthKey
+        openMonth: openMonthKey,
+        frozenMonth: sourceMonthKey
       });
     }
 
     // 3) Mes siguiente (también 00:00:00)
+    // Nota: “siguiente” es relativo al MES FUENTE (sourceMonthKey).
+    // - Modo normal: source=open => next = open+1 (crea mes nuevo)
+    // - Modo catch-up: source=open-1 => next = open (merge sobre mes ya existente)
     const nextMonthRows = await db.query(
-      `SELECT DATE_ADD(:openMonthKey, INTERVAL 1 MONTH) AS nextMonthKey`,
+      `SELECT DATE_ADD(:sourceMonthKey, INTERVAL 1 MONTH) AS nextMonthKey`,
       {
-        replacements: { openMonthKey },
+        replacements: { sourceMonthKey },
         type: db.QueryTypes.SELECT,
         transaction: t
       }
@@ -1055,7 +1085,11 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
       abort(500, { error: 'No se pudo calcular el mes siguiente.' });
     }
 
+    const isCatchUp = monthKey(sourceMonthKey) === monthKey(prevMonthKey); // fuente = (open-1)
+
     // 4) Verificar que el mes siguiente NO exista (por MES, ignora horas)
+    // - Modo normal: el mes siguiente NO debe existir (para no clonar encima).
+    // - Modo catch-up: el mes destino (que coincide con open) DEBE existir (vamos a completar/merge).
     const nextExists = await db.query(
       `
       SELECT 1
@@ -1071,10 +1105,18 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
       }
     );
 
-    if (nextExists.length > 0) {
+    if (!isCatchUp && nextExists.length > 0) {
       abort(409, {
         error:
           'El mes siguiente ya existe (ya fue creado/editado). No se puede clonar encima.',
+        nextMonth: nextMonthKey
+      });
+    }
+
+    if (isCatchUp && nextExists.length === 0) {
+      abort(409, {
+        error:
+          'El mes destino no existe para completar (catch-up). Debe existir el mes abierto para poder mergear.',
         nextMonth: nextMonthKey
       });
     }
@@ -1085,10 +1127,10 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
       SELECT COUNT(*) AS cnt
       FROM integrantes_conve
       WHERE id_conv = :convenio_id
-        AND DATE_FORMAT(fechaCreacion, '%Y-%m') = DATE_FORMAT(:openMonthKey, '%Y-%m')
+        AND DATE_FORMAT(fechaCreacion, '%Y-%m') = DATE_FORMAT(:sourceMonthKey, '%Y-%m')
       `,
       {
-        replacements: { convenio_id, openMonthKey },
+        replacements: { convenio_id, sourceMonthKey },
         type: db.QueryTypes.SELECT,
         transaction: t
       }
@@ -1097,14 +1139,17 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
     const srcCount = Number(srcCountRows?.[0]?.cnt ?? 0);
     if (srcCount <= 0) {
       abort(409, {
-        error: 'El mes abierto no tiene integrantes para clonar. No se congeló el mes.',
-        openMonth: openMonthKey
+        error:
+          'El mes origen no tiene integrantes para clonar. No se congeló el mes.',
+        openMonth: openMonthKey,
+        sourceMonth: sourceMonthKey
       });
     }
 
     // 5) Clonar openMonth -> nextMonth (por MES, ignora horas) + dedupe por persona
     //    - Tomamos 1 registro por persona:
     //      key = DNI si existe; si no, email normalizado; si no, el id.
+    // Nota: en modo catch-up, esto hace MERGE: inserta solo los que NO existan en el mes destino.
     const [insertResult, insertMeta] = await db.query(
       `
   INSERT INTO integrantes_conve (
@@ -1137,7 +1182,7 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
     SELECT MAX(id) AS pick_id
     FROM integrantes_conve s
     WHERE s.id_conv = :convenio_id
-      AND DATE_FORMAT(s.fechaCreacion, '%Y-%m') = DATE_FORMAT(:openMonthKey, '%Y-%m')
+      AND DATE_FORMAT(s.fechaCreacion, '%Y-%m') = DATE_FORMAT(:sourceMonthKey, '%Y-%m')
     GROUP BY
       CASE
         WHEN s.dni IS NOT NULL AND TRIM(s.dni) <> '' THEN CONCAT('D:', TRIM(s.dni))
@@ -1147,7 +1192,7 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
   ) pick ON pick.pick_id = src.id
   LEFT JOIN convenios_planes_disponibles p ON p.id = src.convenio_plan_id
   WHERE src.id_conv = :convenio_id
-    AND DATE_FORMAT(src.fechaCreacion, '%Y-%m') = DATE_FORMAT(:openMonthKey, '%Y-%m')
+    AND DATE_FORMAT(src.fechaCreacion, '%Y-%m') = DATE_FORMAT(:sourceMonthKey, '%Y-%m')
     AND NOT EXISTS (
       SELECT 1
       FROM integrantes_conve dst
@@ -1164,7 +1209,7 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
     )
   `,
       {
-        replacements: { convenio_id, openMonthKey, nextMonthKey },
+        replacements: { convenio_id, sourceMonthKey, nextMonthKey },
         type: db.QueryTypes.INSERT,
         transaction: t
       }
@@ -1183,24 +1228,27 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
     // console.log('INSERT result/meta =>', insertResult, insertMeta, 'clonados =>', clonados);
 
     // 5.1) Si no clonó nada, no congelamos (evita “mes abierto congelado sin mes siguiente”)
-     if (clonados <= 0) {
-       abort(409, {
-         error:
-           'No se clonó ningún integrante (posible inconsistencia o datos duplicados). No se congeló el mes.',
-         openMonth: openMonthKey,
-         nextMonth: nextMonthKey
-       });
-     }
+    // Nota: en modo catch-up puede pasar que "no haya nada para insertar" (ya estaba completo).
+    // En ese caso, sigue siendo seguro marcar el mes como congelado porque el objetivo (completar/merge) ya está cumplido.
+    if (clonados <= 0 && !isCatchUp) {
+      abort(409, {
+        error:
+          'No se clonó ningún integrante (posible inconsistencia o datos duplicados). No se congeló el mes.',
+        openMonth: openMonthKey,
+        nextMonth: nextMonthKey
+      });
+    }
 
     // 6) Marcar openMonth como congelado (key 00:00:00)
+    // Nota: en catch-up, marcamos como congelado el MES FUENTE (sourceMonthKey), no necesariamente el openMonthKey.
     await db.query(
       `
       INSERT INTO congelamiento_integrantes (convenio_id, vencimiento, estado)
-      VALUES (:convenio_id, :openMonthKey, 1)
+      VALUES (:convenio_id, :sourceMonthKey, 1)
       ON DUPLICATE KEY UPDATE estado = 1
       `,
       {
-        replacements: { convenio_id, openMonthKey },
+        replacements: { convenio_id, sourceMonthKey },
         type: db.QueryTypes.INSERT,
         transaction: t
       }
@@ -1210,10 +1258,13 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
     await t.commit();
 
     return res.status(200).json({
-      message: `Mes congelado. Se creó el mes siguiente con ${clonados} integrantes.`,
-      frozenMonth: openMonthKey,
+      message: isCatchUp
+        ? `Mes congelado (catch-up). Se completó el mes destino con ${clonados} integrantes faltantes.`
+        : `Mes congelado. Se creó el mes siguiente con ${clonados} integrantes.`,
+      frozenMonth: sourceMonthKey,
       nextMonth: nextMonthKey,
-      clonados
+      clonados,
+      mode: isCatchUp ? 'catch_up' : 'normal'
     });
   } catch (err) {
     try {
