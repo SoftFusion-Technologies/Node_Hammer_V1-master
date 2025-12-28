@@ -40,12 +40,16 @@ function assertMonthStartFormat(v) {
   }
 }
 
-const ALLOWED_TIPOS = new Set(['FINALIZAR_CARGA', 'ENVIAR_LISTADO']);
+const ALLOWED_TIPOS = new Set([
+  'FINALIZAR_CARGA',
+  'ENVIAR_LISTADO',
+  'CHAT_MENSAJE'
+]);
 function assertTipo(tipo) {
   const t = String(tipo || '').trim();
   if (!ALLOWED_TIPOS.has(t)) {
     const e = new Error(
-      "Tipo inválido. Debe ser 'FINALIZAR_CARGA' o 'ENVIAR_LISTADO'."
+      "Tipo inválido. Debe ser 'FINALIZAR_CARGA' , 'ENVIAR_LISTADO' o 'CHAT_MENSAJE'."
     );
     e.statusCode = 400;
     throw e;
@@ -529,4 +533,3 @@ export const COUNT_PENDIENTES_ConveniosMesAcciones_CTS = async (req, res) => {
     return res.status(code).json({ mensajeError: error.message });
   }
 };
-    

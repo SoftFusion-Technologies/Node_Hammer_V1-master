@@ -1450,5 +1450,32 @@ router.delete('/integrantes-notas/:id', ER_IntegrantesConveNotas_CTS);
 router.put('/integrantes-notas/:id', UR_IntegrantesConveNotas_CTS);
 // BENJAMIN ORELLANA 21 DIC 2025 FIN
 
+// BENJAMIN ORELLANA 28 DIC 2025 INI
+import {
+  OBR_ConvenioChatThread_ByConvenio_CTS,
+  UPD_ConvenioChatThread_SetNombre_CTS,
+  OBRS_ConvenioChatMessages_CTS,
+  CR_ConvenioChatMessage_CTS,
+  UPD_ConvenioChatMessage_CTS,
+  ER_ConvenioChatMessage_SoftDelete_CTS,
+  MARCAR_LEIDO_ConvenioChatAccion_CTS,
+  CR_ConvenioChatMessageRead_CTS
+} from '../Controllers/CTS_TB_ConvenioChat.js';
+
+// Convenio Chat
+router.get('/convenio-chat/thread', OBR_ConvenioChatThread_ByConvenio_CTS);
+router.patch('/convenio-chat/thread/:id/nombre', UPD_ConvenioChatThread_SetNombre_CTS);
+
+router.get('/convenio-chat/messages', OBRS_ConvenioChatMessages_CTS);
+router.post('/convenio-chat/messages', CR_ConvenioChatMessage_CTS);
+router.patch('/convenio-chat/messages/:id', UPD_ConvenioChatMessage_CTS);
+router.delete('/convenio-chat/messages/:id', ER_ConvenioChatMessage_SoftDelete_CTS);
+
+router.post('/convenio-chat/acciones/marcar-leido', MARCAR_LEIDO_ConvenioChatAccion_CTS);
+
+router.post('/convenio-chat/messages/:id/read', CR_ConvenioChatMessageRead_CTS);
+
+// BENJAMIN ORELLANA 28 DIC 2025 FIN
+
 // Exporta el enrutador
 export default router;
