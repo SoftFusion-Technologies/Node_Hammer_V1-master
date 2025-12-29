@@ -430,7 +430,9 @@ import {
 import {
   OBRS_AlumnosAusentes_Dashboard_CTS,
   CR_HistorialContacto_CTS,
-  OBR_HistorialContacto_PorIdCliente_CTS
+  OBR_HistorialContacto_PorIdCliente_CTS,
+  UR_HistorialContacto_CTS,
+  ER_HistorialContacto_CTS
 } from '../Controllers/CTS_TB_HistorialContactosPilates.js';
 
 import {
@@ -1318,6 +1320,8 @@ router.get(
   OBR_HistorialContacto_PorIdCliente_CTS
 );
 router.post('/pilates/historial-contactos', CR_HistorialContacto_CTS);
+router.patch("/pilates/historial-contactos/:id", UR_HistorialContacto_CTS);
+router.delete("/pilates/historial-contactos/:id", ER_HistorialContacto_CTS);
 // =======================================================
 //  HECHO POR SERGIO MANRIQUE, FECHA: 22/12/2025
 //  FIN DE MODULO: ALUMNOS AUSENTES Y SEGUIMIENTO (Pilates)

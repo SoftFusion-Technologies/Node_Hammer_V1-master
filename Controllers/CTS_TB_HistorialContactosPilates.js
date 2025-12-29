@@ -228,3 +228,76 @@ export const OBR_HistorialContacto_PorIdCliente_CTS = async (req, res) => {
     res.status(500).json({ mensajeError: error.message });
   }
 };
+
+
+// --------------------------------------------------------------------------------
+// 4. ACTUALIZAR (Modificar un registro del historial)
+// --------------------------------------------------------------------------------
+export const UR_HistorialContacto_CTS = async (req, res) => {
+  try {
+    const { id } = req.params; // ID del registro de historial
+    const { observacion  } = req.body;
+
+    // Validaciones básicas (Igual que en crear)
+    if (!observacion || observacion.trim() === '') {
+      return res
+        .status(400)
+        .json({ mensajeError: 'La observación es obligatoria.' });
+    }
+
+    if (observacion.length > 255) {
+      return res.status(400).json({
+        mensajeError: "La observación no puede exceder los 255 caracteres.",
+      });
+    }
+    // Buscar el registro
+    const contacto = await HistorialContactosPilatesModel.findByPk(id);
+
+    if (!contacto) {
+      return res
+        .status(404)
+        .json({ mensajeError: 'El registro de historial no existe.' });
+    }
+
+    // Actualizamos los campos
+    contacto.observacion = observacion.trim().toUpperCase();
+    await contacto.save();
+
+    res.json({
+      success: true,
+      message: 'Historial modificado correctamente.',
+      data: contacto
+    });
+  } catch (error) {
+    console.error('Error en MOD_HistorialContacto_CTS:', error);
+    res.status(500).json({ mensajeError: error.message });
+  }
+};
+
+// --------------------------------------------------------------------------------
+// 5. ELIMINAR (Dar de baja un registro del historial)
+// --------------------------------------------------------------------------------
+export const ER_HistorialContacto_CTS = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const contacto = await HistorialContactosPilatesModel.findByPk(id);
+
+    if (!contacto) {
+      return res
+        .status(404)
+        .json({ mensajeError: 'El registro de historial no existe.' });
+    }
+
+    // Eliminamos el registro
+    await contacto.destroy();
+
+    res.json({
+      success: true,
+      message: 'El registro del historial ha sido eliminado correctamente.'
+    });
+  } catch (error) {
+    console.error('Error en ELIM_HistorialContacto_CTS:', error);
+    res.status(500).json({ mensajeError: error.message });
+  }
+};
