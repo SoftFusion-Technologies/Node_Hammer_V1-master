@@ -31,7 +31,7 @@ const AdmConveniosModel = db.define(
       allowNull: false
     },
     descConve: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT('long'), // LONGTEXT
       allowNull: false
     },
     tipoConve: {
@@ -65,8 +65,8 @@ const AdmConveniosModel = db.define(
     },
     // nuevos campos sede y descripción usuario
     sede: {
-      type: DataTypes.STRING,
-      allowNull: true
+      type: DataTypes.TEXT('long'), // LONGTEXT
+      allowNull: false
     },
 
     // Permite o bloquea que la empresa elija la sede al cargar integrantes.
