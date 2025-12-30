@@ -346,10 +346,9 @@ export const OBRS_IntegrantesConve_CTS = async (req, res) => {
     let rows = [];
 
     if (permiteFec) {
-      // === MODO MENSUAL (igual a tu query actual) ===
+      // === MODO MENSUAL ===
       rows = await db.query(
         `
-    /* TU MISMA QUERY ACTUAL COMPLETA (LA LARGA) */
     SELECT
       ic.*,
 
@@ -1398,7 +1397,37 @@ export const CR_IntegrantesConve_CTS = async (req, res) => {
     // Mes pedido por el front (aceptamos que venga en fechaCreacion o monthStart)
     let requestedMonthStart =
       payload.monthStart ?? payload.fechaCreacion ?? null;
-    if (requestedMonthStart) {
+
+    // ==============================
+    // NUEVO: si NO permite fechas, ignoramos cualquier monthStart/fechaCreacion "mensual"
+    // y trabajamos con fecha real (NOW). Esto evita bloqueos por mes editable/congelado.
+    // ==============================
+    let fechaBaseParaVto = null; // <-- NUEVO: base para calcular vencimiento (monthStart o NOW)
+
+    if (!permiteFec) {
+      // Por seguridad, ignoramos inputs de "mes" que pueda mandar el front
+      delete payload.monthStart;
+
+      // Usar SQL para evitar timezone
+      const nowRows = await db.query(`SELECT NOW() AS now`, {
+        type: db.QueryTypes.SELECT,
+        transaction: t
+      });
+
+      const now = nowRows[0]?.now;
+
+      // En convenios sin fechas, fechaCreacion es la fecha real del alta
+      payload.fechaCreacion = now;
+      fechaBaseParaVto = now;
+
+      // Dejar requestedMonthStart como null para que NO dispare normalizaciones mensuales
+      requestedMonthStart = null;
+    }
+
+    // ==============================
+    // Lógica mensual SOLO si permiteFec = 1
+    // ==============================
+    if (permiteFec && requestedMonthStart) {
       requestedMonthStart = String(requestedMonthStart).trim();
       // Normalizamos a inicio de mes si vino tipo 'YYYY-MM'
       if (/^\d{4}-\d{2}$/.test(requestedMonthStart)) {
@@ -1422,6 +1451,10 @@ export const CR_IntegrantesConve_CTS = async (req, res) => {
       monthStart = requestedMonthStart;
     } else {
       // Si NO permite fechas, usamos mes abierto (comportamiento actual)
+      // ==============================
+      // ANTERIOR (se deja comentado para no perder el histórico)
+      // ==============================
+      /*
       monthStart = await getOpenMonthStart(payload.id_conv, t);
 
       // Si no existe aún (primer mes), usar mes actual inicio:
@@ -1432,21 +1465,54 @@ export const CR_IntegrantesConve_CTS = async (req, res) => {
         );
         monthStart = rows[0].monthStart;
       }
+      */
+
+      // ==============================
+      // NUEVO: si NO permite fechas, NO usamos monthStart mensual.
+      // Si permiteFec = 1 y no vino requestedMonthStart, sí usamos mes abierto como antes.
+      // ==============================
+      if (permiteFec) {
+        monthStart = await getOpenMonthStart(payload.id_conv, t);
+
+        // Si no existe aún (primer mes), usar mes actual inicio:
+        if (!monthStart) {
+          const rows = await db.query(
+            `SELECT DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00') AS monthStart`,
+            { type: db.QueryTypes.SELECT, transaction: t }
+          );
+          monthStart = rows[0].monthStart;
+        }
+      } else {
+        // permiteFec = 0: monthStart no aplica
+        monthStart = null;
+      }
     }
 
     // Bloqueo:
     // - si permiteFec: no exigimos "mes abierto", pero sí validamos "no pasado" y "no congelado"
     // - si no permiteFec: exigimos mes abierto (como hoy)
-    await assertMesEditable({
-      convenio_id: payload.id_conv,
-      monthStart,
-      transaction: t,
-      requireOpenMonth: !permiteFec
-    });
+    // ==============================
+    // NUEVO: si permiteFec = 0, NO validamos mes editable/congelado.
+    // ==============================
+    if (permiteFec) {
+      await assertMesEditable({
+        convenio_id: payload.id_conv,
+        monthStart,
+        transaction: t,
+        requireOpenMonth: !permiteFec
+      });
 
-    // Forzar fechaCreacion al inicio de mes elegido
-    payload.fechaCreacion = monthStart;
-    delete payload.monthStart;
+      // Forzar fechaCreacion al inicio de mes elegido
+      payload.fechaCreacion = monthStart;
+      delete payload.monthStart;
+
+      // Base para vencimiento (modo mensual)
+      fechaBaseParaVto = monthStart;
+    } else {
+      // permiteFec = 0: fechaCreacion ya quedó como NOW() arriba, y fechaBaseParaVto también.
+      // No hacemos delete de payload.fechaCreacion (se respeta la fecha real)
+      // delete payload.monthStart ya se hizo arriba.
+    }
 
     // Normalizar plan
     payload.convenio_plan_id = toIntOrNull(payload.convenio_plan_id);
@@ -1455,6 +1521,7 @@ export const CR_IntegrantesConve_CTS = async (req, res) => {
     if (payload.convenio_plan_id) {
       const plan = await ConveniosPlanesDisponiblesModel.findByPk(
         payload.convenio_plan_id
+        // (opcional) { transaction: t }
       );
       if (!plan) {
         await t.rollback();
@@ -1485,10 +1552,33 @@ export const CR_IntegrantesConve_CTS = async (req, res) => {
 
       // vencimiento: usar SQL para evitar timezone
       if (plan.duracion_dias) {
+        // ==============================
+        // ANTERIOR (mensual): DATE_ADD(:monthStart, ...)
+        // ==============================
+        /*
         const vtoRows = await db.query(
           `SELECT DATE_ADD(:monthStart, INTERVAL :dias DAY) AS vto`,
           {
             replacements: { monthStart, dias: Number(plan.duracion_dias) },
+            type: db.QueryTypes.SELECT,
+            transaction: t
+          }
+        );
+        payload.fecha_vencimiento = vtoRows[0].vto;
+        */
+
+        // ==============================
+        // NUEVO: usar fechaBaseParaVto:
+        // - si permiteFec=1 -> monthStart (inicio de mes)
+        // - si permiteFec=0 -> NOW() (fecha real del alta)
+        // ==============================
+        const vtoRows = await db.query(
+          `SELECT DATE_ADD(:fechaBase, INTERVAL :dias DAY) AS vto`,
+          {
+            replacements: {
+              fechaBase: fechaBaseParaVto,
+              dias: Number(plan.duracion_dias)
+            },
             type: db.QueryTypes.SELECT,
             transaction: t
           }
@@ -1517,12 +1607,17 @@ export const CR_IntegrantesConve_CTS = async (req, res) => {
   }
 };
 
+
 // Eliminar un registro en IntegrantesConveModel por su ID
 export const ER_IntegrantesConve_CTS = async (req, res) => {
   const t = await db.transaction();
   try {
     const { id } = req.params;
 
+    // ==============================
+    // ANTERIOR: obtener convenio + mes del registro con helper
+    // ==============================
+    /*
     // 1) Obtener convenio + mes del registro
     const info = await getIntegranteMonthInfo(id, t);
     if (!info) {
@@ -1539,6 +1634,52 @@ export const ER_IntegrantesConve_CTS = async (req, res) => {
       monthStart,
       transaction: t
     });
+
+    // 3) Eliminar
+    const deleted = await IntegrantesConveModel.destroy({
+      where: { id },
+      transaction: t
+    });
+    */
+
+    // ==============================
+    // NUEVO: primero traemos el registro real para conocer fechaCreacion exacta y convenio
+    // y aplicar regla: si permiteFec=0 -> NO VALIDAR MES.
+    // ==============================
+    const actual = await IntegrantesConveModel.findByPk(id, { transaction: t });
+    if (!actual) {
+      await t.rollback();
+      return res.status(404).json({ mensajeError: 'Registro no encontrado' });
+    }
+
+    const convenioId = Number(actual.id_conv);
+
+    // Permite fechas (1) o no (0)
+    const permiteFec = await getConvenioPermiteFec(convenioId, t);
+
+    // 2) Bloqueo SOLO si permiteFec = 1
+    if (permiteFec) {
+      // monthStart desde la fechaCreacion del registro (sin corrimiento de timezone)
+      const msRows = await db.query(
+        `SELECT DATE_FORMAT(:fc, '%Y-%m-01 00:00:00') AS monthStart`,
+        {
+          replacements: { fc: actual.fechaCreacion },
+          type: db.QueryTypes.SELECT,
+          transaction: t
+        }
+      );
+      const monthStart = msRows[0]?.monthStart;
+
+      await assertMesEditable({
+        convenio_id: convenioId,
+        monthStart,
+        transaction: t
+      });
+    } else {
+      // permiteFec = 0:
+      // No se valida mes anterior / congelado / mes abierto.
+      // Se elimina libremente (según tu requerimiento).
+    }
 
     // 3) Eliminar
     const deleted = await IntegrantesConveModel.destroy({
@@ -1567,6 +1708,10 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
     const { id } = req.params;
     const payload = { ...req.body };
 
+    // ==============================
+    // ANTERIOR: obtenías monthStart con helper y validabas siempre (con requireOpenMonth: !permiteFec)
+    // ==============================
+    /*
     // 1) Obtener info del registro (id_conv + monthStart) y bloquear edición por mes
     const info = await getIntegranteMonthInfo(id, t);
     if (!info) {
@@ -1586,6 +1731,48 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
       transaction: t,
       requireOpenMonth: !permiteFec
     });
+    */
+
+    // ==============================
+    // NUEVO: traemos el registro real primero, para:
+    // - saber convenio
+    // - saber fechaCreacion real (base para vencimiento si permiteFec=0)
+    // - aplicar regla: si permiteFec=0 -> NO VALIDAR MES.
+    // ==============================
+    const actual = await IntegrantesConveModel.findByPk(id, { transaction: t });
+    if (!actual) {
+      await t.rollback();
+      return res.status(404).json({ mensajeError: 'Registro no encontrado' });
+    }
+
+    const convenioId = Number(actual.id_conv);
+
+    // Permite fechas (1) o no (0)
+    const permiteFec = await getConvenioPermiteFec(convenioId, t);
+
+    // monthStart solo aplica si permiteFec=1
+    let monthStart = null;
+
+    if (permiteFec) {
+      const msRows = await db.query(
+        `SELECT DATE_FORMAT(:fc, '%Y-%m-01 00:00:00') AS monthStart`,
+        {
+          replacements: { fc: actual.fechaCreacion },
+          type: db.QueryTypes.SELECT,
+          transaction: t
+        }
+      );
+      monthStart = msRows[0]?.monthStart;
+
+      await assertMesEditable({
+        convenio_id: convenioId,
+        monthStart,
+        transaction: t,
+        requireOpenMonth: !permiteFec // (queda igual que tu intención original)
+      });
+    } else {
+      // permiteFec=0: NO validar mes editable/congelado/abierto
+    }
 
     // Sanitizar: nunca permitir que cambien el convenio o el mes del snapshot
     delete payload.id_conv;
@@ -1593,17 +1780,10 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
     delete payload.monthStart;
     delete payload.monthCursor;
 
-    // 3) Obtener registro actual (para comparar plan actual, etc.)
-    const actual = await IntegrantesConveModel.findByPk(id, { transaction: t });
-    if (!actual) {
-      await t.rollback();
-      return res.status(404).json({ mensajeError: 'Registro no encontrado' });
-    }
-
     // 4) Normalizaciones
     payload.convenio_plan_id = toIntOrNull(payload.convenio_plan_id);
 
-    // Fecha vencimiento manual (solo si NO hay plan o si tu negocio lo permite)
+    // Fecha vencimiento manual (solo si NO hay plan)
     if (Object.prototype.hasOwnProperty.call(payload, 'fecha_vencimiento')) {
       payload.fecha_vencimiento = parseDateFlexible(payload.fecha_vencimiento);
     } else {
@@ -1613,6 +1793,13 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
     const planIdNuevo = payload.convenio_plan_id; // int|null
     const planIdActual = toIntOrNull(actual.convenio_plan_id);
     const planCambio = String(planIdNuevo || '') !== String(planIdActual || '');
+
+    // ==============================
+    // NUEVO: base para vencimiento por duración
+    // - Si permiteFec=1: monthStart (inicio de mes del registro)
+    // - Si permiteFec=0: actual.fechaCreacion (fecha real del registro)
+    // ==============================
+    const fechaBaseParaVto = permiteFec ? monthStart : actual.fechaCreacion;
 
     // 5) Si hay plan => forzar snapshot + vencimiento (recalc si cambio o si no vino vto)
     if (planIdNuevo) {
@@ -1649,12 +1836,35 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
       payload.descuento = String(descPct.toFixed(2));
       payload.preciofinal = String(finalCalc.toFixed(2));
 
-      // Vencimiento: si hay duración y (cambió plan o no vino vto válido), recalculamos desde monthStart
+      // Vencimiento: si hay duración y (cambió plan o no vino vto válido), recalculamos desde fechaBaseParaVto
       if (plan.duracion_dias && (planCambio || !payload.fecha_vencimiento)) {
+        // ==============================
+        // ANTERIOR: recalculabas desde monthStart (siempre mensual)
+        // ==============================
+        /*
         const vtoRows = await db.query(
           `SELECT DATE_ADD(:monthStart, INTERVAL :dias DAY) AS vto`,
           {
             replacements: { monthStart, dias: Number(plan.duracion_dias) },
+            type: db.QueryTypes.SELECT,
+            transaction: t
+          }
+        );
+        payload.fecha_vencimiento = vtoRows[0]?.vto || null;
+        */
+
+        // ==============================
+        // NUEVO: recalcular desde fechaBaseParaVto
+        // - permiteFec=1 -> monthStart
+        // - permiteFec=0 -> fecha real del registro
+        // ==============================
+        const vtoRows = await db.query(
+          `SELECT DATE_ADD(:fechaBase, INTERVAL :dias DAY) AS vto`,
+          {
+            replacements: {
+              fechaBase: fechaBaseParaVto,
+              dias: Number(plan.duracion_dias)
+            },
             type: db.QueryTypes.SELECT,
             transaction: t
           }
