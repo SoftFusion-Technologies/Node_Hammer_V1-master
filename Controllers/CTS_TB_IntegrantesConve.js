@@ -1615,7 +1615,7 @@ export const ER_IntegrantesConve_CTS = async (req, res) => {
     const { id } = req.params;
 
     // ==============================
-    // ANTERIOR: obtener convenio + mes del registro con helper
+    // ANTERIOR
     // ==============================
     /*
     // 1) Obtener convenio + mes del registro
@@ -1643,43 +1643,36 @@ export const ER_IntegrantesConve_CTS = async (req, res) => {
     */
 
     // ==============================
-    // NUEVO: primero traemos el registro real para conocer fechaCreacion exacta y convenio
-    // y aplicar regla: si permiteFec=0 -> NO VALIDAR MES.
+    // NUEVO
+    // Criterio: si NO está congelado, debe dejar borrar aunque NO sea el mes abierto.
+    // Por eso: requireOpenMonth = false.
     // ==============================
-    const actual = await IntegrantesConveModel.findByPk(id, { transaction: t });
-    if (!actual) {
+
+    // 1) Obtener convenio + mes del registro
+    const info = await getIntegranteMonthInfo(id, t);
+    if (!info) {
       await t.rollback();
       return res.status(404).json({ mensajeError: 'Registro no encontrado' });
     }
 
-    const convenioId = Number(actual.id_conv);
+    const convenioId = Number(info.id_conv);
+    const monthStart = info.monthStart;
 
-    // Permite fechas (1) o no (0)
+    // (opcional) Si querés que el criterio aplique solo cuando permiteFec=1, lo dejamos calculado:
     const permiteFec = await getConvenioPermiteFec(convenioId, t);
 
-    // 2) Bloqueo SOLO si permiteFec = 1
-    if (permiteFec) {
-      // monthStart desde la fechaCreacion del registro (sin corrimiento de timezone)
-      const msRows = await db.query(
-        `SELECT DATE_FORMAT(:fc, '%Y-%m-01 00:00:00') AS monthStart`,
-        {
-          replacements: { fc: actual.fechaCreacion },
-          type: db.QueryTypes.SELECT,
-          transaction: t
-        }
-      );
-      const monthStart = msRows[0]?.monthStart;
-
-      await assertMesEditable({
-        convenio_id: convenioId,
-        monthStart,
-        transaction: t
-      });
-    } else {
-      // permiteFec = 0:
-      // No se valida mes anterior / congelado / mes abierto.
-      // Se elimina libremente (según tu requerimiento).
-    }
+    // 2) Bloqueo:
+    // - Mantiene validación "no pasado" (punto 0) + "no congelado" (punto 1)
+    // - NO exige mes abierto (punto 2) => requireOpenMonth: false
+    // Nota: esto se alinea con "si no está congelado, puedo borrar".
+    await assertMesEditable({
+      convenio_id: convenioId,
+      monthStart,
+      transaction: t,
+      requireOpenMonth: false
+      // si quisieras condicionar: requireOpenMonth: false (igual),
+      // o incluso: requireOpenMonth: !permiteFec (pero vos querés que NO exija mes abierto)
+    });
 
     // 3) Eliminar
     const deleted = await IntegrantesConveModel.destroy({
@@ -1700,6 +1693,7 @@ export const ER_IntegrantesConve_CTS = async (req, res) => {
     return res.status(code).json({ mensajeError: error.message });
   }
 };
+
 
 // Actualizar un registro en Integrante por su ID
 export const UR_IntegrantesConve_CTS = async (req, res) => {
