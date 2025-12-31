@@ -53,6 +53,30 @@ const calcPrecioFinal = ({ precio_lista, descuento_valor, precio_final }) => {
   return final < 0 ? 0 : Number(final.toFixed(2));
 };
 
+const toDefaultFlagOrUndefined = (v) => {
+  // undefined => no viene en el body (no tocar en update)
+  if (v === undefined) return undefined;
+
+  // null/"" => explícitamente “sin default”
+  if (v === null || v === '') return null;
+
+  const s = String(v).trim().toLowerCase();
+
+  // Aceptamos 1/true/si/sí como "default"
+  if (
+    v === 1 ||
+    v === true ||
+    s === '1' ||
+    s === 'true' ||
+    s === 'si' ||
+    s === 'sí'
+  )
+    return 1;
+
+  // Cualquier otro valor => lo tratamos como "no default" (NULL)
+  return null;
+};
+
 const pickPlanPayload = (body = {}) => {
   // Whitelist para evitar “mass assignment”
   return {
@@ -63,8 +87,11 @@ const pickPlanPayload = (body = {}) => {
     precio_lista: toDecOrNull(body.precio_lista),
     descuento_valor: toDecOrNull(body.descuento_valor),
     precio_final: body.precio_final,
-    activo:
-      body.activo === undefined ? undefined : toIntOrNull(body.activo) ?? 1
+    activo: body.activo === undefined ? undefined : toIntOrNull(body.activo),
+
+    // Benjamin Orellana - 30/12/2025
+    // Manejo de es_default
+    es_default: toDefaultFlagOrUndefined(body.es_default) ?? 1
   };
 };
 
@@ -145,29 +172,31 @@ export const OBR_ConveniosPlanesDisponibles_CTS = async (req, res) => {
    CR - crear (requiere sede_id)
 ========================= */
 export const CR_ConveniosPlanesDisponibles_CTS = async (req, res) => {
+  const t = await db.transaction();
   try {
     const payload = pickPlanPayload(req.body);
 
-    // Validaciones mínimas
     if (!payload.convenio_id) {
+      await t.rollback();
       return res
         .status(400)
         .json({ mensajeError: 'convenio_id es obligatorio.' });
     }
 
-    // sede_id NO obligatoria
-
     if (!payload.nombre_plan) {
+      await t.rollback();
       return res
         .status(400)
         .json({ mensajeError: 'nombre_plan es obligatorio.' });
     }
     if (payload.nombre_plan.length > 60) {
+      await t.rollback();
       return res
         .status(400)
         .json({ mensajeError: 'nombre_plan supera 60 caracteres.' });
     }
     if (payload.precio_lista === null) {
+      await t.rollback();
       return res.status(400).json({
         mensajeError: 'precio_lista es obligatorio y debe ser numérico.'
       });
@@ -176,15 +205,16 @@ export const CR_ConveniosPlanesDisponibles_CTS = async (req, res) => {
       payload.descuento_valor !== null &&
       payload.descuento_valor > payload.precio_lista
     ) {
+      await t.rollback();
       return res.status(400).json({
         mensajeError: 'descuento_valor no puede ser mayor a precio_lista.'
       });
     }
 
-    // Validar sede SOLO si viene
     if (payload.sede_id) {
       const sedeCheck = await validateSedeExists(payload.sede_id);
       if (!sedeCheck.ok) {
+        await t.rollback();
         const msg =
           sedeCheck.reason === 'inactiva'
             ? 'La sede seleccionada está inactiva.'
@@ -199,22 +229,51 @@ export const CR_ConveniosPlanesDisponibles_CTS = async (req, res) => {
       precio_final: payload.precio_final
     });
 
-    const creado = await ConveniosPlanesDisponiblesModel.create({
-      convenio_id: payload.convenio_id,
-      sede_id: payload.sede_id ?? null,
-      nombre_plan: payload.nombre_plan,
-      duracion_dias: payload.duracion_dias,
-      precio_lista: payload.precio_lista,
-      descuento_valor: payload.descuento_valor,
-      precio_final: precio_final_calc,
-      activo: payload.activo ?? 1
-    });
+    // Si viene marcado como default, primero “bajamos” el resto del convenio
+    if (payload.es_default === 1) {
+      await ConveniosPlanesDisponiblesModel.update(
+        { es_default: null },
+        { where: { convenio_id: payload.convenio_id }, transaction: t }
+      );
+    }
 
+    const creado = await ConveniosPlanesDisponiblesModel.create(
+      {
+        convenio_id: payload.convenio_id,
+        sede_id: payload.sede_id ?? null,
+        nombre_plan: payload.nombre_plan,
+        duracion_dias: payload.duracion_dias,
+        precio_lista: payload.precio_lista,
+        descuento_valor: payload.descuento_valor,
+        precio_final: precio_final_calc,
+        activo: payload.activo ?? 1,
+
+        // NUEVO
+        es_default: payload.es_default === 1 ? 1 : null
+      },
+      { transaction: t }
+    );
+
+    await t.commit();
     return res.status(201).json({
       message: 'Registro creado correctamente',
       registro: creado
     });
   } catch (error) {
+    await t.rollback();
+
+    const sqlMsg = String(
+      error?.original?.sqlMessage || error?.original?.message || ''
+    );
+
+    // UNIQUE de default
+    if (sqlMsg.includes('uq_cpd_convenio_default')) {
+      return res.status(409).json({
+        mensajeError: 'Ya existe un plan por defecto en este convenio.'
+      });
+    }
+
+    // UNIQUE nombre por convenio+sede+nombre_plan
     if (
       error?.name === 'SequelizeUniqueConstraintError' ||
       String(error?.original?.code || '').includes('ER_DUP_ENTRY')
@@ -224,9 +283,11 @@ export const CR_ConveniosPlanesDisponibles_CTS = async (req, res) => {
           'Ya existe un plan con el mismo nombre para ese convenio y sede.'
       });
     }
-    res.status(500).json({ mensajeError: error.message });
+
+    return res.status(500).json({ mensajeError: error.message });
   }
 };
+
 
 /* =========================
    ER - eliminar
@@ -254,108 +315,195 @@ export const ER_ConveniosPlanesDisponibles_CTS = async (req, res) => {
    UR - update (si viene sede_id, valida)
 ========================= */
 export const UR_ConveniosPlanesDisponibles_CTS = async (req, res) => {
+  const t = await db.transaction();
   try {
     const id = toIntOrNull(req.params.id);
-    if (!id) return res.status(400).json({ mensajeError: 'ID inválido.' });
-
-    const payload = pickPlanPayload(req.body);
-
-    // Si vienen valores, validamos (pero en update pueden venir parciales)
-    if (payload.sede_id !== null && payload.sede_id !== undefined) {
-      const sedeCheck = await validateSedeExists(payload.sede_id);
-      if (!sedeCheck.ok) {
-        const msg =
-          sedeCheck.reason === 'inactiva'
-            ? 'La sede seleccionada está inactiva.'
-            : 'La sede seleccionada no existe.';
-        return res.status(400).json({ mensajeError: msg });
-      }
+    if (!id) {
+      await t.rollback();
+      return res.status(400).json({ mensajeError: 'ID inválido.' });
     }
 
-    if (payload.nombre_plan !== null && payload.nombre_plan !== undefined) {
-      if (!payload.nombre_plan) {
+    // ==============================
+    // Importante:
+    // En UPDATE NO podemos usar pickPlanPayload “tal cual”,
+    // porque convierte campos ausentes en NULL y eso provoca notNull Violation.
+    // Por eso armamos updateBody SOLO con lo que venga en req.body.
+    // ==============================
+    const body = req.body || {};
+
+    // Traemos el registro actual UNA vez para:
+    // - recalcular precio_final si hace falta
+    // - manejar es_default y convenio_id real
+    const current = await ConveniosPlanesDisponiblesModel.findByPk(id, {
+      transaction: t
+    });
+
+    if (!current) {
+      await t.rollback();
+      return res.status(404).json({ mensajeError: 'Registro no encontrado' });
+    }
+
+    // Helper: detectar si un campo vino en el body (aunque venga null)
+    const has = (k) =>
+      Object.prototype.hasOwnProperty.call(body, k);
+
+    const updateBody = {};
+
+    // ==============================
+    // Validaciones + asignación controlada (solo si viene en body)
+    // ==============================
+
+    // sede_id: opcional. Si viene, validar existencia (permitimos null para “General”)
+    if (has('sede_id')) {
+      const nextSedeId = toIntOrNull(body.sede_id); // null permitido
+      if (nextSedeId) {
+        const sedeCheck = await validateSedeExists(nextSedeId);
+        if (!sedeCheck.ok) {
+          await t.rollback();
+          const msg =
+            sedeCheck.reason === 'inactiva'
+              ? 'La sede seleccionada está inactiva.'
+              : 'La sede seleccionada no existe.';
+          return res.status(400).json({ mensajeError: msg });
+        }
+      }
+      updateBody.sede_id = nextSedeId;
+    }
+
+    // nombre_plan: si viene, no puede ser vacío
+    if (has('nombre_plan')) {
+      const np = body.nombre_plan ? String(body.nombre_plan).trim() : '';
+      if (!np) {
+        await t.rollback();
         return res
           .status(400)
           .json({ mensajeError: 'nombre_plan no puede ser vacío.' });
       }
-      if (payload.nombre_plan.length > 60) {
+      if (np.length > 60) {
+        await t.rollback();
         return res
           .status(400)
           .json({ mensajeError: 'nombre_plan supera 60 caracteres.' });
       }
+      updateBody.nombre_plan = np;
     }
 
-    // Recalcular precio_final solo si se toca precio_lista/descuento/precio_final
+    // duracion_dias: opcional, null permitido
+    if (has('duracion_dias')) {
+      updateBody.duracion_dias = toIntOrNull(body.duracion_dias);
+    }
+
+    // activo: opcional
+    if (has('activo')) {
+      const a = toIntOrNull(body.activo);
+      updateBody.activo = a === null ? 1 : a; // tu criterio: si viene inválido, default 1
+    }
+
+    // ==============================
+    // Benjamin Orellana - 30/12/2025
+    // Manejo de es_default (NULL o 1)
+    // Regla: solo 1 por convenio (DB lo asegura con uq_cpd_convenio_default)
+    // ==============================
+    if (has('es_default')) {
+      const incoming =
+        String(body.es_default) === '1' || body.es_default === 1 ? 1 : null;
+
+      // Si quieren marcar este como default, bajamos todos los demás del convenio
+      if (incoming === 1) {
+        await ConveniosPlanesDisponiblesModel.update(
+          { es_default: null },
+          { where: { convenio_id: current.convenio_id }, transaction: t }
+        );
+      }
+
+      updateBody.es_default = incoming;
+    }
+
+    // ==============================
+    // Precio final: recalcular solo si se toca precio_lista/descuento_valor/precio_final
+    // ==============================
     const touchesPrice =
-      req.body?.precio_lista !== undefined ||
-      req.body?.descuento_valor !== undefined ||
-      req.body?.precio_final !== undefined;
+      has('precio_lista') || has('descuento_valor') || has('precio_final');
 
-    let precio_final_calc;
     if (touchesPrice) {
-      // Tomamos los valores resultantes (si no vinieron en body, necesitamos el registro actual)
-      const current = await ConveniosPlanesDisponiblesModel.findByPk(id);
-      if (!current)
-        return res.status(404).json({ mensajeError: 'Registro no encontrado' });
+      // Valores “next” (si no vienen, usamos current)
+      const nextPrecioLista = has('precio_lista')
+        ? toDecOrNull(body.precio_lista)
+        : Number(current.precio_lista);
 
-      const nextPrecioLista =
-        payload.precio_lista !== null && payload.precio_lista !== undefined
-          ? payload.precio_lista
-          : Number(current.precio_lista);
+      const nextDesc = has('descuento_valor')
+        ? toDecOrNull(body.descuento_valor)
+        : current.descuento_valor !== null
+        ? Number(current.descuento_valor)
+        : null;
 
-      const nextDesc =
-        payload.descuento_valor !== undefined
-          ? payload.descuento_valor
-          : current.descuento_valor !== null
-          ? Number(current.descuento_valor)
-          : null;
+      const nextPf = has('precio_final')
+        ? body.precio_final
+        : current.precio_final;
 
-      const nextPf =
-        req.body?.precio_final !== undefined
-          ? req.body.precio_final
-          : current.precio_final;
+      // Validaciones coherentes (si viene precio_lista, debe ser numérico)
+      if (has('precio_lista') && nextPrecioLista === null) {
+        await t.rollback();
+        return res.status(400).json({
+          mensajeError: 'precio_lista es obligatorio y debe ser numérico.'
+        });
+      }
 
-      precio_final_calc = calcPrecioFinal({
+      if (nextDesc !== null && nextPrecioLista !== null && nextDesc > nextPrecioLista) {
+        await t.rollback();
+        return res.status(400).json({
+          mensajeError: 'descuento_valor no puede ser mayor a precio_lista.'
+        });
+      }
+
+      const precio_final_calc = calcPrecioFinal({
         precio_lista: nextPrecioLista,
         descuento_valor: nextDesc,
         precio_final: nextPf
       });
+
+      // Guardamos los campos que vinieron explícitos
+      if (has('precio_lista')) updateBody.precio_lista = nextPrecioLista;
+      if (has('descuento_valor')) updateBody.descuento_valor = nextDesc;
+
+      // El precio_final se setea siempre si toca precio (tu lógica original)
+      updateBody.precio_final = precio_final_calc;
     }
 
-    const updateBody = {};
-    // Solo seteamos lo que vino definido (parcial)
-    Object.keys(payload).forEach((k) => {
-      if (payload[k] !== undefined) updateBody[k] = payload[k];
-    });
-
-    if (touchesPrice) updateBody.precio_final = precio_final_calc;
-
+    // ==============================
+    // Ejecutar update
+    // ==============================
     const [numRowsUpdated] = await ConveniosPlanesDisponiblesModel.update(
       updateBody,
-      { where: { id } }
+      { where: { id }, transaction: t }
     );
 
-    if (numRowsUpdated === 1) {
-      const registroActualizado =
-        await ConveniosPlanesDisponiblesModel.findByPk(id);
-      return res.json({
-        message: 'Registro actualizado correctamente',
-        registroActualizado
-      });
+    if (numRowsUpdated !== 1) {
+      await t.rollback();
+      return res.status(404).json({ mensajeError: 'Registro no encontrado' });
     }
 
-    return res.status(404).json({ mensajeError: 'Registro no encontrado' });
+    await t.commit();
+
+    const registroActualizado = await ConveniosPlanesDisponiblesModel.findByPk(id);
+    return res.json({
+      message: 'Registro actualizado correctamente',
+      registroActualizado
+    });
   } catch (error) {
+    await t.rollback();
+
     if (
       error?.name === 'SequelizeUniqueConstraintError' ||
       String(error?.original?.code || '').includes('ER_DUP_ENTRY')
     ) {
+      // Puede ocurrir si hay concurrencia extrema al setear default
       return res.status(409).json({
         mensajeError:
-          'Ya existe un plan con el mismo nombre para ese convenio y sede.'
+          'Conflicto de unicidad: ya existe un plan por defecto para este convenio.'
       });
     }
 
-    res.status(500).json({ mensajeError: error.message });
+    return res.status(500).json({ mensajeError: error.message });
   }
 };

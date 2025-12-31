@@ -82,6 +82,15 @@ const ConveniosPlanesDisponiblesModel = db.define(
       defaultValue: 1
     },
 
+    // Benjamin Orellana - 30/12/2025
+    // Indica si este plan es el plan por defecto para el convenio y sede.
+    // Puede ser NULL si no se ha definido un plan por defecto.
+    es_default: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: null
+    },
+
     created_at: {
       type: DataTypes.DATE,
       allowNull: false,

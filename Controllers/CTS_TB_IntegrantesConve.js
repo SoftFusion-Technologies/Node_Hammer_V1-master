@@ -363,6 +363,12 @@ export const OBRS_IntegrantesConve_CTS = async (req, res) => {
       CASE
         WHEN ic.convenio_plan_id IS NULL THEN 0
         WHEN ic.fecha_vencimiento IS NULL THEN 1
+
+        /* NUEVO: el "primer mes" (alta real) NO debe quedar locked */
+        WHEN fm.first_month IS NOT NULL
+        AND DATE_FORMAT(:monthStart, '%Y-%m') = fm.first_month THEN 0
+
+        /* Desde el mes siguiente en adelante: locked mientras el mes sea anterior al vencimiento */
         WHEN :monthStart < ic.fecha_vencimiento THEN 1
         ELSE 0
       END AS locked_este_mes,
@@ -1093,6 +1099,12 @@ export const OBRS_IntegrantesConve_PDF_CTS = async (req, res) => {
     CASE
       WHEN ic.convenio_plan_id IS NULL THEN 0
       WHEN ic.fecha_vencimiento IS NULL THEN 1
+
+      /* NUEVO: el "primer mes" (alta real) NO debe quedar locked */
+      WHEN fm.first_month IS NOT NULL
+      AND DATE_FORMAT(:monthStart, '%Y-%m') = fm.first_month THEN 0
+
+      /* Desde el mes siguiente en adelante: locked mientras el mes sea anterior al vencimiento */
       WHEN :monthStart < ic.fecha_vencimiento THEN 1
       ELSE 0
     END AS locked_este_mes,
@@ -1607,7 +1619,6 @@ export const CR_IntegrantesConve_CTS = async (req, res) => {
   }
 };
 
-
 // Eliminar un registro en IntegrantesConveModel por su ID
 export const ER_IntegrantesConve_CTS = async (req, res) => {
   const t = await db.transaction();
@@ -1694,7 +1705,6 @@ export const ER_IntegrantesConve_CTS = async (req, res) => {
   }
 };
 
-
 // Actualizar un registro en Integrante por su ID
 export const UR_IntegrantesConve_CTS = async (req, res) => {
   const t = await db.transaction();
@@ -1703,43 +1713,47 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
     const payload = { ...req.body };
 
     // ==============================
-    // ANTERIOR: obtenías monthStart con helper y validabas siempre (con requireOpenMonth: !permiteFec)
+    // Benja - 30/12/2025
+    // Traer info del registro con SQL crudo para evitar corrimientos timezone
+    // y además obtener monthStart/monthYm para reglas mensuales.
     // ==============================
-    /*
-    // 1) Obtener info del registro (id_conv + monthStart) y bloquear edición por mes
-    const info = await getIntegranteMonthInfo(id, t);
+    const infoRows = await db.query(
+      `
+      SELECT
+        id,
+        id_conv,
+        fechaCreacion,
+        DATE_FORMAT(fechaCreacion, '%Y-%m-01 00:00:00') AS monthStart,
+        DATE_FORMAT(fechaCreacion, '%Y-%m') AS monthYm,
+
+        convenio_plan_id,
+        fecha_vencimiento,
+
+        dni,
+        email,
+        telefono,
+        nombre,
+        sede,
+        preciofinal
+      FROM integrantes_conve
+      WHERE id = :id
+      LIMIT 1
+      `,
+      {
+        replacements: { id },
+        type: db.QueryTypes.SELECT,
+        transaction: t
+      }
+    );
+
+    const info = infoRows?.[0] || null;
+
     if (!info) {
       await t.rollback();
       return res.status(404).json({ mensajeError: 'Registro no encontrado' });
     }
 
     const convenioId = Number(info.id_conv);
-    const monthStart = info.monthStart; // 'YYYY-MM-01 00:00:00'
-
-    // Si permiteFec=1, no exigimos "mes abierto"; solo (no pasado) y (no congelado)
-    const permiteFec = await getConvenioPermiteFec(convenioId, t);
-
-    await assertMesEditable({
-      convenio_id: convenioId,
-      monthStart,
-      transaction: t,
-      requireOpenMonth: !permiteFec
-    });
-    */
-
-    // ==============================
-    // NUEVO: traemos el registro real primero, para:
-    // - saber convenio
-    // - saber fechaCreacion real (base para vencimiento si permiteFec=0)
-    // - aplicar regla: si permiteFec=0 -> NO VALIDAR MES.
-    // ==============================
-    const actual = await IntegrantesConveModel.findByPk(id, { transaction: t });
-    if (!actual) {
-      await t.rollback();
-      return res.status(404).json({ mensajeError: 'Registro no encontrado' });
-    }
-
-    const convenioId = Number(actual.id_conv);
 
     // Permite fechas (1) o no (0)
     const permiteFec = await getConvenioPermiteFec(convenioId, t);
@@ -1748,130 +1762,299 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
     let monthStart = null;
 
     if (permiteFec) {
-      const msRows = await db.query(
-        `SELECT DATE_FORMAT(:fc, '%Y-%m-01 00:00:00') AS monthStart`,
-        {
-          replacements: { fc: actual.fechaCreacion },
-          type: db.QueryTypes.SELECT,
-          transaction: t
-        }
-      );
-      monthStart = msRows[0]?.monthStart;
+      monthStart = info.monthStart;
 
       await assertMesEditable({
         convenio_id: convenioId,
         monthStart,
         transaction: t,
-        requireOpenMonth: !permiteFec // (queda igual que tu intención original)
+        requireOpenMonth: !permiteFec // mantenemos tu intención original
       });
     } else {
       // permiteFec=0: NO validar mes editable/congelado/abierto
     }
 
+    // ==============================
     // Sanitizar: nunca permitir que cambien el convenio o el mes del snapshot
+    // ==============================
     delete payload.id_conv;
     delete payload.fechaCreacion;
     delete payload.monthStart;
     delete payload.monthCursor;
 
-    // 4) Normalizaciones
-    payload.convenio_plan_id = toIntOrNull(payload.convenio_plan_id);
+    // ==============================
+    // - No tocar convenio_plan_id si no vino en body.
+    // - Si vino, normalizar a int|null.
+    // ==============================
+    const planIdActual = toIntOrNull(info.convenio_plan_id);
 
-    // Fecha vencimiento manual (solo si NO hay plan)
+    const planIdVinoEnBody = Object.prototype.hasOwnProperty.call(
+      payload,
+      'convenio_plan_id'
+    );
+
+    if (planIdVinoEnBody) {
+      payload.convenio_plan_id = toIntOrNull(payload.convenio_plan_id);
+    } else {
+      delete payload.convenio_plan_id;
+    }
+
+    // Fecha vencimiento manual (solo si lo mandan explícito)
     if (Object.prototype.hasOwnProperty.call(payload, 'fecha_vencimiento')) {
       payload.fecha_vencimiento = parseDateFlexible(payload.fecha_vencimiento);
     } else {
       delete payload.fecha_vencimiento;
     }
 
-    const planIdNuevo = payload.convenio_plan_id; // int|null
-    const planIdActual = toIntOrNull(actual.convenio_plan_id);
-    const planCambio = String(planIdNuevo || '') !== String(planIdActual || '');
+    const planIdNuevo = planIdVinoEnBody
+      ? payload.convenio_plan_id
+      : planIdActual;
+
+    // Cambio de plan SOLO si vino en body y cambia (incluye pasar a NULL)
+    const planCambio =
+      planIdVinoEnBody &&
+      String(planIdNuevo || '') !== String(planIdActual || '');
 
     // ==============================
-    // NUEVO: base para vencimiento por duración
-    // - Si permiteFec=1: monthStart (inicio de mes del registro)
-    // - Si permiteFec=0: actual.fechaCreacion (fecha real del registro)
+    // Benja - 31/12/2025
+    // FIX: Bloqueo de cambio/quita de plan cuando:
+    // - El plan está vigente
+    // - Y NO estás en el mes de creación real de la persona en el convenio
+    //
+    // Importante:
+    // - NO usamos "nombre" como identidad (editable => bypass).
+    // - Identidad estricta: dni/email/teléfono válidos (ignorando "No informado").
+    // - Fallback (cuando no hay identidad): mismo plan + mismo vto + mismo preciofinal + misma sede
+    //   para detectar clones de ese snapshot.
     // ==============================
-    const fechaBaseParaVto = permiteFec ? monthStart : actual.fechaCreacion;
+    if (planCambio && planIdActual) {
+      const checkRows = await db.query(
+        `
+        SELECT
+          DATE_FORMAT(ic.fechaCreacion, '%Y-%m') AS cur_month,
 
-    // 5) Si hay plan => forzar snapshot + vencimiento (recalc si cambio o si no vino vto)
-    if (planIdNuevo) {
-      const plan = await ConveniosPlanesDisponiblesModel.findByPk(planIdNuevo, {
-        transaction: t
-      });
+          /* identidad estricta (NO editable): dni/email/teléfono */
+          CASE
+            WHEN ic.dni IS NOT NULL AND TRIM(ic.dni) <> ''
+                 AND LOWER(TRIM(ic.dni)) <> 'no informado'
+                 AND TRIM(ic.dni) REGEXP '^[0-9]+$'
+              THEN CONCAT('D:', TRIM(ic.dni))
+            WHEN ic.email IS NOT NULL AND TRIM(ic.email) <> ''
+                 AND LOWER(TRIM(ic.email)) <> 'no informado'
+              THEN CONCAT('E:', LOWER(TRIM(ic.email)))
+            WHEN ic.telefono IS NOT NULL AND TRIM(ic.telefono) <> ''
+                 AND LOWER(TRIM(ic.telefono)) <> 'no informado'
+              THEN CONCAT('T:', TRIM(ic.telefono))
+            ELSE NULL
+          END AS person_key_strict,
 
-      if (!plan) {
+          /* plan vigente:
+             - Si NO hay vencimiento => lo tratamos como vigente (indefinido)
+             - permiteFec=1 => comparamos contra monthStart del registro
+             - permiteFec=0 => comparamos contra NOW() */
+          CASE
+            WHEN ic.fecha_vencimiento IS NULL THEN 1
+            WHEN :permiteFec = 1 AND :monthStart < ic.fecha_vencimiento THEN 1
+            WHEN :permiteFec = 0 AND NOW() < ic.fecha_vencimiento THEN 1
+            ELSE 0
+          END AS plan_vigente,
+
+          /* Primer mes real (creación) para esa persona/snapshot */
+          (
+            SELECT MIN(DATE_FORMAT(s.fechaCreacion, '%Y-%m'))
+            FROM integrantes_conve s
+            WHERE s.id_conv = :id_conv
+              AND (
+                /* Caso A: identidad estricta disponible => trackea por dni/email/teléfono */
+                (
+                  (
+                    CASE
+                      WHEN s.dni IS NOT NULL AND TRIM(s.dni) <> ''
+                           AND LOWER(TRIM(s.dni)) <> 'no informado'
+                           AND TRIM(s.dni) REGEXP '^[0-9]+$'
+                        THEN CONCAT('D:', TRIM(s.dni))
+                      WHEN s.email IS NOT NULL AND TRIM(s.email) <> ''
+                           AND LOWER(TRIM(s.email)) <> 'no informado'
+                        THEN CONCAT('E:', LOWER(TRIM(s.email)))
+                      WHEN s.telefono IS NOT NULL AND TRIM(s.telefono) <> ''
+                           AND LOWER(TRIM(s.telefono)) <> 'no informado'
+                        THEN CONCAT('T:', TRIM(s.telefono))
+                      ELSE NULL
+                    END
+                  ) IS NOT NULL
+                  AND
+                  (
+                    CASE
+                      WHEN s.dni IS NOT NULL AND TRIM(s.dni) <> ''
+                           AND LOWER(TRIM(s.dni)) <> 'no informado'
+                           AND TRIM(s.dni) REGEXP '^[0-9]+$'
+                        THEN CONCAT('D:', TRIM(s.dni))
+                      WHEN s.email IS NOT NULL AND TRIM(s.email) <> ''
+                           AND LOWER(TRIM(s.email)) <> 'no informado'
+                        THEN CONCAT('E:', LOWER(TRIM(s.email)))
+                      WHEN s.telefono IS NOT NULL AND TRIM(s.telefono) <> ''
+                           AND LOWER(TRIM(s.telefono)) <> 'no informado'
+                        THEN CONCAT('T:', TRIM(s.telefono))
+                      ELSE NULL
+                    END
+                  ) = (
+                    CASE
+                      WHEN ic.dni IS NOT NULL AND TRIM(ic.dni) <> ''
+                           AND LOWER(TRIM(ic.dni)) <> 'no informado'
+                           AND TRIM(ic.dni) REGEXP '^[0-9]+$'
+                        THEN CONCAT('D:', TRIM(ic.dni))
+                      WHEN ic.email IS NOT NULL AND TRIM(ic.email) <> ''
+                           AND LOWER(TRIM(ic.email)) <> 'no informado'
+                        THEN CONCAT('E:', LOWER(TRIM(ic.email)))
+                      WHEN ic.telefono IS NOT NULL AND TRIM(ic.telefono) <> ''
+                           AND LOWER(TRIM(ic.telefono)) <> 'no informado'
+                        THEN CONCAT('T:', TRIM(ic.telefono))
+                      ELSE NULL
+                    END
+                  )
+                )
+
+                OR
+
+                /* Caso B: NO hay identidad estricta => fallback por snapshot (para detectar clones) */
+                (
+                  (
+                    CASE
+                      WHEN ic.dni IS NOT NULL AND TRIM(ic.dni) <> ''
+                           AND LOWER(TRIM(ic.dni)) <> 'no informado'
+                           AND TRIM(ic.dni) REGEXP '^[0-9]+$'
+                        THEN 1
+                      WHEN ic.email IS NOT NULL AND TRIM(ic.email) <> ''
+                           AND LOWER(TRIM(ic.email)) <> 'no informado'
+                        THEN 1
+                      WHEN ic.telefono IS NOT NULL AND TRIM(ic.telefono) <> ''
+                           AND LOWER(TRIM(ic.telefono)) <> 'no informado'
+                        THEN 1
+                      ELSE 0
+                    END
+                  ) = 0
+                  AND s.convenio_plan_id = :plan_id
+                  AND (
+                    (:fv IS NULL AND s.fecha_vencimiento IS NULL)
+                    OR (:fv IS NOT NULL AND s.fecha_vencimiento = :fv)
+                  )
+                  AND COALESCE(TRIM(s.preciofinal), '') = COALESCE(TRIM(ic.preciofinal), '')
+                  AND COALESCE(TRIM(s.sede), '') = COALESCE(TRIM(ic.sede), '')
+                )
+              )
+          ) AS first_month_person
+
+        FROM integrantes_conve ic
+        WHERE ic.id = :id
+        LIMIT 1
+        `,
+        {
+          replacements: {
+            id,
+            id_conv: convenioId,
+            plan_id: planIdActual,
+            fv: info.fecha_vencimiento ?? null,
+            permiteFec: permiteFec ? 1 : 0,
+            monthStart: monthStart // si permiteFec=0 no afecta
+          },
+          type: db.QueryTypes.SELECT,
+          transaction: t
+        }
+      );
+
+      const check = checkRows?.[0] || null;
+
+      const planVigente = Number(check?.plan_vigente || 0) === 1;
+
+      const firstMonth = check?.first_month_person || null;
+      const curMonth = check?.cur_month || null;
+
+      const esMesCreacion =
+        firstMonth && curMonth
+          ? String(firstMonth) === String(curMonth)
+          : false;
+
+      // Si no podemos determinar firstMonth con seguridad, por seguridad NO habilitamos el cambio fuera de mes creación
+      if (planVigente && !esMesCreacion) {
         await t.rollback();
-        return res
-          .status(400)
-          .json({ mensajeError: 'El plan seleccionado no existe.' });
-      }
-
-      // Validar que plan pertenece a este convenio
-      if (plan.convenio_id && Number(plan.convenio_id) !== Number(convenioId)) {
-        await t.rollback();
-        return res.status(400).json({
+        return res.status(423).json({
           mensajeError:
-            'El plan seleccionado no pertenece al convenio del integrante.'
+            'Plan vigente: solo se permite cambiar/quitar el plan en el mes de creación. En meses posteriores queda bloqueado hasta su vencimiento.'
         });
       }
+    }
 
-      const precioLista = Number(plan.precio_lista || 0);
-      const descPct = Number(plan.descuento_valor || 0);
+    // ==============================
+    // Base para vencimiento por duración:
+    // - permiteFec=1: monthStart (inicio de mes del registro)
+    // - permiteFec=0: fechaCreacion real
+    // ==============================
+    const fechaBaseParaVto = permiteFec ? monthStart : info.fechaCreacion;
 
-      const finalCalc =
-        plan.precio_final !== null && plan.precio_final !== undefined
-          ? Number(plan.precio_final)
-          : Number((precioLista - (precioLista * descPct) / 100).toFixed(2));
-
-      // Snapshot forzado
-      payload.precio = String(precioLista.toFixed(2));
-      payload.descuento = String(descPct.toFixed(2));
-      payload.preciofinal = String(finalCalc.toFixed(2));
-
-      // Vencimiento: si hay duración y (cambió plan o no vino vto válido), recalculamos desde fechaBaseParaVto
-      if (plan.duracion_dias && (planCambio || !payload.fecha_vencimiento)) {
-        // ==============================
-        // ANTERIOR: recalculabas desde monthStart (siempre mensual)
-        // ==============================
-        /*
-        const vtoRows = await db.query(
-          `SELECT DATE_ADD(:monthStart, INTERVAL :dias DAY) AS vto`,
-          {
-            replacements: { monthStart, dias: Number(plan.duracion_dias) },
-            type: db.QueryTypes.SELECT,
-            transaction: t
-          }
+    // ==============================
+    // Solo aplicamos lógica de plan/snapshot/vencimiento si vino convenio_plan_id en body
+    // ==============================
+    if (planIdVinoEnBody) {
+      // 5) Si hay plan => forzar snapshot + vencimiento
+      if (planIdNuevo) {
+        const plan = await ConveniosPlanesDisponiblesModel.findByPk(
+          planIdNuevo,
+          { transaction: t }
         );
-        payload.fecha_vencimiento = vtoRows[0]?.vto || null;
-        */
 
-        // ==============================
-        // NUEVO: recalcular desde fechaBaseParaVto
-        // - permiteFec=1 -> monthStart
-        // - permiteFec=0 -> fecha real del registro
-        // ==============================
-        const vtoRows = await db.query(
-          `SELECT DATE_ADD(:fechaBase, INTERVAL :dias DAY) AS vto`,
-          {
-            replacements: {
-              fechaBase: fechaBaseParaVto,
-              dias: Number(plan.duracion_dias)
-            },
-            type: db.QueryTypes.SELECT,
-            transaction: t
-          }
-        );
-        payload.fecha_vencimiento = vtoRows[0]?.vto || null;
+        if (!plan) {
+          await t.rollback();
+          return res
+            .status(400)
+            .json({ mensajeError: 'El plan seleccionado no existe.' });
+        }
+
+        // Validar que plan pertenece a este convenio
+        if (
+          plan.convenio_id &&
+          Number(plan.convenio_id) !== Number(convenioId)
+        ) {
+          await t.rollback();
+          return res.status(400).json({
+            mensajeError:
+              'El plan seleccionado no pertenece al convenio del integrante.'
+          });
+        }
+
+        const precioLista = Number(plan.precio_lista || 0);
+        const descPct = Number(plan.descuento_valor || 0);
+
+        const finalCalc =
+          plan.precio_final !== null && plan.precio_final !== undefined
+            ? Number(plan.precio_final)
+            : Number((precioLista - (precioLista * descPct) / 100).toFixed(2));
+
+        // Snapshot forzado
+        payload.precio = String(precioLista.toFixed(2));
+        payload.descuento = String(descPct.toFixed(2));
+        payload.preciofinal = String(finalCalc.toFixed(2));
+
+        // Vencimiento: si hay duración y (cambió plan o no vino vto válido), recalcular
+        if (plan.duracion_dias && (planCambio || !payload.fecha_vencimiento)) {
+          const vtoRows = await db.query(
+            `SELECT DATE_ADD(:fechaBase, INTERVAL :dias DAY) AS vto`,
+            {
+              replacements: {
+                fechaBase: fechaBaseParaVto,
+                dias: Number(plan.duracion_dias)
+              },
+              type: db.QueryTypes.SELECT,
+              transaction: t
+            }
+          );
+          payload.fecha_vencimiento = vtoRows[0]?.vto || null;
+        }
+      } else {
+        // 6) Si NO hay plan: si estaban quitando plan y no mandan vto, limpiar
+        if (planCambio && !payload.fecha_vencimiento) {
+          payload.fecha_vencimiento = null;
+        }
       }
-    } else {
-      // 6) Si NO hay plan: si estaban quitando plan y no mandan vto, limpiar
-      if (planCambio && !payload.fecha_vencimiento) {
-        payload.fecha_vencimiento = null;
-      }
-      // (opcional) si no querés vencimiento sin plan:
-      // payload.fecha_vencimiento = null;
     }
 
     // 7) Update

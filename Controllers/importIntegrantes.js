@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import XLSX from 'xlsx';
-import IntegranteConveImp from '../Models/MD_TB_IntegrantesConveImp.js';
+// import IntegranteConveImp from '../Models/MD_TB_IntegrantesConveImp.js';// Modelo ya no util, usamos el modelo original
 import { validateData } from '../utils/validators.js';
 import sequelize from '../DataBase/db.js';
 import fs from 'fs';
@@ -9,6 +9,13 @@ import fs from 'fs';
 // NUEVO: para leer permiteFec del convenio
 import MD_TB_AdmConvenios from '../Models/MD_TB_AdmConvenios.js';
 const AdmConveniosModel = MD_TB_AdmConvenios.AdmConveniosModel;
+
+import MD_TB_IntegrantesConve from '../Models/MD_TB_IntegrantesConve.js';
+const IntegrantesConveModel = MD_TB_IntegrantesConve.IntegrantesConveModel;
+
+import MD_TB_ConveniosPlanesDisponibles from '../Models/MD_TB_ConveniosPlanesDisponibles.js';
+const ConveniosPlanesDisponiblesModel =
+  MD_TB_ConveniosPlanesDisponibles.ConveniosPlanesDisponiblesModel;
 
 const router = express.Router();
 const upload = multer({ dest: 'uploads/' });
@@ -74,6 +81,84 @@ function mergePreferFilled(oldVal, newVal) {
   return oldVal;
 }
 
+// ============================
+// Helpers fecha vencimiento (DATETIME MySQL sin tz)
+// ============================
+function parseMySQLDateTimeUTC(s) {
+  if (!s) return null;
+  const str = String(s).trim();
+  const [datePart, timePart = '00:00:00'] = str.split(' ');
+  const [y, m, d] = datePart.split('-').map(Number);
+  const [hh, mm, ss] = timePart.split(':').map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d))
+    return null;
+  return new Date(Date.UTC(y, m - 1, d, hh || 0, mm || 0, ss || 0));
+}
+
+function formatMySQLDateTimeUTC(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return (
+    `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(
+      date.getUTCDate()
+    )} ` +
+    `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(
+      date.getUTCSeconds()
+    )}`
+  );
+}
+
+function addDaysMySQL(fechaCreacion, duracionDias) {
+  const days = Number(duracionDias || 0);
+  if (!Number.isFinite(days) || days <= 0) return null;
+
+  let base;
+  if (typeof fechaCreacion === 'string')
+    base = parseMySQLDateTimeUTC(fechaCreacion);
+  else base = new Date(fechaCreacion);
+
+  if (!base || Number.isNaN(base.getTime())) return null;
+
+  const out = new Date(base.getTime() + days * 86400000);
+  return formatMySQLDateTimeUTC(out);
+}
+
+// ============================
+// Helpers money: tratar 0 como "no informado" (para completar desde plan)
+// ============================
+function isZeroLike(v) {
+  if (v === null || v === undefined) return false;
+  const s = String(v).trim();
+  if (!s) return false;
+
+  // normalizar: "0,00" -> "0.00", quitar miles
+  let t = s.replace(/\s/g, '');
+  if (t.includes(',')) {
+    t = t.replace(/\./g, '');
+    t = t.replace(',', '.');
+  }
+  t = t.replace(/,/g, '');
+
+  const n = parseFloat(t);
+  return Number.isFinite(n) && n === 0;
+}
+
+function isEmptyMoney(v) {
+  return isEmpty(v) || isZeroLike(v);
+}
+
+function toMoneyStr(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(2) : '';
+}
+
+// Merge “completar sin pisar”, pero considerando 0 como vacío
+function mergePreferFilledMoney(oldVal, newVal) {
+  const oEmpty = isEmptyMoney(oldVal);
+  const n = cleanStr(newVal);
+  if (oEmpty && n) return n;
+  return oldVal;
+}
+
 router.post('/import/:id_conv', upload.single('file'), async (req, res) => {
   const file = req.file;
   const idConvRaw = req.params.id_conv;
@@ -84,7 +169,6 @@ router.post('/import/:id_conv', upload.single('file'), async (req, res) => {
 
   const convId = Number(idConvRaw || 0);
   if (!Number.isFinite(convId) || convId <= 0) {
-    // Mantengo estilo de tu endpoint
     try {
       fs.unlinkSync(file.path);
     } catch {}
@@ -115,7 +199,7 @@ router.post('/import/:id_conv', upload.single('file'), async (req, res) => {
 
     // NUEVO: leer convenio para saber permiteFec
     const convenio = await AdmConveniosModel.findByPk(convId, {
-      attributes: ['id', 'permiteFec'],
+      attributes: ['id', 'permiteFec', 'sede'],
       transaction
     });
 
@@ -124,6 +208,45 @@ router.post('/import/:id_conv', upload.single('file'), async (req, res) => {
       transaction = null;
       fs.unlinkSync(file.path);
       return res.status(404).json({ message: 'Convenio no encontrado' });
+    }
+
+    const convenioSede = cleanStr(convenio?.sede);
+
+    // ============================
+    // Benjamin Orellana - 30/12/2025
+    // Resolver plan por defecto del convenio (si existe)
+    // ============================
+    let defaultPlan = await ConveniosPlanesDisponiblesModel.findOne({
+      where: {
+        convenio_id: convId,
+        es_default: 1,
+        activo: 1
+      },
+      attributes: [
+        'id',
+        'duracion_dias',
+        'precio_lista',
+        'descuento_valor',
+        'precio_final'
+      ],
+      order: [['id', 'DESC']],
+      transaction
+    });
+
+    // Si por algún motivo el default está inactivo, igual lo buscamos (opcional)
+    if (!defaultPlan) {
+      defaultPlan = await ConveniosPlanesDisponiblesModel.findOne({
+        where: { convenio_id: convId, es_default: 1 },
+        attributes: [
+          'id',
+          'duracion_dias',
+          'precio_lista',
+          'descuento_valor',
+          'precio_final'
+        ],
+        order: [['id', 'DESC']],
+        transaction
+      });
     }
 
     const permiteFec = Number(convenio.permiteFec || 0) === 1;
@@ -158,10 +281,18 @@ router.post('/import/:id_conv', upload.single('file'), async (req, res) => {
     for (const integrante of validData) {
       const row = {
         id_conv: convId,
+
+        // plan por defecto si existe
+        convenio_plan_id: defaultPlan ? Number(defaultPlan.id) : null,
+
         nombre: cleanStr(integrante.nombre),
         telefono: cleanStr(integrante.telefono),
         dni: cleanStr(integrante.dni),
         email: cleanStr(integrante.email),
+
+        // sede del convenio por defecto (si Excel no trae)
+        sede: cleanStr(integrante.sede) || convenioSede || null,
+
         notas: cleanStr(integrante.notas),
         precio: cleanStr(integrante.precio),
         descuento: cleanStr(integrante.descuento),
@@ -187,6 +318,51 @@ router.post('/import/:id_conv', upload.single('file'), async (req, res) => {
       }
 
       // ============================
+      // NUEVO: si hay plan default, calcular vencimiento si aplica
+      // ============================
+      if (defaultPlan && defaultPlan.duracion_dias) {
+        // Solo setear vencimiento si no viene por Excel y si el plan tiene duración
+        row.fecha_vencimiento = addDaysMySQL(
+          row.fechaCreacion,
+          defaultPlan.duracion_dias
+        );
+      } else {
+        row.fecha_vencimiento = null;
+      }
+
+      // Opcional recomendado: si el Excel no trae precio/descuento/preciofinal, completar desde plan
+      if (defaultPlan) {
+        if (isEmpty(row.precio) && defaultPlan.precio_lista != null)
+          row.precio = String(defaultPlan.precio_lista);
+
+        if (isEmpty(row.descuento) && defaultPlan.descuento_valor != null)
+          row.descuento = String(defaultPlan.descuento_valor);
+
+        if (isEmpty(row.preciofinal) && defaultPlan.precio_final != null)
+          row.preciofinal = String(defaultPlan.precio_final);
+      }
+
+      // ============================
+      // NUEVO: si hay plan default, completar importes si vienen vacíos o 0
+      // ============================
+      if (defaultPlan) {
+        if (isEmptyMoney(row.precio) && defaultPlan.precio_lista != null) {
+          row.precio = toMoneyStr(defaultPlan.precio_lista);
+        }
+
+        if (
+          isEmptyMoney(row.descuento) &&
+          defaultPlan.descuento_valor != null
+        ) {
+          row.descuento = toMoneyStr(defaultPlan.descuento_valor);
+        }
+
+        if (isEmptyMoney(row.preciofinal) && defaultPlan.precio_final != null) {
+          row.preciofinal = toMoneyStr(defaultPlan.precio_final);
+        }
+      }
+
+      // ============================
       // ANTI DUPLICADOS (permiteFec)
       // ============================
       if (permiteFec) {
@@ -194,7 +370,7 @@ router.post('/import/:id_conv', upload.single('file'), async (req, res) => {
 
         if (!key) {
           // Sin identidad, no deduplicamos: insert directo
-          await IntegranteConveImp.create(row, { transaction });
+          await IntegrantesConveModel.create(row, { transaction });
           inserted += 1;
           continue;
         }
@@ -202,18 +378,19 @@ router.post('/import/:id_conv', upload.single('file'), async (req, res) => {
         // Buscar existente en ese mes
         const existing = await sequelize.query(
           `
-          SELECT id, nombre, telefono, dni, email, notas, precio, descuento, preciofinal, userName
-          FROM integrantes_conve
-          WHERE id_conv = :id_conv
-            AND fechaCreacion = :monthStart
-            AND (
-              (:dni <> '' AND TRIM(dni) = :dni)
-              OR (:email <> '' AND LOWER(TRIM(email)) = :email)
-              OR (:tel <> '' AND TRIM(telefono) = :tel)
-            )
-          ORDER BY id DESC
-          LIMIT 1
-          `,
+  SELECT id, nombre, telefono, dni, email, notas, precio, descuento, preciofinal, userName,
+         convenio_plan_id, fecha_vencimiento
+  FROM integrantes_conve
+  WHERE id_conv = :id_conv
+    AND fechaCreacion = :monthStart
+    AND (
+      (:dni <> '' AND TRIM(dni) = :dni)
+      OR (:email <> '' AND LOWER(TRIM(email)) = :email)
+      OR (:tel <> '' AND TRIM(telefono) = :tel)
+    )
+  ORDER BY id DESC
+  LIMIT 1
+  `,
           {
             replacements: {
               id_conv: convId,
@@ -237,26 +414,50 @@ router.post('/import/:id_conv', upload.single('file'), async (req, res) => {
             dni: mergePreferFilled(found.dni, row.dni),
             email: mergePreferFilled(found.email, row.email),
             notas: mergePreferFilled(found.notas, row.notas),
-            precio: mergePreferFilled(found.precio, row.precio),
-            descuento: mergePreferFilled(found.descuento, row.descuento),
-            preciofinal: mergePreferFilled(found.preciofinal, row.preciofinal),
+            precio: mergePreferFilledMoney(found.precio, row.precio),
+            descuento: mergePreferFilledMoney(found.descuento, row.descuento),
+            preciofinal: mergePreferFilledMoney(
+              found.preciofinal,
+              row.preciofinal
+            ),
             userName: mergePreferFilled(found.userName, row.userName)
             // fechaCreacion NO se toca: ya es monthStart
           };
 
-          await IntegranteConveImp.update(patch, {
+          // NUEVO: setear plan default SOLO si el existente no tiene plan
+          if (
+            defaultPlan &&
+            (found.convenio_plan_id === null ||
+              found.convenio_plan_id === undefined)
+          ) {
+            patch.convenio_plan_id = Number(defaultPlan.id);
+          }
+
+          // NUEVO: setear vencimiento SOLO si no estaba calculado
+          if (
+            defaultPlan &&
+            defaultPlan.duracion_dias &&
+            !found.fecha_vencimiento
+          ) {
+            patch.fecha_vencimiento = addDaysMySQL(
+              row.fechaCreacion,
+              defaultPlan.duracion_dias
+            );
+          }
+
+          await IntegrantesConveModel.update(patch, {
             where: { id: found.id },
             transaction
           });
 
           updated += 1;
         } else {
-          await IntegranteConveImp.create(row, { transaction });
+          await IntegrantesConveModel.create(row, { transaction });
           inserted += 1;
         }
       } else {
         // No mensual: insert simple (sin dedup por mes)
-        await IntegranteConveImp.create(row, { transaction });
+        await IntegrantesConveModel.create(row, { transaction });
         inserted += 1;
       }
     }
