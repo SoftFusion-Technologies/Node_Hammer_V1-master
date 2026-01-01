@@ -38,7 +38,13 @@ const ConveniosMesAccionesModel = db.define(
 
     // Acción registrada
     tipo: {
-      type: DataTypes.ENUM('FINALIZAR_CARGA', 'ENVIAR_LISTADO', 'CHAT_MENSAJE'),
+      type: DataTypes.ENUM(
+        'FINALIZAR_CARGA',
+        'ENVIAR_LISTADO',
+        'CHAT_MENSAJE',
+        'SUBIR_COMPROBANTE',
+        'FALTA_COMPROBANTE'
+      ),
       allowNull: false
     },
 

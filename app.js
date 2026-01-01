@@ -327,6 +327,225 @@ const multerUpload = multer({
 
 //Para administrar las los comprobantes emitidas por el convenio
 
+const TZ = 'America/Argentina/Tucuman';
+const DUE_DAY = 10;
+// Ventana para mostrar modal al convenio (8, 9 y 10)
+const WINDOW_FROM_DAY = 8;
+const WINDOW_TO_DAY = 10;
+
+function getMonthStartSQL(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}-01 00:00:00`;
+}
+
+function normalizeMonthStart(input) {
+  if (!input) return getMonthStartSQL(new Date());
+  const s = String(input);
+  const m = s.match(/^(\d{4})-(\d{2})/);
+  if (!m) throw new Error('monthStart inválido (se esperaba YYYY-MM...)');
+  return `${m[1]}-${m[2]}-01 00:00:00`;
+}
+
+function getDayOfMonthInTZ(date = new Date(), timeZone = TZ) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+
+  const dayPart = parts.find((p) => p.type === 'day')?.value;
+  return Number(dayPart || 0);
+}
+
+// ==============================
+// FUNCIÓN: genera acciones FALTA_COMPROBANTE del mes
+// (solo convenios permiteFec=1)
+// ==============================
+async function generarFaltaComprobanteDelMes() {
+  const now = new Date();
+
+  if (now.getDate() !== DUE_DAY) return; // solo el día 10
+
+  const monthStart = getMonthStartSQL(now);
+
+  const meta = JSON.stringify({
+    due_day: DUE_DAY,
+    monthStart,
+    executed_at: new Date().toISOString()
+  });
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    await conn.query(
+      `
+      INSERT INTO convenios_mes_acciones
+        (convenio_id, monthStart, tipo, descripcion, creado_por_nombre, leido, meta_json, ref_tabla, ref_id)
+      SELECT
+        c.id,
+        ?,
+        'FALTA_COMPROBANTE',
+        CONCAT('Falta comprobante de pago del mes ', DATE_FORMAT(?, '%m/%Y'), '.'),
+        'SOFTSYSTEM',
+        0,
+        CAST(? AS JSON),
+        NULL,
+        NULL
+      FROM adm_convenios c
+      WHERE c.permiteFec = 1
+        AND NOT EXISTS (
+          SELECT 1
+          FROM convenios_mes_acciones a
+          WHERE a.convenio_id = c.id
+            AND a.monthStart = ?
+            AND a.tipo = 'SUBIR_COMPROBANTE'
+        )
+      ON DUPLICATE KEY UPDATE
+        descripcion = VALUES(descripcion),
+        leido = 0,
+        leido_at = NULL,
+        leido_por_id = NULL,
+        leido_por_nombre = NULL,
+        meta_json = VALUES(meta_json),
+        updated_at = CURRENT_TIMESTAMP
+      `,
+      [monthStart, monthStart, meta, monthStart]
+    );
+
+    await conn.commit();
+    console.log(`[CMA] OK FALTA_COMPROBANTE monthStart=${monthStart}`);
+  } catch (e) {
+    await conn.rollback();
+    console.error('[CMA] ERROR generarFaltaComprobanteDelMes:', e);
+  } finally {
+    conn.release();
+  }
+}
+
+// ==============================
+// CRON: corre diario 09:00 (AR/Tucumán)
+// y ejecuta solo si hoy es día 10
+// ==============================
+cron.schedule(
+  '0 9 * * *',
+  () => generarFaltaComprobanteDelMes().catch(console.error),
+  { timezone: TZ }
+);
+
+// ==============================
+// GET: Estado "Falta comprobante" para modal del convenio (userLevel = '')
+// Benjamin Orellana - 31/12/2025
+// Ventana: días 8, 9 y 10. Vence el día 10.
+// Solo aplica a convenios permiteFec = 1.
+// ==============================
+// GET /convenios/:convenio_id/falta-comprobante?monthStart=2025-12-01 00:00:00
+app.get('/convenios/:convenio_id/falta-comprobante', async (req, res) => {
+  try {
+    const convenio_id = Number(req.params.convenio_id || 0);
+    if (!Number.isFinite(convenio_id) || convenio_id <= 0) {
+      return res
+        .status(400)
+        .json({ ok: false, mensajeError: 'convenio_id inválido.' });
+    }
+
+    let monthStart;
+    try {
+      monthStart = normalizeMonthStart(req.query.monthStart);
+    } catch (e) {
+      return res.status(400).json({ ok: false, mensajeError: e.message });
+    }
+
+    const todayDay = getDayOfMonthInTZ(new Date(), TZ);
+
+    // 1) Convenio debe existir y permiteFec = 1
+    const [convRows] = await pool.query(
+      `SELECT id, nameConve, permiteFec FROM adm_convenios WHERE id = ? LIMIT 1`,
+      [convenio_id]
+    );
+
+    if (!convRows || convRows.length === 0) {
+      return res
+        .status(404)
+        .json({ ok: false, mensajeError: 'Convenio no encontrado.' });
+    }
+
+    const convenio = convRows[0];
+
+    if (Number(convenio.permiteFec) !== 1) {
+      return res.json({
+        ok: true,
+        showModal: false,
+        reason: 'NO_APLICA_PERMITEFEC',
+        convenio_id,
+        monthStart,
+        window: { from: WINDOW_FROM_DAY, to: WINDOW_TO_DAY, today: todayDay },
+        dueDay: DUE_DAY
+      });
+    }
+
+    // 2) Solo ventana 8-10
+    const inWindow = todayDay >= WINDOW_FROM_DAY && todayDay <= WINDOW_TO_DAY;
+    if (!inWindow) {
+      return res.json({
+        ok: true,
+        showModal: false,
+        reason: 'FUERA_DE_VENTANA',
+        convenio_id,
+        monthStart,
+        window: { from: WINDOW_FROM_DAY, to: WINDOW_TO_DAY, today: todayDay },
+        dueDay: DUE_DAY
+      });
+    }
+
+    // 3) Si ya subió comprobante (al menos 1 imagen en adm_convenio_images en el mes) => NO modal
+    const [imgRows] = await pool.query(
+      `
+  SELECT 1
+    FROM adm_convenio_images
+   WHERE convenio_id = ?
+     AND created_at >= ?
+     AND created_at < DATE_ADD(?, INTERVAL 1 MONTH)
+   LIMIT 1
+  `,
+      [convenio_id, monthStart, monthStart]
+    );
+
+    const yaSubio = Array.isArray(imgRows) && imgRows.length > 0;
+
+    if (yaSubio) {
+      return res.json({
+        ok: true,
+        showModal: false,
+        reason: 'COMPROBANTE_YA_SUBIDO',
+        convenio_id,
+        monthStart,
+        window: { from: WINDOW_FROM_DAY, to: WINDOW_TO_DAY, today: todayDay },
+        dueDay: DUE_DAY
+      });
+    }
+
+    // 4) Pendiente => SI modal
+    return res.json({
+      ok: true,
+      showModal: true,
+      reason: 'PENDIENTE_COMPROBANTE',
+      convenio_id,
+      convenio_nombre: convenio.nameConve || null,
+      monthStart,
+      window: { from: WINDOW_FROM_DAY, to: WINDOW_TO_DAY, today: todayDay },
+      dueDay: DUE_DAY,
+      mensaje:
+        'Aún no subiste el comprobante de pago. Recordá que vence el día 10. Por favor, subilo para evitar inconvenientes.'
+    });
+  } catch (e) {
+    console.error('[GET falta-comprobante] Error:', e);
+    return res.status(500).json({ ok: false, mensajeError: 'Error interno.' });
+  }
+});
+
 app.post(
   '/upload/:convenio_id',
   multerUpload.single('file'),
@@ -338,21 +557,110 @@ app.post(
     }
 
     const imagePath = `uploads/agendas/${req.file.filename}`;
-    const fecha = req.body.fecha;
+    const fechaBody = req.body.fecha; // puede venir monthStart o una fecha cualquiera del mes
 
+    const toMonthStart = (v) => {
+      if (!v) {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        return `${y}-${m}-01 00:00:00`;
+      }
+      const s = String(v);
+      const m = s.match(/^(\d{4})-(\d{2})/);
+      if (!m) throw new Error('fecha inválida: se esperaba YYYY-MM...');
+      return `${m[1]}-${m[2]}-01 00:00:00`;
+    };
+
+    const monthStart = toMonthStart(fechaBody);
+
+    const fechaParaImages = fechaBody || new Date(); // podés cambiarlo a new Date() directamente
+
+    const conn = await pool.getConnection();
     try {
-      // Guardar la ruta de la imagen en la base de datos
-      await pool.query(
-        'INSERT INTO adm_convenio_images (convenio_id, image_path,created_at) VALUES (?, ?, ?)',
-        [convenio_id, imagePath, fecha]
+      await conn.beginTransaction();
+
+      // 1) Insert comprobante
+      const [insImg] = await conn.query(
+        'INSERT INTO adm_convenio_images (convenio_id, image_path, created_at) VALUES (?, ?, ?)',
+        [convenio_id, imagePath, fechaParaImages]
       );
 
-      res
-        .status(200)
-        .json({ message: 'Imagen subida y guardada correctamente.' });
+      const imageId = insImg.insertId;
+
+      // 2) Nombre del convenio
+      let convenioNombre = null;
+      try {
+        const [rows] = await conn.query(
+          'SELECT nameConve FROM adm_convenios WHERE id = ? LIMIT 1',
+          [convenio_id]
+        );
+        convenioNombre = rows?.[0]?.nameConve || null;
+      } catch {
+        convenioNombre = null;
+      }
+
+      const descripcion = convenioNombre
+        ? `El convenio "${convenioNombre}" subió un comprobante.`
+        : `El convenio ID ${convenio_id} subió un comprobante.`;
+
+      const meta = {
+        comprobante: {
+          image_id: imageId,
+          image_path: imagePath,
+          uploaded_at: new Date().toISOString()
+        }
+      };
+
+      // 3) Insert acción (UNA POR CADA COMPROBANTE)
+      await conn.query(
+        `
+        INSERT INTO convenios_mes_acciones
+          (convenio_id, monthStart, tipo, descripcion, creado_por_id, creado_por_nombre, leido, meta_json, ref_tabla, ref_id)
+        VALUES
+          (?, ?, 'SUBIR_COMPROBANTE', ?, NULL, ?, 0, CAST(? AS JSON), 'adm_convenio_images', ?)
+        `,
+        [
+          convenio_id,
+          monthStart,
+          descripcion,
+          convenioNombre,
+          JSON.stringify(meta),
+          imageId
+        ]
+      );
+
+      await conn.query(
+        `
+  UPDATE convenios_mes_acciones
+     SET leido = 1,
+         leido_at = NOW(),
+         leido_por_nombre = COALESCE(?, 'SOFTSYSTEM'),
+         leido_por_id = NULL,
+         updated_at = CURRENT_TIMESTAMP
+   WHERE convenio_id = ?
+     AND monthStart = ?
+     AND tipo = 'FALTA_COMPROBANTE'
+     AND leido = 0
+  `,
+        [convenioNombre || 'SOFTSYSTEM', convenio_id, monthStart]
+      );
+
+      await conn.commit();
+
+      return res.status(200).json({
+        message: 'Imagen subida y acción registrada correctamente.',
+        image_id: imageId,
+        monthStart
+      });
     } catch (error) {
+      await conn.rollback();
       console.error(error);
-      res.status(500).json({ message: 'Error al guardar la imagen.' });
+      return res
+        .status(500)
+        .json({ message: 'Error al guardar la imagen/acción.' });
+    } finally {
+      conn.release();
     }
   }
 );
