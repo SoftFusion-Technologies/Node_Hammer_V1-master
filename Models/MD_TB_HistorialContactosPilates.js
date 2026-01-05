@@ -30,6 +30,11 @@ const HistorialContactosPilatesModel = db.define(
       type: DataTypes.STRING(45), 
       allowNull: true,
     },
+    esperando_respuesta: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    }
   },
   {
     tableName: "historial_contactos_pilates",
