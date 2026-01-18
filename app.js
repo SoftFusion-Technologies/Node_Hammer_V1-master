@@ -550,14 +550,25 @@ app.post(
   '/upload/:convenio_id',
   multerUpload.single('file'),
   async (req, res) => {
+    // Benjamin Orellana - 18/01/2026
+    // Descripción: se mantiene el flujo de alta y registro en convenios_mes_acciones,
+    // pero ahora el endpoint acepta comprobantes en PDF además de imágenes (validado por multerUpload).
+
     const { convenio_id } = req.params;
 
     if (!req.file) {
       return res.status(400).json({ message: 'Archivo no proporcionado' });
     }
 
-    const imagePath = `uploads/agendas/${req.file.filename}`;
-    const fechaBody = req.body.fecha; // puede venir monthStart o una fecha cualquiera del mes
+    // IMPORTANTE:
+    // - Tu multerUpload guarda en: /uploads/agendas
+    // - Por compatibilidad, seguimos persistiendo en DB con el prefijo "uploads/agendas/..."
+    // - Si el archivo es PDF, igual se guarda y se podrá descargar desde /download/:id (ya apunta al filename).
+    const storedFilename = req.file.filename; // ya viene con extension preservada (pdf/jpg/png/etc.)
+    const imagePath = `uploads/agendas/${storedFilename}`;
+
+    // body.fecha puede venir monthStart o una fecha cualquiera del mes
+    const fechaBody = req.body.fecha;
 
     const toMonthStart = (v) => {
       if (!v) {
@@ -572,15 +583,21 @@ app.post(
       return `${m[1]}-${m[2]}-01 00:00:00`;
     };
 
-    const monthStart = toMonthStart(fechaBody);
+    let monthStart;
+    try {
+      monthStart = toMonthStart(fechaBody);
+    } catch (e) {
+      return res.status(400).json({ message: e.message });
+    }
 
-    const fechaParaImages = fechaBody || new Date(); // podés cambiarlo a new Date() directamente
+    // Mantengo tu lógica: created_at = fechaBody si vino, si no new Date()
+    const fechaParaImages = fechaBody || new Date();
 
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
 
-      // 1) Insert comprobante
+      // 1) Insert comprobante (imagen o PDF) en la misma tabla, sin cambiar estructura.
       const [insImg] = await conn.query(
         'INSERT INTO adm_convenio_images (convenio_id, image_path, created_at) VALUES (?, ?, ?)',
         [convenio_id, imagePath, fechaParaImages]
@@ -604,11 +621,23 @@ app.post(
         ? `El convenio "${convenioNombre}" subió un comprobante.`
         : `El convenio ID ${convenio_id} subió un comprobante.`;
 
+      // Detectamos tipo de archivo solo para meta (no cambia nada funcional)
+      const mime = req.file.mimetype || null;
+      const originalName = req.file.originalname || null;
+      const size = Number(req.file.size || 0) || null;
+
       const meta = {
         comprobante: {
           image_id: imageId,
           image_path: imagePath,
-          uploaded_at: new Date().toISOString()
+          uploaded_at: new Date().toISOString(),
+          // Benjamin Orellana - 18/01/2026 - Meta extra para distinguir PDF/IMG (sin afectar compatibilidad).
+          file: {
+            mimetype: mime,
+            originalname: originalName,
+            size_bytes: size,
+            filename: storedFilename
+          }
         }
       };
 
@@ -630,6 +659,7 @@ app.post(
         ]
       );
 
+      // 4) Si existía FALTA_COMPROBANTE, lo marcamos leído
       await conn.query(
         `
   UPDATE convenios_mes_acciones
@@ -649,7 +679,8 @@ app.post(
       await conn.commit();
 
       return res.status(200).json({
-        message: 'Imagen subida y acción registrada correctamente.',
+        // Benjamin Orellana - 18/01/2026 - Mensaje general (ya no solo “Imagen”).
+        message: 'Comprobante subido y acción registrada correctamente.',
         image_id: imageId,
         monthStart
       });
@@ -658,12 +689,13 @@ app.post(
       console.error(error);
       return res
         .status(500)
-        .json({ message: 'Error al guardar la imagen/acción.' });
+        .json({ message: 'Error al guardar el comprobante/acción.' });
     } finally {
       conn.release();
     }
   }
 );
+
 
 app.get('/download/:id', async (req, res) => {
   const { id } = req.params;
@@ -736,34 +768,47 @@ app.post(
   '/uploadfac/:convenio_id',
   multerUpload.single('file'),
   async (req, res) => {
+    // Benjamin Orellana - 18/01/2026
+    // Descripción: se habilita soporte de facturas en PDF además de imágenes (JPG/PNG) reutilizando el mismo multerUpload.
+    // Se mantiene el guardado en adm_convenio_fac y la descarga por /downloadfac/:id.
+
     const { convenio_id } = req.params;
 
     if (!req.file) {
       return res.status(400).json({ message: 'Archivo no proporcionado' });
     }
 
+    // Mantengo tu naming por compatibilidad: se guarda la ruta en image_path aunque sea PDF
     const imagePath = `uploads/agendas/${req.file.filename}`;
     const fecha = req.body.fecha;
 
     try {
-      // Guardar la ruta de la imagen en la base de datos
+      // Guardar la ruta del comprobante (imagen o PDF) en la base de datos
       await pool.query(
         'INSERT INTO adm_convenio_fac (convenio_id, image_path, created_at) VALUES (?, ?, ?)',
         [convenio_id, imagePath, fecha]
       );
+
       const [dbRow] = await pool.query('SELECT DATABASE() db, @@hostname host');
       console.log('[UPLOADFAC] DB:', dbRow?.[0]);
-      res
-        .status(200)
-        .json({ message: 'Imagen subida y guardada correctamente.' });
+
+      // Benjamin Orellana - 18/01/2026 - Mensaje genérico (ya no solo "Imagen").
+      res.status(200).json({
+        message: 'Factura subida y guardada correctamente.'
+      });
     } catch (error) {
       console.error(error);
-      res.status(500).json({ message: 'Error al guardar la imagen.' });
+      // Benjamin Orellana - 18/01/2026 - Mensaje genérico (ya no solo "imagen").
+      res.status(500).json({ message: 'Error al guardar la factura.' });
     }
   }
 );
 
 app.get('/downloadfac/:id', async (req, res) => {
+  // Benjamin Orellana - 18/01/2026
+  // Descripción: se mantiene el download existente y se adiciona Content-Type sugerido para PDF (mejor preview en navegador),
+  // sin modificar la lógica de ubicación del archivo.
+
   const { id } = req.params;
 
   try {
@@ -773,13 +818,13 @@ app.get('/downloadfac/:id', async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.status(404).json({ message: 'Imagen no encontrada.' });
+      return res.status(404).json({ message: 'Archivo no encontrado.' });
     }
 
-    console.log('Ruta de la imagen desde la BD:', rows[0].image_path);
+    console.log('Ruta del archivo desde la BD:', rows[0].image_path);
 
     if (rows.length === 0) {
-      return res.status(404).json({ message: 'Imagen no encontrada.' });
+      return res.status(404).json({ message: 'Archivo no encontrado.' });
     }
 
     // Construir la ruta relativa a la carpeta "uploads"
@@ -789,7 +834,7 @@ app.get('/downloadfac/:id', async (req, res) => {
       'agendas',
       rows[0].image_path.split('/').pop()
     );
-    console.log('Ruta completa de la imagen:', imagePath);
+    console.log('Ruta completa del archivo:', imagePath);
 
     // Verifica si el archivo existe
     if (!fs.existsSync(imagePath)) {
@@ -799,15 +844,29 @@ app.get('/downloadfac/:id', async (req, res) => {
         .json({ message: 'Archivo no encontrado en el servidor.' });
     }
 
-    // Enviar la imagen al cliente
+    // Benjamin Orellana - 18/01/2026 - Hint de Content-Type para mejorar comportamiento con PDF.
+    // (res.download ya funciona igual; esto ayuda a previsualizar/identificar el tipo)
+    const ext = String(imagePath).toLowerCase();
+    if (ext.endsWith('.pdf')) {
+      res.setHeader('Content-Type', 'application/pdf');
+    } else if (ext.endsWith('.png')) {
+      res.setHeader('Content-Type', 'image/png');
+    } else if (ext.endsWith('.jpg') || ext.endsWith('.jpeg')) {
+      res.setHeader('Content-Type', 'image/jpeg');
+    }
+
+    // Enviar el archivo al cliente
     res.download(imagePath);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Error al descargar la imagen.' });
+    res.status(500).json({ message: 'Error al descargar el archivo.' });
   }
 });
 
 app.get('/imagesfac/:convenio_id', async (req, res) => {
+  // Benjamin Orellana - 18/01/2026
+  // Descripción: sin cambios funcionales. El listado ahora puede incluir rutas a PDFs además de imágenes.
+
   const { convenio_id } = req.params;
 
   try {
@@ -824,7 +883,7 @@ app.get('/imagesfac/:convenio_id', async (req, res) => {
     res.json({ images: rows });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Error al obtener las imágenes.' });
+    res.status(500).json({ message: 'Error al obtener los archivos.' });
   }
 });
 
