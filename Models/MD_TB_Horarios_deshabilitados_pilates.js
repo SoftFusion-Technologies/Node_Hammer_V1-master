@@ -32,6 +32,11 @@ export const HorariosDeshabilitadosPilatesModel = db.define(
       type: DataTypes.STRING(5), // Ej: "08:00"
       allowNull: false
     },
+    tipo_bloqueo: {
+      type: DataTypes.ENUM('todos', 'lmv', 'mj'),
+      allowNull: false,
+      defaultValue: 'todos'
+    },
     creado_por: {
       type: DataTypes.BIGINT.UNSIGNED,
       allowNull: true,

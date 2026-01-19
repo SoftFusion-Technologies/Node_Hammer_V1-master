@@ -398,7 +398,8 @@ import {
 import {
   OBRS_HorariosDeshabilitadosPilates_CTS,
   CR_HorarioDeshabilitadoPilates_CTS,
-  ER_HorarioDeshabilitadoPilates_CTS
+  ER_HorarioDeshabilitadoPilates_CTS,
+  UR_HorarioDeshabilitadoPilates_CTS
 } from '../Controllers/CTS_TB_HorariosDeshabilitadosPilates.js';
 
 /* --------------------------------------------
@@ -1307,6 +1308,10 @@ router.post('/horarios-deshabilitados', CR_HorarioDeshabilitadoPilates_CTS);
 router.delete(
   '/horarios-deshabilitados/:id',
   ER_HorarioDeshabilitadoPilates_CTS
+);
+router.patch(
+  '/horarios-deshabilitados/:id',
+  UR_HorarioDeshabilitadoPilates_CTS
 );
 //--FIN: Sergio Manrique
 

@@ -887,11 +887,14 @@ export const ESP_OBRS_HorariosDisponibles_CTS = async (req, res) => {
     // Paso 2: Obtiene la lista de horarios deshabilitados (no disponibles) para la sede actual
     const horariosOcultos = await HorariosDeshabilitadosPilatesModel.findAll({
       where: { sede_id: sedeId },
-      attributes: ['hora_label']
+      attributes: ['hora_label', 'tipo_bloqueo']
     });
 
-    // Paso 3: Crea un Set con los horarios deshabilitados para búsquedas rápidas
-    const disabledTimesSet = new Set(horariosOcultos.map((h) => h.hora_label));
+    // Paso 3: Crea un Map con los horarios deshabilitados y su tipo de bloqueo
+    const disabledTimesMap = new Map(
+      horariosOcultos.map((h) => [h.hora_label, h.tipo_bloqueo])
+    );
+
 
     // Funciones auxiliares para normalizar días, agrupar por tipo de grupo y formatear horas
     const normalizeDay = (value) => {
@@ -934,22 +937,33 @@ export const ESP_OBRS_HorariosDisponibles_CTS = async (req, res) => {
     const horarioKeyById = new Map();
 
     // Crea una entrada en el mapa de resultados para un grupo y horario si aún no existe,
-    // siempre que el grupo esté permitido y el horario no esté deshabilitado
+    // siempre que el grupo esté permitido
     const ensureEntry = (grp, hhmm) => {
       if (!allowedGroups.has(grp)) return null;
 
-      // [NUEVO] Verificación crítica:
-      // Si la hora está en la lista de deshabilitados, no creamos la entrada.
-      if (disabledTimesSet.has(hhmm)) return null;
-
       const key = `${grp}|${hhmm}`;
       if (!resultsMap.has(key)) {
+        // Determinar si este grupo-hora está bloqueado
+        const tipoBloqueo = disabledTimesMap.get(hhmm);
+        let estaBloqueado = false;
+
+        if (tipoBloqueo) {
+          if (tipoBloqueo === 'todos') {
+            estaBloqueado = true; // Bloqueado para LMV y MJ
+          } else if (tipoBloqueo === 'lmv' && grp === 'LMV') {
+            estaBloqueado = true; // Bloqueado solo para LMV
+          } else if (tipoBloqueo === 'mj' && grp === 'MJ') {
+            estaBloqueado = true; // Bloqueado solo para MJ
+          }
+        }
+
         resultsMap.set(key, {
           hhmm,
           grp,
           grupo_label: groupLabels[grp] ?? grp,
           cupo_por_clase: sedeCupo,
-          total_inscriptos: 0
+          total_inscriptos: 0,
+          tipo_bloqueo: estaBloqueado
         });
       }
       return resultsMap.get(key);
@@ -964,9 +978,6 @@ export const ESP_OBRS_HorariosDisponibles_CTS = async (req, res) => {
     for (const horario of horarios) {
       const grp = determineGroup(horario.dia_semana); // Determina el grupo (LMV/MJ) según el día
       const hhmm = formatTime(horario.hora_inicio); // Formatea la hora a HH:MM
-
-      // Si el horario está deshabilitado, lo omite
-      if (disabledTimesSet.has(hhmm)) continue;
 
       // Crea la entrada en el mapa de resultados si corresponde
       const entry = ensureEntry(grp, hhmm);
@@ -1010,7 +1021,7 @@ export const ESP_OBRS_HorariosDisponibles_CTS = async (req, res) => {
     // Inscripciones de clientes en clase de prueba
     const pruebas = await fetchInscripcionesByEstados(['Clase de prueba']);
 
-    // Suma la cantidad de inscriptos por cada horario y grupo, ignorando los horarios deshabilitados
+    // Suma la cantidad de inscriptos por cada horario y grupo
     const accumulateInscripciones = (inscripciones) => {
       for (const inscripcion of inscripciones) {
         const horario = inscripcion.horario;
@@ -1018,9 +1029,6 @@ export const ESP_OBRS_HorariosDisponibles_CTS = async (req, res) => {
 
         // Obtiene la hora en formato HH:MM
         const hhmm = formatTime(horario.hora_inicio);
-
-        // Si el horario está deshabilitado, no lo cuenta
-        if (disabledTimesSet.has(hhmm)) continue;
 
         // Busca la clave del horario en el mapa
         let key = horarioKeyById.get(horario.id);

@@ -4594,7 +4594,7 @@ app.post(
     { name: 'instructivo', maxCount: 1 } // El PDF o .jpg del instructivo
   ]),
   async (req, res) => {
-    const { elemento_id, orden } = req.body; // El ID del grupo padre
+    const { elemento_id, orden, destacado } = req.body; // El ID del grupo padre
     const tarjetaFile = req.files?.['imagen_tarjeta']?.[0];
     const instructivoFile = req.files?.['instructivo']?.[0];
 
@@ -4635,11 +4635,13 @@ app.post(
         instructivoUrl = await guardarArchivo(instructivoFile);
       }
 
+      const esDestacado = destacado === "true" || destacado === true || destacado === 1 ? 1 : 0;
+
       // Insertar en la nueva tabla 'promocion_tarjetas'
       await pool.query(
-        `INSERT INTO promocion_tarjetas (elemento_id, imagen_tarjeta_url, instructivo_url, orden, activo) 
-         VALUES (?, ?, ?, ?, 1)`,
-        [elemento_id, tarjetaUrl, instructivoUrl, orden || 1]
+        `INSERT INTO promocion_tarjetas (elemento_id, imagen_tarjeta_url, instructivo_url, orden, activo, destacado) 
+          VALUES (?, ?, ?, ?, 1, ?)`,
+        [elemento_id, tarjetaUrl, instructivoUrl, orden || 1, esDestacado]
       );
 
       res
@@ -4708,6 +4710,22 @@ app.put(
     }
   }
 );
+
+app.put('/promocion-tarjetas/:id/destacado', async (req, res) => {
+  const { id } = req.params;
+  const { destacado } = req.body; 
+  
+  try {
+    await pool.query(
+      'UPDATE promocion_tarjetas SET destacado = ? WHERE id = ?',
+      [destacado ? 1 : 0, id]
+    );
+    res.json({ message: 'Estado destacado actualizado.' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error al actualizar destacado' });
+  }
+});
 
 /* ---------------------------------------------------------------------- */
 /* ---------------------------------------------------------------------- */

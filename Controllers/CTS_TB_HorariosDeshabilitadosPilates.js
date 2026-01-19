@@ -32,14 +32,12 @@ export const OBRS_HorariosDeshabilitadosPilates_CTS = async (req, res) => {
         {
           model: UsersModel,
           as: 'usuario',
-          attributes: ['id', 'name', 'email'] // Traemos el nombre del usuario que ocultó
+          attributes: ['id', 'name', 'email'] 
         }
       ],
       order: [['hora_label', 'ASC']]
     });
 
-    // Formateamos la respuesta si es necesario, o la enviamos directa
-    // El frontend podrá acceder a: item.hora_label, item.creado_en, item.usuario.name
     res.json(registros);
   } catch (error) {
     console.error('Error al obtener horarios ocultos:', error);
@@ -49,31 +47,28 @@ export const OBRS_HorariosDeshabilitadosPilates_CTS = async (req, res) => {
 
 // Ocultar un horario (Crear registro)
 // POST /horarios-ocultos
-// Body: { sede_id, hora_label, creado_por }
+// Body: { sede_id, hora_label, creado_por, tipo_bloqueo }
 export const CR_HorarioDeshabilitadoPilates_CTS = async (req, res) => {
   try {
-    const { sede_id, hora_label, creado_por } = req.body;
-
-    if (!sede_id || !hora_label) {
-      return res.status(400).json({ mensajeError: 'Faltan datos obligatorios (sede_id, hora_label).' });
+    const { sede_id, hora_label, creado_por, tipo_bloqueo } = req.body;
+    if (!sede_id || !hora_label || !tipo_bloqueo) {
+      return res.status(400).json({ mensajeError: 'Faltan datos obligatorios (sede_id, hora_label, tipo_bloqueo).' });
     }
-
-    // Intentamos crear el registro.
-    // Como la tabla tiene UNIQUE(sede_id, hora_label), si ya existe fallará o podemos usar findOrCreate.
     const [nuevoRegistro, creado] = await HorariosOcultosPilatesModel.findOrCreate({
       where: {
         sede_id: sede_id,
-        hora_label: hora_label
+        hora_label: hora_label,
+        tipo_bloqueo: tipo_bloqueo 
       },
       defaults: {
-        creado_por: creado_por || null, // ID del usuario que ejecuta la acción
+        creado_por: creado_por || null,
         creado_en: new Date()
       }
     });
 
     if (!creado) {
       return res.status(409).json({ 
-        mensajeError: `El horario ${hora_label} ya se encuentra oculto en esta sede.` 
+        mensajeError: `El horario ${hora_label} ya tiene aplicado el bloqueo '${tipo_bloqueo}'.` 
       });
     }
 
@@ -123,6 +118,43 @@ export const ER_HorarioDeshabilitadoPilates_CTS = async (req, res) => {
 
   } catch (error) {
     console.error('Error al restaurar horario:', error);
+    res.status(500).json({ mensajeError: error.message });
+  }
+};
+
+export const UR_HorarioDeshabilitadoPilates_CTS = async (req, res) => {
+  try {
+    const { id } = req.params; 
+    const { tipo_bloqueo } = req.body;
+
+    console.log('ID recibido:', id);
+    console.log('Tipo de bloqueo recibido:', tipo_bloqueo);
+
+    if (!id || !tipo_bloqueo) {
+      return res.status(400).json({ 
+        mensajeError: 'Faltan datos obligatorios (id del horario y tipo_bloqueo).' 
+      });
+    }
+
+    // Buscamos el registro por su ID
+    const registroExistente = await HorariosOcultosPilatesModel.findByPk(id);
+
+    if (!registroExistente) {
+      return res.status(404).json({ mensajeError: 'No se encontró el horario deshabilitado.' });
+    }
+
+    // Actualizamos solo el campo del tipo de bloqueo
+    await registroExistente.update({
+      tipo_bloqueo: tipo_bloqueo
+    });
+
+    res.json({
+      message: 'Tipo de bloqueo actualizado correctamente.',
+      registroActualizado: registroExistente
+    });
+
+  } catch (error) {
+    console.error('Error al actualizar el tipo de bloqueo:', error);
     res.status(500).json({ mensajeError: error.message });
   }
 };
