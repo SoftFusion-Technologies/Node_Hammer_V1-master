@@ -10,6 +10,10 @@ import AuditoriaFechaFinModificadaPilatesModel from "./MD_TB_AuditoriaFechaFinMo
 import ClientesPilatesHistorialModel from "./MD_TB_ClientesPilatesHistorial.js";
 import ClientesPilatesHistorialDetalleModel from "./MD_TB_ClientesPilatesHistorialDetalle.js";
 import HistorialContactosPilatesModel from "./MD_TB_HistorialContactosPilates.js"; 
+import ListaEsperaPilates from "./MD_TB_ListaEsperaPilates.js";
+import ContactosListaEsperaPilatesModel from "./MD_TB_ContactosListaEsperaPilates.js";
+import { VentasComisionesRemarketingModel } from "./MD_TB_Ventas_comisiones_remarketing.js";
+import VentasRemarketingModel from "./MD_TB_VentasRemarketing.js";
 
 // 2. Creamos una función para configurar las asociaciones
 const setupAssociations = () => {
@@ -135,6 +139,43 @@ const setupAssociations = () => {
   UsersModel.hasMany(HistorialContactosPilatesModel, {
     foreignKey: 'id_usuario',
     as: 'contactos_realizados_pilates'
+  });
+// Un contacto pertenece a una persona de la lista de espera
+  ContactosListaEsperaPilatesModel.belongsTo(ListaEsperaPilates, {
+    foreignKey: "id_lista_espera",
+    as: "persona_espera", // IMPORTANTE: Este alias debe coincidir con el usado en el controlador
+  });
+
+  // Una persona de la lista de espera tiene muchos contactos
+  ListaEsperaPilates.hasMany(ContactosListaEsperaPilatesModel, {
+    foreignKey: "id_lista_espera",
+    as: "contacto_cliente",
+  });
+
+  // Relación con el usuario que hizo el contacto
+  ContactosListaEsperaPilatesModel.belongsTo(UsersModel, {
+    foreignKey: "id_usuario_contacto",
+    as: "usuario_autor",
+  });
+
+  // ===============================
+  // VentasComisionesRemarketingModel -> Users (vendedor)
+  // ===============================
+  VentasComisionesRemarketingModel.belongsTo(UsersModel, {
+    foreignKey: "vendedor_id",
+    as: "vendedor",
+    onDelete: "SET NULL",
+    onUpdate: "CASCADE"
+  });
+
+  // ===============================
+  // VentasComisionesRemarketingModel -> VentasRemarketingModel (prospecto)
+  // ===============================
+  VentasComisionesRemarketingModel.belongsTo(VentasRemarketingModel, {
+    foreignKey: "prospecto_id",
+    as: "prospecto",
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
   });
 
   console.log("Relaciones de Sequelize configuradas correctamente.");

@@ -53,6 +53,60 @@ export const OBRS_VentasProspectos_CTS = async (req, res) => {
   }
 };
 
+
+// =======================================================
+//  HECHO POR SERGIO MANRIQUE, FECHA: 12/01/2026
+//  INICIO DE MODULO
+// =======================================================
+// Obtener prospectos no convertidos de la última semana del mes anterior 
+export const OBRS_VentasProspectosUltimaSemanaMesAnterior_CTS = async (_req, res) => {
+  try {
+    const hoy = new Date();
+
+    // Calcular mes anterior
+    let targetYear = hoy.getFullYear();
+    let targetMonthIndex = hoy.getMonth() - 1; // 0-based
+    if (targetMonthIndex < 0) {
+      targetMonthIndex = 11;
+      targetYear -= 1;
+    }
+
+    // Último día del mes anterior
+    const lastDay = new Date(targetYear, targetMonthIndex + 1, 0).getDate();
+    const startDate = new Date(targetYear, targetMonthIndex, Math.max(1, lastDay - 6), 0, 0, 0, 0);
+    const endDate = new Date(targetYear, targetMonthIndex, lastDay, 23, 59, 59, 999);
+
+    const registros = await VentasProspectosModel.findAll({
+      where: {
+        [Op.and]: [
+          {
+            [Op.or]: [
+              { convertido: 0 },
+              { convertido: false },
+              { convertido: null }
+            ]
+          },
+          {
+            fecha: {
+              [Op.between]: [startDate, endDate]
+            }
+          }
+        ]
+      },
+      order: [["fecha", "ASC"]]
+    });
+
+    res.json(registros);
+  } catch (error) {
+    console.error("Error en OBRS_VentasProspectosUltimaSemanaMesAnterior_CTS:", error);
+    res.status(500).json({ mensajeError: error.message });
+  }
+};
+// =======================================================
+//  HECHO POR SERGIO MANRIQUE, FECHA: 12/01/2026
+//  FIN DE MODULO
+// =======================================================
+
 // Obtener un solo prospecto por ID
 export const OBR_VentasProspecto_CTS = async (req, res) => {
   try {

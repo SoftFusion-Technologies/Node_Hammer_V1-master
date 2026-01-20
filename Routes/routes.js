@@ -330,6 +330,7 @@ import {
 import {
   OBR_VentasProspecto_CTS,
   OBRS_VentasProspectos_CTS,
+  OBRS_VentasProspectosUltimaSemanaMesAnterior_CTS,
   CR_VentasProspecto_CTS,
   ER_VentasProspecto_CTS,
   UR_VentasProspecto_CTS,
@@ -343,6 +344,13 @@ import {
   PATCH_AgendaDone,
   POST_GenerarAgendaHoy // opcional (para pruebas/manual)
 } from '../Controllers/CTS_TB_VentasAgenda.js';
+
+import {
+  GET_AgendaHoyRemarketing,
+  GET_AgendaHoyCountRemarketing,
+  PATCH_AgendaDoneRemarketing,
+  POST_GenerarAgendaHoyRemarketing // opcional (para pruebas/manual)
+} from "../Controllers/CTS_TB_VentasAgendaRemarketing.js"
 
 import {
   OBRS_ClientesPilates_CTS,
@@ -410,6 +418,12 @@ import {
   CR_VentasProspectosHorario_CTS,
   PUT_VentasProspectosHorarioPorProspecto_CTS
 } from '../Controllers/CTS_TB_VentasProspectosHorarios.js';
+
+import {
+  OBRS_VentasRemarketingHorario_CTS,
+  CR_VentasRemarketingHorario_CTS,
+  PUT_VentasRemarketingHorarioPorRemarketing_CTS,
+}from "../Controllers/CTS_TB_VentasRemarketingHorarios.js";
 
 import {
   OBRS_AsistenciasFormato_CTS,
@@ -1135,6 +1149,14 @@ router.delete(
 // Obtener todos los prospectos (con filtros opcionales)
 router.get('/ventas_prospectos', OBRS_VentasProspectos_CTS);
 
+/* RUTAS INTGEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
+//Obtener los alumons no convertidos del mes anterior para mostrarlos en remarketing
+router.get(
+  '/ventas_prospectos/alumnos-ultima-semana-mes-anterior',
+  OBRS_VentasProspectosUltimaSemanaMesAnterior_CTS
+);
+/* FIN DE RUTAS INTEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
+
 // Obtener un prospecto por ID
 router.get('/ventas_prospectos/:id', OBR_VentasProspecto_CTS);
 
@@ -1208,6 +1230,17 @@ router.post(
   '/ventas/agenda/generar-hoy',
   /* requireAuth, */ POST_GenerarAgendaHoy
 );
+
+/* RUTAS INTGEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
+router.get('/ventas-remarketing/agenda/hoy', /* requireAuth, */ GET_AgendaHoyRemarketing);
+router.get('/ventas-remarketing/agenda/hoy/count', /* requireAuth, */ GET_AgendaHoyCountRemarketing);
+router.patch('/ventas-remarketing/agenda/:id/done', /* requireAuth, */ PATCH_AgendaDoneRemarketing);
+router.post(
+  '/ventas-remarketing/agenda/generar-hoy',
+  /* requireAuth, */ POST_GenerarAgendaHoyRemarketing
+);
+/* FIN DE RUTAS INTEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
+
 
 // ----------------------------------------------------------------
 // Rutas para operaciones CRUD en la tabla 'inscripciones_pilates'
@@ -1342,6 +1375,27 @@ router.put(
   PUT_VentasProspectosHorarioPorProspecto_CTS
 );
 
+// =======================================================
+//  HECHO POR SERGIO MANRIQUE, FECHA: 12/01/2026
+//  INICIO DE MODULO
+// =======================================================
+// Rutas para ventas remarketing horarios
+router.post('/ventas-remarketing-horarios', CR_VentasRemarketingHorario_CTS);
+// Obtener horarios por prospecto_id
+router.get(
+  '/ventas-remarketing-horarios/:prospecto_id',
+  OBRS_VentasRemarketingHorario_CTS
+);
+// Modificar horarios por remarketing_id
+router.put(
+  '/ventas-remarketing-horarios/modificar-por-remarketing',
+  PUT_VentasRemarketingHorarioPorRemarketing_CTS
+);
+// =======================================================
+//  HECHO POR SERGIO MANRIQUE, FECHA: 12/01/2026
+//  FIN DE MODULO
+// =======================================================
+
 router.post('/contactos-lista-espera', CR_crearContacto);
 router.put(
   '/contactos-lista-espera/:id_lista_espera',
@@ -1393,6 +1447,13 @@ import {
   GET_listarComisionesVendedor_CTS
 } from '../Controllers/CTS_TB_VentasComision.js';
 
+import {
+  GET_listarVentasComisionesRemarketing_CTS,
+  PUT_actualizarVentaComisionRemarketing_CTS,
+  PUT_aprobarVentaComisionRemarketing_CTS,
+  PUT_rechazarVentaComisionRemarketing_CTS
+} from '../Controllers/CTS_TB_VentasComisionRemarketing.js';
+
 router.get('/ventas-comisiones/resumen', GET_resumenComisionesVendedor_CTS);
 router.get('/ventas-comisiones/vendedor', GET_listarComisionesVendedor_CTS);
 
@@ -1407,6 +1468,15 @@ router.put('/ventas-comisiones/:id/aprobar', PUT_aprobarVentaComision_CTS);
 router.put('/ventas-comisiones/:id/rechazar', PUT_rechazarVentaComision_CTS);
 router.delete('/ventas-comisiones/:id', DEL_eliminarVentaComision_CTS);
 
+/* RUTAS INTGEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
+//Comisiones remarketing
+router.get('/ventas-comisiones-remarketing', GET_listarVentasComisionesRemarketing_CTS);
+router.patch('/ventas-comisiones-remarketing/:id', PUT_actualizarVentaComisionRemarketing_CTS);
+router.put('/ventas-comisiones-remarketing/:id/aprobar', PUT_aprobarVentaComisionRemarketing_CTS);
+router.put('/ventas-comisiones-remarketing/:id/rechazar', PUT_rechazarVentaComisionRemarketing_CTS);
+router.delete('/ventas-comisiones-remarketing/:id', DEL_eliminarVentaComision_CTS);
+/* FIN RUTAS INTGEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
+
 // Import controlador Comisiones Vigentes
 import ComisionesVigentesCtrl from '../Controllers/CTS_TB_VentasComisionesVigentes.js';
 const {
@@ -1419,6 +1489,18 @@ const {
   DESACTIVAR_Comisiones_Mes_CTS,
   OBR_ComisionPorCodigo_CTS
 } = ComisionesVigentesCtrl;
+
+import ComisionesVigentesRemarketing from "../Controllers/CTS_TB_VentasComisionesVigentesRemarketing.js";
+const {
+    OBRS_ComisionesVigentesRemarketing_CTS,
+  OBR_ComisionVigenteRemarketing_CTS,
+  CR_ComisionVigenteRemarketing_CTS,
+  UR_ComisionVigenteRemarketing_CTS,
+  ER_ComisionVigenteRemarketing_CTS,
+  DUP_ComisionesRemarketing_Mes_CTS,
+  DESACTIVAR_ComisionesRemarketing_Mes_CTS,
+  OBR_ComisionRemarketingPorCodigo_CTS
+} = ComisionesVigentesRemarketing;
 
 // --- Rutas Comisiones Vigentes ---
 router.get('/comisiones-vigentes', OBRS_ComisionesVigentes_CTS); // list (filtros: mes,anio,solo_activas,codigo)
@@ -1433,6 +1515,18 @@ router.post('/comisiones-vigentes/desactivar', DESACTIVAR_Comisiones_Mes_CTS); /
 
 // Búsqueda rápida por código
 router.get('/comisiones-vigentes/by-codigo', OBR_ComisionPorCodigo_CTS); // query: codigo,mes,anio
+
+/* RUTAS INTGEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
+router.get('/comisiones-vigentes-remarketing', OBRS_ComisionesVigentesRemarketing_CTS); // list (filtros: mes,anio,solo_activas,codigo)
+router.get('/comisiones-vigentes-remarketing/:id', OBR_ComisionVigenteRemarketing_CTS); // get by id
+router.post('/comisiones-vigentes-remarketing', CR_ComisionVigenteRemarketing_CTS); // create
+router.put('/comisiones-vigentes-remarketing/:id', UR_ComisionVigenteRemarketing_CTS); // update
+router.delete('/comisiones-vigentes-remarketing/:id', ER_ComisionVigenteRemarketing_CTS); // delete (hard)
+// Utilitarios de período
+router.post('/comisiones-vigentes-remarketing/duplicar', DUP_ComisionesRemarketing_Mes_CTS); // body: origen_mes,origen_anio,destino_mes,destino_anio
+router.post('/comisiones-vigentes-remarketing/desactivar', DESACTIVAR_ComisionesRemarketing_Mes_CTS); // body/query: mes,anio o periodo_inicio
+router.get('/comisiones-vigentes-remarketing/by-codigo', OBR_ComisionRemarketingPorCodigo_CTS); // query: codigo,mes,anio
+/* FIN RUTAS INTGEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
 
 // SE ADICIONAN LAS RUTAS RELACIONADAS A CONVENIOS Y PLANES DE CONVENIO
 // BENJAMIN ORELLANA 21 DIC 2025 INI

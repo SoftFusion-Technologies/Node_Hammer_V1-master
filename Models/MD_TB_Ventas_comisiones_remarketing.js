@@ -1,16 +1,15 @@
 /*
- * Programador: Benjamin Orellana
- * Fecha Creación: 19 / 10 / 2025
+ * Programador: Sergio Manrique
+ * Fecha Creación: 12 / 01 / 2026
  * Versión: 1.0
- * Descripción: Modelo de solicitudes de comisión por conversión.
  */
 
 import db from '../DataBase/db.js';
 import { DataTypes, Model } from 'sequelize';
 
-export class VentasComisionesModel extends Model {}
+export class VentasComisionesRemarketingModel extends Model {}
 
-VentasComisionesModel.init(
+VentasComisionesRemarketingModel.init(
   {
     id: {
       type: DataTypes.BIGINT.UNSIGNED,
@@ -46,8 +45,8 @@ VentasComisionesModel.init(
   },
   {
     sequelize: db,
-    modelName: 'ventas_comisiones',
-    tableName: 'ventas_comisiones',
+    modelName: 'ventas_comisiones_remarketing',
+    tableName: 'ventas_comisiones_remarketing',
     timestamps: true,
     createdAt: 'created_at',
     updatedAt: 'updated_at',
@@ -59,4 +58,4 @@ VentasComisionesModel.init(
   }
 );
 
-export default { VentasComisionesModel };
+export default { VentasComisionesRemarketingModel };

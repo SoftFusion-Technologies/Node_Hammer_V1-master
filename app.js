@@ -4340,6 +4340,95 @@ app.get('/notifications/clases-prueba/:userId', async (req, res) => {
   }
 });
 
+/* FUNCION INTGEGRADA POR SERGIO MANRIQUE 14-01-2025 */
+// Endpoint igual pero para ventas_remarketing
+app.get('/notifications/clases-prueba-remarketing/:userId', async (req, res) => {
+  const userId = Number(req.params.userId);
+  try {
+    // Traer user para saber sede/level
+    const [[user]] = await pool.query(
+      'SELECT id, level, sede FROM users WHERE id = ? LIMIT 1',
+      [userId]
+    );
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    const level = norm(user.level);
+    const mappedSede = mapUserSedeToVp(user.sede); // null => todas
+    const isAdmin = level === 'admin';
+
+    const params = [];
+    const sedeFilterSQL = !isAdmin && mappedSede ? ' AND vr.sede = ? ' : '';
+    if (!isAdmin && mappedSede) params.push(mappedSede);
+
+    const [notis] = await pool.query(
+      `
+      SELECT
+        vr.id AS prospecto_id,
+        vr.nombre_socio AS nombre,
+        vr.contacto,
+        vr.clase_prueba_1_fecha,
+        vr.clase_prueba_2_fecha,
+        vr.clase_prueba_3_fecha,
+        vr.n_contacto_2,           -- 0 pendiente, 1 enviado (realizado)
+        vr.usuario_id,
+        u.name AS asesor_nombre,
+        vr.sede,
+        vr.observacion,            -- observación general del prospecto
+
+        /* === Derivados para HOY (opcionales y muy útiles en el front) === */
+        CASE
+          WHEN DATE(vr.clase_prueba_1_fecha) = CURDATE() THEN vr.clase_prueba_1_tipo
+          WHEN DATE(vr.clase_prueba_2_fecha) = CURDATE() THEN vr.clase_prueba_2_tipo
+          WHEN DATE(vr.clase_prueba_3_fecha) = CURDATE() THEN vr.clase_prueba_3_tipo
+          ELSE NULL
+        END AS tipo_for_today,
+
+        CASE
+          WHEN DATE(vr.clase_prueba_1_fecha) = CURDATE() THEN vr.clase_prueba_1_fecha
+          WHEN DATE(vr.clase_prueba_2_fecha) = CURDATE() THEN vr.clase_prueba_2_fecha
+          WHEN DATE(vr.clase_prueba_3_fecha) = CURDATE() THEN vr.clase_prueba_3_fecha
+          ELSE NULL
+        END AS fecha_for_today,
+
+        CASE
+          WHEN DATE(vr.clase_prueba_1_fecha) = CURDATE() THEN vr.clase_prueba_1_obs
+          WHEN DATE(vr.clase_prueba_2_fecha) = CURDATE() THEN vr.clase_prueba_2_obs
+          WHEN DATE(vr.clase_prueba_3_fecha) = CURDATE() THEN vr.clase_prueba_3_obs
+          ELSE NULL
+        END AS obs_for_today,
+
+        /* Alias de compatibilidad para el front actual */
+        CASE
+          WHEN DATE(vr.clase_prueba_1_fecha) = CURDATE() THEN vr.clase_prueba_1_tipo
+          WHEN DATE(vr.clase_prueba_2_fecha) = CURDATE() THEN vr.clase_prueba_2_tipo
+          WHEN DATE(vr.clase_prueba_3_fecha) = CURDATE() THEN vr.clase_prueba_3_tipo
+          ELSE NULL
+        END AS tipo
+
+      FROM ventas_remarketing vr
+      JOIN users u ON u.id = vr.usuario_id
+      WHERE
+        (
+          DATE(vr.clase_prueba_1_fecha) = CURDATE() OR
+          DATE(vr.clase_prueba_2_fecha) = CURDATE() OR
+          DATE(vr.clase_prueba_3_fecha) = CURDATE()
+        )
+        ${sedeFilterSQL}
+      ORDER BY vr.n_contacto_2 ASC, vr.nombre_socio
+      `,
+      params
+    );
+
+    res.json(notis);
+  } catch (error) {
+    console.error('Error obteniendo notificaciones clase de prueba (remarketing):', error);
+    res
+      .status(500)
+      .json({ error: 'Error obteniendo notificaciones de clase de prueba (remarketing)' });
+  }
+});
+/* FIN DE FUNCION INTGEGRADA POR SERGIO MANRIQUE 14-01-2025 */
+
 app.patch(
   '/notifications/clases-prueba/:prospectoId/enviado',
   async (req, res) => {
@@ -4359,6 +4448,29 @@ app.patch(
     }
   }
 );
+
+/* FUNCION INTGEGRADA POR SERGIO MANRIQUE 14-01-2025 */
+  // PATCH para ventas_remarketing
+  app.patch(
+    '/notifications/clases-prueba-remarketing/:prospectoId/enviado',
+    async (req, res) => {
+      const prospectoId = Number(req.params.prospectoId);
+      try {
+        const [r] = await pool.query(
+          'UPDATE ventas_remarketing SET n_contacto_2 = 1, updated_at = NOW() WHERE id = ?',
+          [prospectoId]
+        );
+        if (r.affectedRows === 0) {
+          return res.status(404).json({ error: 'Prospecto no encontrado' });
+        }
+        res.json({ ok: true, n_contacto_2: 1 });
+      } catch (e) {
+        console.error('PATCH enviado error (remarketing):', e);
+        res.status(500).json({ error: 'No se pudo marcar como enviado (remarketing)' });
+      }
+    }
+  );
+  /* FIN DE FUNCION INTGEGRADA POR SERGIO MANRIQUE 14-01-2025 */
 
 // GET /prospectos-alertas
 app.get('/prospectos-alertas', async (req, res) => {
@@ -4395,6 +4507,44 @@ app.get('/prospectos-alertas', async (req, res) => {
 
   res.json(rows);
 });
+
+/* FUNCION INTGEGRADA POR SERGIO MANRIQUE 19-01-2025 */
+// GET /prospectos-alertas
+app.get('/prospectos-remarketing-alertas', async (req, res) => {
+  const { sede } = req.query;
+  let where = 'WHERE fecha IS NOT NULL';
+  let params = [];
+
+  if (sede) {
+    where += ' AND sede = ?';
+    params.push(sede);
+  }
+
+  const [rows] = await pool.query(
+    `
+    SELECT
+      id,
+      nombre_socio AS nombre,
+      fecha,
+      n_contacto_2,
+      convertido,
+      DATEDIFF(CURDATE(), fecha) AS dias_desde_alta,
+      CASE
+        WHEN n_contacto_2 = 1 OR convertido = 1 THEN 'ninguno'
+        WHEN DATEDIFF(CURDATE(), fecha) = 7 THEN 'amarillo'
+        WHEN DATEDIFF(CURDATE(), fecha) > 7 THEN 'rojo'
+        ELSE 'ninguno'
+      END AS color_2do_contacto
+    FROM ventas_remarketing
+    ${where}
+    ORDER BY fecha ASC
+  `,
+    params
+  );
+
+  res.json(rows);
+});
+  /* FIN DE FUNCION INTGEGRADA POR SERGIO MANRIQUE 19-01-2025 */
 
 async function deleteOldNotifications() {
   try {

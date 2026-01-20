@@ -11,12 +11,10 @@
 
 import db from '../DataBase/db.js';
 import { Op, fn, col } from 'sequelize';
-import { VentasComisionesModel } from '../Models/MD_TB_ventas_comisiones.js';
-import { VentasProspectosModel } from '../Models/MD_TB_ventas_prospectos.js';
+import {VentasComisionesRemarketingModel} from "../Models/MD_TB_Ventas_comisiones_remarketing.js";
+import VentasRemarketingModel from "../Models/MD_TB_VentasRemarketing.js";
 import UserModel from '../Models/MD_TB_Users.js';
-import { CLIENT_RENEG_LIMIT } from 'tls';
 
-// ========================= Helpers =========================
 
 // Fallbacks sin auth
 function getActingRole(req) {
@@ -118,7 +116,7 @@ function normalizePlan({ tipo_plan, tipo_plan_custom }) {
  * Crea comisión en revisión si esComision=true y sincroniza el prospecto.
  * Body: { esComision: boolean, tipo_plan?, tipo_plan_custom?, observacion?, actor_id? }
  */
-export const POST_convertirProspecto_CTS = async (req, res) => {
+export const POST_convertirProspectoRemarketing_CTS = async (req, res) => {
   const t = await db.transaction();
   try {
     const prospecto_id = Number(req.params.id);
@@ -135,7 +133,7 @@ export const POST_convertirProspecto_CTS = async (req, res) => {
     }
 
     // Cargamos el prospecto CON LOCK para evitar carreras
-    const prospecto = await VentasProspectosModel.findByPk(prospecto_id, {
+    const prospecto = await VentasRemarketingModel.findByPk(prospecto_id, {
       transaction: t,
       lock: t.LOCK.UPDATE
     });
@@ -157,12 +155,12 @@ export const POST_convertirProspecto_CTS = async (req, res) => {
         comision_id: null
       });
 
-      await VentasProspectosModel.update(camposProspecto, {
+      await VentasRemarketingModel.update(camposProspecto, {
         where: { id: prospecto_id },
         transaction: t
       });
 
-      const data = await VentasProspectosModel.findByPk(prospecto_id, {
+      const data = await VentasRemarketingModel.findByPk(prospecto_id, {
         transaction: t
       });
 
@@ -181,7 +179,7 @@ export const POST_convertirProspecto_CTS = async (req, res) => {
     const observacion = sanitizeStr(req.body?.observacion, 255);
 
     // 4) Evitar duplicados en revisión para este prospecto
-    const yaPendiente = await VentasComisionesModel.findOne({
+    const yaPendiente = await VentasComisionesRemarketingModel.findOne({
       where: { prospecto_id, estado: 'en_revision' },
       transaction: t,
       lock: t.LOCK.UPDATE
@@ -201,7 +199,7 @@ export const POST_convertirProspecto_CTS = async (req, res) => {
         .toLowerCase() || 'monteros';
 
     // 7) crear comisión en revisión (monto nulo por ahora; moneda fija si querés)
-    const comision = await VentasComisionesModel.create(
+    const comision = await VentasComisionesRemarketingModel.create(
       {
         prospecto_id,
         vendedor_id, // << EL ACTOR QUE CONVIERTE
@@ -225,12 +223,12 @@ export const POST_convertirProspecto_CTS = async (req, res) => {
       comision_id: comision.id
     });
 
-    await VentasProspectosModel.update(camposProspecto, {
+    await VentasRemarketingModel.update(camposProspecto, {
       where: { id: prospecto_id },
       transaction: t
     });
 
-    const prospectoRefresco = await VentasProspectosModel.findByPk(
+    const prospectoRefresco = await VentasRemarketingModel.findByPk(
       prospecto_id,
       { transaction: t }
     );
@@ -254,7 +252,7 @@ export const POST_convertirProspecto_CTS = async (req, res) => {
  * Paginación: page (1..N), pageSize (default 20)
  * Orden: orderBy (created_at|estado|monto_comision|...), orderDir (ASC|DESC)
  */
-export const GET_listarVentasComisiones_CTS = async (req, res) => {
+export const GET_listarVentasComisionesRemarketing_CTS = async (req, res) => {
   try {
     const {
       estado,
@@ -269,8 +267,6 @@ export const GET_listarVentasComisiones_CTS = async (req, res) => {
       orderBy = 'created_at',
       orderDir = 'DESC'
     } = req.query;
-
-    console.log('Query params:', req.query);
 
     const where = {};
     if (estado) {
@@ -293,9 +289,9 @@ export const GET_listarVentasComisiones_CTS = async (req, res) => {
     const include = [
       { model: UserModel, as: 'vendedor', attributes: ['id', 'name'] },
       {
-        model: VentasProspectosModel,
+        model: VentasRemarketingModel,
         as: 'prospecto',
-        attributes: ['id', 'nombre', 'dni', 'sede', 'comision_estado']
+        attributes: ['id', 'nombre_socio', 'dni', 'sede', 'comision_estado']
       }
     ];
 
@@ -318,7 +314,7 @@ export const GET_listarVentasComisiones_CTS = async (req, res) => {
     const offset = (Math.max(1, Number(page) || 1) - 1) * limit;
 
     // Consulta
-    const { rows, count } = await VentasComisionesModel.findAndCountAll({
+    const { rows, count } = await VentasComisionesRemarketingModel.findAndCountAll({
       where,
       include,
       limit,
@@ -332,7 +328,7 @@ export const GET_listarVentasComisiones_CTS = async (req, res) => {
       const qq = String(q).toLowerCase();
       data = rows.filter((r) => {
         const p = r.prospecto;
-        const nombre = (p?.nombre || '').toLowerCase();
+        const nombre = (p?.nombre_socio || '').toLowerCase();
         const dni = (p?.dni || '').toLowerCase();
         return nombre.includes(qq) || dni.includes(qq);
       });
@@ -345,6 +341,7 @@ export const GET_listarVentasComisiones_CTS = async (req, res) => {
       items: data
     });
   } catch (err) {
+    console.log('Error en GET_listarVentasComisionesRemarketing_CTS:', err);
     return res.status(500).json({ mensajeError: err.message });
   }
 };
@@ -352,22 +349,22 @@ export const GET_listarVentasComisiones_CTS = async (req, res) => {
 /**
  * GET /ventas-comisiones/:id
  */
-export const GET_obtenerVentaComision_CTS = async (req, res) => {
+export const GET_obtenerVentaComisionRemarketing_CTS = async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ mensajeError: 'ID inválido' });
 
-    const item = await VentasComisionesModel.findByPk(id, {
+    const item = await VentasComisionesRemarketingModel.findByPk(id, {
       include: [
         { model: UserModel, as: 'vendedor', attributes: ['id', 'name'] },
         { model: UserModel, as: 'aprobador', attributes: ['id', 'name'] },
         { model: UserModel, as: 'rechazador', attributes: ['id', 'name'] },
         {
-          model: VentasProspectosModel,
+          model: VentasRemarketingModel,
           as: 'prospecto',
           attributes: [
             'id',
-            'nombre',
+            'nombre_socio',
             'dni',
             'sede',
             'comision_estado',
@@ -388,7 +385,7 @@ export const GET_obtenerVentaComision_CTS = async (req, res) => {
  * PUT/PATCH /ventas-comisiones/:id
  * Edición completa + transición de estado y side-effects
  */
-export const PUT_actualizarVentaComision_CTS = async (req, res) => {
+export const PUT_actualizarVentaComisionRemarketing_CTS = async (req, res) => {
   const t = await db.transaction();
   try {
     const id = Number(req.params.id);
@@ -398,7 +395,7 @@ export const PUT_actualizarVentaComision_CTS = async (req, res) => {
     }
 
     // Bloqueamos la fila para edición segura
-    const com = await VentasComisionesModel.findByPk(id, {
+    const com = await VentasComisionesRemarketingModel.findByPk(id, {
       transaction: t,
       lock: t.LOCK.UPDATE
     });
@@ -436,7 +433,7 @@ export const PUT_actualizarVentaComision_CTS = async (req, res) => {
         await t.rollback();
         return res.status(400).json({ mensajeError: 'prospecto_id inválido' });
       }
-      const pro = await VentasProspectosModel.findByPk(prospecto_id, {
+      const pro = await VentasRemarketingModel.findByPk(prospecto_id, {
         transaction: t
       });
       if (!pro) {
@@ -553,21 +550,21 @@ export const PUT_actualizarVentaComision_CTS = async (req, res) => {
     }
 
     // ====== Persistencia ======
-    await VentasComisionesModel.update(updates, {
+    await VentasComisionesRemarketingModel.update(updates, {
       where: { id },
       transaction: t
     });
 
     // Sincronizar estado en el prospecto (solo si tenemos id válido)
     if (prospectoIdTarget) {
-      await VentasProspectosModel.update(
+      await VentasRemarketingModel.update(
         { comision_estado: newEstado },
         { where: { id: prospectoIdTarget }, transaction: t }
       );
     }
 
     // Reload con asociaciones básicas
-    const data = await VentasComisionesModel.findByPk(id, {
+    const data = await VentasComisionesRemarketingModel.findByPk(id, {
       transaction: t
       // si tenés include de relaciones, podés agregar aquí
     });
@@ -585,27 +582,35 @@ export const PUT_actualizarVentaComision_CTS = async (req, res) => {
  * Body: { monto_comision, moneda }
  * Requiere roldmin
  */
-export const PUT_aprobarVentaComision_CTS = async (req, res) => {
+export const PUT_aprobarVentaComisionRemarketing_CTS = async (req, res) => {
   const t = await db.transaction();
   try {
-    // ✅ Sin auth: intentamos rol desde headers/body; por default “admin”
+    console.log('--- APROBAR COMISION REMARKETING ---');
+    console.log('User:', req.user);
+    console.log('Body:', req.body);
     if (!hasRoleLoose(req, ['admin', 'gerente'])) {
+      console.log('No autorizado');
       await t.rollback();
       return res.status(403).json({ mensajeError: 'No autorizado' });
     }
 
     const id = Number(req.params.id);
+    console.log('ID:', id);
     if (!id) {
+      console.log('ID inválido');
       await t.rollback();
       return res.status(400).json({ mensajeError: 'ID inválido' });
     }
 
-    const com = await VentasComisionesModel.findByPk(id, { transaction: t });
+    const com = await VentasComisionesRemarketingModel.findByPk(id, { transaction: t });
+    console.log('Comisión encontrada:', com);
     if (!com) {
+      console.log('Comisión no encontrada');
       await t.rollback();
       return res.status(404).json({ mensajeError: 'Comisión no encontrada' });
     }
     if (!['en_revision', 'rechazado'].includes(com.estado)) {
+      console.log('Estado no permitido:', com.estado);
       await t.rollback();
       return res.status(400).json({
         mensajeError: 'Solo se puede aprobar si está en revisión o rechazada'
@@ -613,14 +618,17 @@ export const PUT_aprobarVentaComision_CTS = async (req, res) => {
     }
 
     const monto = positiveMoneyOrNull(req.body?.monto_comision);
+    console.log('Monto:', monto);
     if (monto === null) {
+      console.log('Monto inválido');
       await t.rollback();
       return res.status(400).json({ mensajeError: 'monto_comision inválido' });
     }
     const moneda = normalizeMoneda(req.body?.moneda);
     const aprobadorId = getActingUserId(req);
+    console.log('Moneda:', moneda, 'AprobadorId:', aprobadorId);
 
-    await VentasComisionesModel.update(
+    await VentasComisionesRemarketingModel.update(
       {
         estado: 'aprobado',
         monto_comision: monto,
@@ -634,9 +642,10 @@ export const PUT_aprobarVentaComision_CTS = async (req, res) => {
       },
       { where: { id }, transaction: t }
     );
+    console.log('Comisión actualizada a aprobado');
 
     // sync prospecto
-    await VentasProspectosModel.update(
+    await VentasRemarketingModel.update(
       {
         comision_estado: 'aprobado',
         comision: true,
@@ -646,13 +655,15 @@ export const PUT_aprobarVentaComision_CTS = async (req, res) => {
       },
       { where: { id: com.prospecto_id }, transaction: t }
     );
+    console.log('Prospecto sincronizado a aprobado');
 
     // Sincronizar prospecto
-    const p = await VentasProspectosModel.findByPk(com.prospecto_id, {
+    const p = await VentasRemarketingModel.findByPk(com.prospecto_id, {
       transaction: t
     });
+    console.log('Prospecto encontrado:', p);
     if (p) {
-      await VentasProspectosModel.update(
+      await VentasRemarketingModel.update(
         {
           comision_estado: 'aprobado',
           comision: true,
@@ -662,24 +673,28 @@ export const PUT_aprobarVentaComision_CTS = async (req, res) => {
         },
         { where: { id: p.id }, transaction: t }
       );
+      console.log('Prospecto actualizado con datos de comisión aprobada');
     }
 
-    const data = await VentasComisionesModel.findByPk(id, {
+    const data = await VentasComisionesRemarketingModel.findByPk(id, {
       transaction: t,
       include: [
         { model: UserModel, as: 'vendedor', attributes: ['id', 'name'] },
-        { model: UserModel, as: 'aprobador', attributes: ['id', 'name'] },
+        // { model: UserModel, as: 'aprobador', attributes: ['id', 'name'] },
         {
-          model: VentasProspectosModel,
+          model: VentasRemarketingModel,
           as: 'prospecto',
-          attributes: ['id', 'nombre', 'dni', 'sede', 'comision_estado']
+          attributes: ['id', 'nombre_socio', 'dni', 'sede', 'comision_estado']
         }
       ]
     });
+    console.log('Comisión final:', data);
 
     await t.commit();
+    console.log('Transacción commit aprobada');
     return res.json({ message: 'Comisión aprobada', data });
   } catch (err) {
+    console.log("Error al aprobar comisión:", err);
     await t.rollback();
     return res.status(500).json({ mensajeError: err.message });
   }
@@ -690,26 +705,35 @@ export const PUT_aprobarVentaComision_CTS = async (req, res) => {
  * Body: { motivo_rechazo }
  * Requiere roldmin
  */
-export const PUT_rechazarVentaComision_CTS = async (req, res) => {
+export const PUT_rechazarVentaComisionRemarketing_CTS = async (req, res) => {
   const t = await db.transaction();
   try {
+    console.log('--- RECHAZAR COMISION REMARKETING ---');
+    console.log('User:', req.user);
+    console.log('Body:', req.body);
     if (!hasRoleLoose(req, ['admin', 'gerente'])) {
+      console.log('No autorizado');
       await t.rollback();
       return res.status(403).json({ mensajeError: 'No autorizado' });
     }
 
     const id = Number(req.params.id);
+    console.log('ID:', id);
     if (!id) {
+      console.log('ID inválido');
       await t.rollback();
       return res.status(400).json({ mensajeError: 'ID inválido' });
     }
 
-    const com = await VentasComisionesModel.findByPk(id, { transaction: t });
+    const com = await VentasComisionesRemarketingModel.findByPk(id, { transaction: t });
+    console.log('Comisión encontrada:', com);
     if (!com) {
+      console.log('Comisión no encontrada');
       await t.rollback();
       return res.status(404).json({ mensajeError: 'Comisión no encontrada' });
     }
     if (!['en_revision', 'aprobado'].includes(com.estado)) {
+      console.log('Estado no permitido:', com.estado);
       await t.rollback();
       return res.status(400).json({
         mensajeError: 'Solo se puede rechazar si está en revisión o aprobada'
@@ -720,8 +744,9 @@ export const PUT_rechazarVentaComision_CTS = async (req, res) => {
       sanitizeStr(req.body?.motivo_rechazo, 255) ||
       'Rechazada por coordinación';
     const rechezId = getActingUserId(req);
+    console.log('Motivo:', motivo, 'RechazadorId:', rechezId);
 
-    await VentasComisionesModel.update(
+    await VentasComisionesRemarketingModel.update(
       {
         estado: 'rechazado',
         rechazado_por: rechezId,
@@ -731,9 +756,10 @@ export const PUT_rechazarVentaComision_CTS = async (req, res) => {
       },
       { where: { id }, transaction: t }
     );
+    console.log('Comisión actualizada a rechazado');
 
     // sync prospecto
-    await VentasProspectosModel.update(
+    await VentasRemarketingModel.update(
       {
         comision_estado: 'rechazado',
         comision: true, // lo mantenemos visible como caso de comisión
@@ -741,12 +767,14 @@ export const PUT_rechazarVentaComision_CTS = async (req, res) => {
       },
       { where: { id: com.prospecto_id }, transaction: t }
     );
+    console.log('Prospecto sincronizado a rechazado');
 
-    const p = await VentasProspectosModel.findByPk(com.prospecto_id, {
+    const p = await VentasRemarketingModel.findByPk(com.prospecto_id, {
       transaction: t
     });
+    console.log('Prospecto encontrado:', p);
     if (p) {
-      await VentasProspectosModel.update(
+      await VentasRemarketingModel.update(
         {
           comision_estado: 'rechazado',
           comision: p.comision,
@@ -754,24 +782,28 @@ export const PUT_rechazarVentaComision_CTS = async (req, res) => {
         },
         { where: { id: p.id }, transaction: t }
       );
+      console.log('Prospecto actualizado con datos de comisión rechazada');
     }
 
-    const data = await VentasComisionesModel.findByPk(id, {
+    const data = await VentasComisionesRemarketingModel.findByPk(id, {
       transaction: t,
       include: [
         { model: UserModel, as: 'vendedor', attributes: ['id', 'name'] },
-        { model: UserModel, as: 'rechazador', attributes: ['id', 'name'] },
+        // { model: UserModel, as: 'rechazador', attributes: ['id', 'name'] },
         {
-          model: VentasProspectosModel,
+          model: VentasRemarketingModel,
           as: 'prospecto',
-          attributes: ['id', 'nombre', 'dni', 'sede', 'comision_estado']
+          attributes: ['id', 'nombre_socio', 'dni', 'sede', 'comision_estado']
         }
       ]
     });
+    console.log('Comisión final:', data);
 
     await t.commit();
+    console.log('Transacción commit rechazada');
     return res.json({ message: 'Comisión rechazada', data });
   } catch (err) {
+    console.log("Error al rechazar comisión:", err);
     await t.rollback();
     return res.status(500).json({ mensajeError: err.message });
   }
@@ -783,7 +815,7 @@ export const PUT_rechazarVentaComision_CTS = async (req, res) => {
  * Admin/Gerente o Dueño (vendedor_id) pueden eliminar si está en_revision.
  * Limpia vínculo en prospecto.
  */
-export const DEL_eliminarVentaComision_CTS = async (req, res) => {
+export const DEL_eliminarVentaComisionRemarketing_CTS = async (req, res) => {
   const t = await db.transaction();
   try {
     const id = Number(req.params.id);
@@ -792,7 +824,7 @@ export const DEL_eliminarVentaComision_CTS = async (req, res) => {
       return res.status(400).json({ mensajeError: 'ID inválido' });
     }
 
-    const com = await VentasComisionesModel.findByPk(id, { transaction: t });
+    const com = await VentasComisionesRemarketingModel.findByPk(id, { transaction: t });
     if (!com) {
       await t.rollback();
       return res.status(404).json({ mensajeError: 'Comisión no encontrada' });
@@ -815,11 +847,11 @@ export const DEL_eliminarVentaComision_CTS = async (req, res) => {
     // }
 
     // limpiar prospecto si apuntaba a esta comisión
-    const p = await VentasProspectosModel.findByPk(com.prospecto_id, {
+    const p = await VentasRemarketingModel.findByPk(com.prospecto_id, {
       transaction: t
     });
     if (p && Number(p.comision_id) === Number(com.id)) {
-      await VentasProspectosModel.update(
+      await VentasRemarketingModel.update(
         {
           comision_estado: null,
           comision_id: null,
@@ -832,7 +864,7 @@ export const DEL_eliminarVentaComision_CTS = async (req, res) => {
       );
     }
 
-    await VentasComisionesModel.destroy({ where: { id }, transaction: t });
+    await VentasComisionesRemarketingModel.destroy({ where: { id }, transaction: t });
 
     await t.commit();
     return res.json({ message: 'Comisión eliminada' });
@@ -844,7 +876,7 @@ export const DEL_eliminarVentaComision_CTS = async (req, res) => {
 
 
 // GET /ventas-comisiones/resumen?vendedor_id=...&mes=..&anio=..
-export const GET_resumenComisionesVendedor_CTS = async (req, res) => {
+export const GET_resumenComisionesVendedorRemarketing_CTS = async (req, res) => {
   try {
     const vendedor_id = Number(req.query.vendedor_id);
     if (!vendedor_id) {
@@ -859,7 +891,7 @@ export const GET_resumenComisionesVendedor_CTS = async (req, res) => {
     const hasta = new Date(anio, mes, 0, 23, 59, 59, 999);
 
     // total mensual (solo aprobadas; usamos aprobado_at para rango)
-    const totalMensual = await VentasComisionesModel.findOne({
+    const totalMensual = await VentasComisionesRemarketingModel.findOne({
       attributes: [
         [fn('COALESCE', fn('SUM', col('monto_comision')), 0), 'total']
       ],
@@ -872,7 +904,7 @@ export const GET_resumenComisionesVendedor_CTS = async (req, res) => {
     });
 
     // total histórico (solo aprobadas)
-    const totalHistorico = await VentasComisionesModel.findOne({
+    const totalHistorico = await VentasComisionesRemarketingModel.findOne({
       attributes: [
         [fn('COALESCE', fn('SUM', col('monto_comision')), 0), 'total']
       ],
@@ -892,7 +924,7 @@ export const GET_resumenComisionesVendedor_CTS = async (req, res) => {
 };
 
 // GET /ventas-comisiones/vendedor?vendedor_id=...&estado=aprobado&mes=..&anio=..&page=1&limit=15
-export const GET_listarComisionesVendedor_CTS = async (req, res) => {
+export const GET_listarComisionesVendedorRemarketing_CTS = async (req, res) => {
   try {
     const vendedor_id = Number(req.query.vendedor_id);
     if (!vendedor_id) {
@@ -918,7 +950,7 @@ export const GET_listarComisionesVendedor_CTS = async (req, res) => {
     // Si por algún motivo el campo de fecha es nulo, este filtro lo excluye (esperable)
     where[dateField] = { [Op.between]: [desde, hasta] };
 
-    const { rows, count } = await VentasComisionesModel.findAndCountAll({
+    const { rows, count } = await VentasComisionesRemarketingModel.findAndCountAll({
       where,
       order: [[dateField, 'DESC']],
       limit,
@@ -926,9 +958,9 @@ export const GET_listarComisionesVendedor_CTS = async (req, res) => {
       include: [
         { model: UserModel, as: 'vendedor', attributes: ['id', 'name'] },
         {
-          model: VentasProspectosModel,
+          model: VentasRemarketingModel,
           as: 'prospecto',
-          attributes: ['id', 'nombre', 'dni', 'sede']
+          attributes: ['id', 'nombre_socio', 'dni', 'sede']
         }
       ]
     });

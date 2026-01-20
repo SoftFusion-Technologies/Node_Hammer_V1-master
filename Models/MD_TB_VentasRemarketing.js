@@ -41,7 +41,7 @@ const VentasRemarketingModel = db.define(
     },
     usuario_id: {
       type: DataTypes.BIGINT.UNSIGNED,
-      allowNull: false,
+      allowNull: true,
       references: {
         model: "users",
         key: "id",
@@ -205,7 +205,7 @@ const VentasRemarketingModel = db.define(
       type: DataTypes.BIGINT.UNSIGNED,
       allowNull: true,
       references: {
-        model: "ventas_comisiones",
+        model: "ventas_comisiones_remarketing",
         key: "id",
       },
     },

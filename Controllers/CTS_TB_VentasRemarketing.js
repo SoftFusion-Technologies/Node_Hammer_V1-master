@@ -18,11 +18,11 @@
 
 // Controladores para operaciones CRUD en la tabla ventas_remarketing
 
+import "../Models/remarketing_relaciones.js";
 import VentasRemarketingModel from "../Models/MD_TB_VentasRemarketing.js";
 import { Op, QueryTypes } from "sequelize";
 import db from "../DataBase/db.js";
 import cron from "node-cron";
-
 import { VentasProspectosModel } from "../Models/MD_TB_ventas_prospectos.js";
 import { RecaptacionModel } from "../Models/MD_TB_Recaptacion.js";
 import UsersModel from "../Models/MD_TB_Users.js";
@@ -30,11 +30,12 @@ import { SedeModel } from "../Models/MD_TB_sedes.js";
 import { VentasComisionesModel } from "../Models/MD_TB_ventas_comisiones.js";
 
 import ClientesPilatesModel from "../Models/MD_TB_ClientesPilates.js";
+import ContactosListaEsperaPilatesModel from "../Models/MD_TB_ContactosListaEsperaPilates.js";
+import ListaEsperaPilates from "../Models/MD_TB_ListaEsperaPilates.js";
 import InscripcionesPilatesModel from "../Models/MD_TB_InscripcionesPilates.js";
 import AsistenciasPilatesModel from "../Models/MD_TB_AsistenciasPilates.js";
 import { HorariosPilatesModel } from "../Models/MD_TB_HorariosPilates.js";
-
-import ListaEsperaPilates from "../Models/MD_TB_ListaEsperaPilates.js";
+import { VentasComisionesRemarketingModel } from "../Models/MD_TB_Ventas_comisiones_remarketing.js";
 
 // Obtener todos los registros de ventas remarketing con paginación y filtros
 export const OBRS_VentasRemarketing_CTS = async (req, res) => {
@@ -128,7 +129,7 @@ export const OBRS_VentasRemarketing_CTS = async (req, res) => {
         nombre: plainRow.nombre_socio,
         dni: plainRow.dni,
         asesor_nombre:
-          plainRow.usuario?.name || plainRow.usuario?.usuario || "N/A",
+          plainRow.usuario?.name || plainRow.usuario?.usuario || "Sistema/Automático",
 
         // 🔧 NORMALIZAR BOOLEANOS
         contactado: Boolean(plainRow.contactado),
@@ -183,7 +184,7 @@ export const CR_VentaRemarketing_CTS = async (req, res) => {
       recaptacion_id: req.body.recaptacion_id || null,
 
       // Datos principales
-      usuario_id: req.body.usuario_id,
+      usuario_id: req.body.usuario_id || null,
       sede: req.body.sede,
       nombre_socio: req.body.nombre_socio,
       dni: req.body.dni,
@@ -247,15 +248,22 @@ export const CR_VentaRemarketing_CTS = async (req, res) => {
 
 // Actualizar un registro de venta remarketing por su ID
 export const UR_VentaRemarketing_CTS = async (req, res) => {
+  console.log("🔄 Iniciando UR_VentaRemarketing_CTS");
+  // Si el body viene con 'nombre', lo mapeamos a 'nombre_socio' para el update
+  if (req.body.nombre) req.body.nombre_socio = req.body.nombre;
+
+  console.log("📥 Body recibido:", JSON.stringify(req.body, null, 2));
   const t = await db.transaction();
   try {
     const id = req.params.id;
+    console.log("🔎 Buscando registro remarketing con id:", id);
     const registroExistente = await VentasRemarketingModel.findByPk(id, {
       transaction: t,
       lock: t.LOCK.UPDATE
     });
 
     if (!registroExistente) {
+      console.log("❌ No se encontró el registro remarketing con id:", id);
       await t.rollback();
       return res.status(404).json({
         mensajeError: "Registro de remarketing no encontrado",
@@ -268,13 +276,8 @@ export const UR_VentaRemarketing_CTS = async (req, res) => {
       req.body.comision_monto !== undefined || 
       req.body.comision_tipo_plan;
 
-    console.log("📋 Registro existente:", {
-      id: registroExistente.id,
-      comision_id: registroExistente.comision_id,
-      comision_estado: registroExistente.comision_estado
-    });
-
-    console.log("🔍 Detección:", {
+    console.log("📋 Registro existente:", JSON.stringify(registroExistente.get({ plain: true }), null, 2));
+    console.log("🔍 Detección de actualización de comisión:", {
       esActualizacionComision,
       tieneComisionId: !!registroExistente.comision_id,
       body: req.body
@@ -283,33 +286,31 @@ export const UR_VentaRemarketing_CTS = async (req, res) => {
     // Auto-crear comisión si no existe
     if (esActualizacionComision && !registroExistente.comision_id) {
       console.log("🆕 Auto-creando comisión porque no existe...");
-
       // Validar datos requeridos
       const tipo_plan = req.body.comision_tipo_plan?.trim();
       const tipo_plan_custom = req.body.comision_tipo_plan_custom?.trim();
       const monto_comision = req.body.comision_monto;
-
+      console.log("➡️ Datos para comisión:", { tipo_plan, tipo_plan_custom, monto_comision });
       if (!tipo_plan) {
         await t.rollback();
         return res.status(400).json({
           mensajeError: "Debe indicar el tipo de plan para crear la comisión"
         });
       }
-
       if (tipo_plan.toLowerCase() === 'otros' && !tipo_plan_custom) {
         await t.rollback();
         return res.status(400).json({
           mensajeError: "Debe especificar el detalle cuando el plan es 'Otros'"
         });
       }
-
       // Determinar vendedor_id (quien registra la comisión)
-      const vendedor_id = Number(req.body.usuario_id) || Number(req.user?.id) || registroExistente.usuario_id;
+      const vendedor_id = Number(req.body.vendedor_id) || Number(req.body.usuario_id) || Number(req.user?.id) || registroExistente.usuario_id;
       const sede = String(registroExistente.sede || '').trim().toLowerCase() || 'monteros';
-
-      // Crear comisión en ventas_comisiones
-      const nuevaComision = await VentasComisionesModel.create({
-        remarketing_id: registroExistente.id,
+      console.log("👤 Vendedor ID para comisión:", vendedor_id);
+      console.log("🏢 Sede para comisión:", sede);
+      // Crear comisión en ventas_comisiones_remarketing
+      const comisionPayload = {
+        prospecto_id: registroExistente.id,
         vendedor_id: vendedor_id,
         sede: sede,
         tipo_plan: tipo_plan,
@@ -318,10 +319,10 @@ export const UR_VentaRemarketing_CTS = async (req, res) => {
         observacion: req.body.observacion || registroExistente.observacion || null,
         estado: req.body.comision_estado || 'en_revision',
         moneda: 'ARS'
-      }, { transaction: t });
-
+      };
+      console.log("📦 Payload para crear comisión:", JSON.stringify(comisionPayload, null, 2));
+      const nuevaComision = await VentasComisionesRemarketingModel.create(comisionPayload, { transaction: t });
       console.log("✅ Comisión creada con ID:", nuevaComision.id);
-
       // Actualizar remarketing con comision_id
       const now = new Date();
       await VentasRemarketingModel.update({
@@ -335,12 +336,10 @@ export const UR_VentaRemarketing_CTS = async (req, res) => {
         where: { id },
         transaction: t
       });
-
       // Si es aprobación/rechazo, actualizar la comisión inmediatamente
       const actorId = Number(req.user?.id) || vendedor_id;
-      
       if (req.body.comision_estado === 'aprobado') {
-        await VentasComisionesModel.update({
+        await VentasComisionesRemarketingModel.update({
           estado: 'aprobado',
           aprobado_por: actorId,
           aprobado_at: now
@@ -349,7 +348,7 @@ export const UR_VentaRemarketing_CTS = async (req, res) => {
           transaction: t
         });
       } else if (req.body.comision_estado === 'rechazado') {
-        await VentasComisionesModel.update({
+        await VentasComisionesRemarketingModel.update({
           estado: 'rechazado',
           rechazado_por: actorId,
           rechazado_at: now,
@@ -359,34 +358,28 @@ export const UR_VentaRemarketing_CTS = async (req, res) => {
           transaction: t
         });
       }
-
       await t.commit();
       console.log("✅ Comisión auto-creada y actualizada exitosamente");
-
       const remarketingActualizado = await VentasRemarketingModel.findByPk(id);
+      console.log("🔄 Registro remarketing actualizado:", JSON.stringify(remarketingActualizado.get({ plain: true }), null, 2));
       return res.json({
         message: "Comisión creada y actualizada exitosamente",
         registro: remarketingActualizado
       });
     }
 
-    // Si tiene comision_id, actualizar en ventas_comisiones
+    // Si tiene comision_id, actualizar en ventas_comisiones_remarketing
     if (esActualizacionComision && registroExistente.comision_id) {
       console.log("🔄 RUTA: Actualización de comisión existente");
-
       const updates = {};
-      
       if (req.body.comision_tipo_plan) updates.tipo_plan = req.body.comision_tipo_plan;
       if (req.body.comision_tipo_plan_custom) updates.tipo_plan_custom = req.body.comision_tipo_plan_custom;
       if (req.body.comision_monto !== undefined) updates.monto_comision = req.body.comision_monto;
       if (req.body.observacion !== undefined) updates.observacion = req.body.observacion;
-
       const actorId = Number(req.user?.id) || Number(req.body.usuario_id);
       const now = new Date();
-
       if (req.body.comision_estado) {
         updates.estado = req.body.comision_estado;
-        
         if (req.body.comision_estado === 'aprobado') {
           updates.aprobado_por = actorId;
           updates.aprobado_at = now;
@@ -396,12 +389,12 @@ export const UR_VentaRemarketing_CTS = async (req, res) => {
           updates.motivo_rechazo = req.body.motivo_rechazo || null;
         }
       }
-
-      await VentasComisionesModel.update(updates, {
+      console.log("📝 Actualizando comisión con id:", registroExistente.comision_id);
+      console.log("📦 Payload de actualización:", JSON.stringify(updates, null, 2));
+      await VentasComisionesRemarketingModel.update(updates, {
         where: { id: registroExistente.comision_id },
         transaction: t
       });
-
       // Sincronizar estado en remarketing
       if (req.body.comision_estado) {
         await VentasRemarketingModel.update({
@@ -411,11 +404,10 @@ export const UR_VentaRemarketing_CTS = async (req, res) => {
           transaction: t
         });
       }
-
       await t.commit();
       console.log("✅ Comisión existente actualizada");
-
       const remarketingActualizado = await VentasRemarketingModel.findByPk(id);
+      console.log("🔄 Registro remarketing actualizado:", JSON.stringify(remarketingActualizado.get({ plain: true }), null, 2));
       return res.json({
         message: "Comisión actualizada exitosamente",
         registro: remarketingActualizado
@@ -1143,6 +1135,278 @@ const ejecutarCopiaDeRemarketing = async () => {
   }
 };
 
+export const copiarListaEsperaPilatesAMensualRemarketing = async () => {
+  try {
+    console.log("--> 🟢 Iniciando migración de Lista de Espera a Remarketing...");
+
+    const fechaHoy = new Date();
+    // Normalizamos al primer día del mes actual para la validación
+    const primerDiaMes = new Date(fechaHoy.getFullYear(), fechaHoy.getMonth(), 1);
+
+    // 1. Buscar contactos "Rechazado/Sin Respuesta"
+    const contactosRechazados = await ContactosListaEsperaPilatesModel.findAll({
+      where: {
+        estado_contacto: "Rechazado/Sin Respuesta"
+      },
+      include: [
+        {
+          model: ListaEsperaPilates,
+          as: "persona_espera"
+        }
+      ]
+    });
+
+    console.log(`--> 📊 Se encontraron ${contactosRechazados.length} candidatos en Lista de Espera.`);
+
+    let creados = 0;
+    let omitidos = 0;
+
+    // 2. Recorremos cada registro
+    for (const registro of contactosRechazados) {
+      const persona = registro.persona_espera;
+
+      if (!persona) continue;
+
+      // 3. Obtener nombre de Sede
+      let nombreSede = "Sede Desconocida";
+      if (persona.id_sede) {
+        const sedeData = await SedeModel.findByPk(persona.id_sede);
+        if (sedeData) {
+          nombreSede = (sedeData.nombre || sedeData.sede || "Sede s/n").trim();
+        }
+      }
+
+      // 4. VALIDACIÓN DE DUPLICADOS
+      // Buscamos si ya existe alguien con mismo Nombre y Contacto creado este mes
+      const existeDuplicado = await VentasRemarketingModel.findOne({
+        where: {
+          nombre_socio: persona.nombre,
+          contacto: persona.contacto,
+          fecha: {
+            [Op.gte]: primerDiaMes // Que haya sido creado desde el día 1 de este mes en adelante
+          }
+        }
+      });
+
+      if (existeDuplicado) {
+        omitidos++;
+        continue; // Saltamos al siguiente ciclo
+      }
+
+      // 5. Construir objeto para insertar
+      const datosParaInsertar = {
+        ventas_prospecto_id: null,
+        recaptacion_id: null,
+        usuario_id: null, 
+        sede: nombreSede.toLowerCase().trim(),
+        nombre_socio: persona.nombre,
+        dni: "Sin DNI",
+        tipo_prospecto: "Nuevo", 
+        canal_contacto: "Baja Pilates",
+        contacto: persona.contacto || "Sin contacto",
+        actividad: "Pilates",
+        observacion: `Alumnos de lista de espera en pilates en estado Rechazado/Sin respuesta.`,
+        fecha: new Date(),
+        
+        // Defaults
+        contactado: 0,
+        visitas: 0,
+        n_contacto_1: 0,
+        n_contacto_2: 0,
+        n_contacto_3: 0,
+        enviado: 0,
+        respondido: 0,
+        agendado: 0,
+        convertido: 0
+      };
+
+      // 6. CREAR REGISTRO REAL
+      await VentasRemarketingModel.create(datosParaInsertar);
+      creados++;
+      console.log(`--> ✅ [Creado] ${datosParaInsertar.nombre_socio} en ${datosParaInsertar.sede}`);
+    }
+
+    console.log("---------------------------------------------------");
+    console.log(`--> 🏁 Proceso Finalizado.`);
+    console.log(`--> ✅ Insertados: ${creados}`);
+    console.log(`--> ⏭️  Omitidos (Duplicados): ${omitidos}`);
+    console.log("---------------------------------------------------");
+
+    // 7. LIMPIEZA: Después de copiar exitosamente, eliminamos de ListaEsperaPilates
+    // todos los registros cuyo contacto esté en estado "Rechazado/Sin Respuesta" O "Confirmado"
+    if (creados > 0 || omitidos > 0) {
+      console.log("--> 🗑️  Iniciando limpieza de Lista de Espera...");
+
+      // Obtener IDs de lista de espera a eliminar (aquellos con contactos Rechazados o Confirmados)
+      const contactosParaLimpiar = await ContactosListaEsperaPilatesModel.findAll({
+        where: {
+          estado_contacto: {
+            [Op.in]: ["Rechazado/Sin Respuesta", "Confirmado"]
+          }
+        },
+        attributes: ["id_lista_espera"],
+        raw: true
+      });
+
+      const idsParaEliminar = [...new Set(contactosParaLimpiar.map(c => c.id_lista_espera))];
+
+      if (idsParaEliminar.length > 0) {
+        const eliminados = await ListaEsperaPilates.destroy({
+          where: {
+            id: {
+              [Op.in]: idsParaEliminar
+            }
+          }
+        });
+
+        console.log(`--> ✅ Eliminados de Lista de Espera: ${eliminados} registros`);
+        console.log(`--> 🏁 Limpieza completada.`);
+      } else {
+        console.log(`--> ℹ️  No hay registros para limpiar en Lista de Espera.`);
+      }
+    }
+
+  } catch (error) {
+    console.error("❌ Error en copiarListaEsperaPilatesAMensualRemarketing:", error);
+  }
+};
+
+export const copiarVentasProspectosARemarketing = async () => {
+  try {
+    console.log("--> 🟢 Iniciando migración INTELIGENTE a Remarketing...");
+
+    const hoy = new Date();
+
+    // 1. Buscamos TODOS los prospectos no convertidos
+    const prospectosPendientes = await VentasProspectosModel.findAll({
+      where: {
+        [Op.or]: [
+          { convertido: 0 },
+          { convertido: false },
+          { convertido: null }
+        ]
+      }
+    });
+
+    console.log(`--> 📊 Analizando ${prospectosPendientes.length} prospectos pendientes...`);
+
+    let creados = 0;
+    let omitidosDuplicado = 0;
+    let omitidosPorFecha = 0;
+
+    for (const prospecto of prospectosPendientes) {
+
+      // --- A. DETERMINAR FECHA REAL DE CARGA ---
+      const fechaCargaRaw = prospecto.fecha || prospecto.createdAt || prospecto.created_at;
+
+      if (!fechaCargaRaw) {
+         console.log(`--> ⚠️ [Omitido - Sin Fecha] ID ${prospecto.id} - ${prospecto.nombre}`);
+         continue;
+      }
+
+      const fechaCarga = new Date(fechaCargaRaw);
+      if (isNaN(fechaCarga.getTime())) continue;
+
+      const mesOrigenTexto = `${fechaCarga.getFullYear()}-${String(fechaCarga.getMonth() + 1).padStart(2, "0")}`;
+
+      const finDeMesCarga = new Date(fechaCarga.getFullYear(), fechaCarga.getMonth() + 1, 0);
+      const inicioUltimaSemana = new Date(finDeMesCarga);
+      inicioUltimaSemana.setDate(finDeMesCarga.getDate() - 6);
+      
+      const esUltimaSemana = fechaCarga >= inicioUltimaSemana;
+
+      // Diferencia de meses
+      const diffMeses = (hoy.getFullYear() - fechaCarga.getFullYear()) * 12 + (hoy.getMonth() - fechaCarga.getMonth());
+
+      // CASO 1: Regla General (No última semana)
+      if (!esUltimaSemana && diffMeses < 1) {
+        console.log(`--> ⏳ [Omitido - Muy Nuevo] ${prospecto.nombre} (Cargado: ${mesOrigenTexto} | No pasó 1 mes)`);
+        omitidosPorFecha++;
+        continue; 
+      }
+
+      // CASO 2: Regla Última Semana (Necesita 2 meses)
+      if (esUltimaSemana && diffMeses < 2) {
+        console.log(`--> 📅 [Omitido - Última Semana] ${prospecto.nombre} (Cargado: ${fechaCarga.toLocaleDateString()} | Esperando 2do mes)`);
+        omitidosPorFecha++;
+        continue; 
+      }
+
+      // --- D. VALIDACIÓN DE DUPLICADOS (CON LOGS) ---
+      const existeDuplicado = await VentasRemarketingModel.findOne({
+        where: {
+          ventas_prospecto_id: prospecto.id
+        }
+      });
+
+      if (existeDuplicado) {
+        console.log(`--> 🔁 [Omitido - Ya existe] ${prospecto.nombre}`);
+        omitidosDuplicado++;
+        continue;
+      }
+
+      // --- E. NORMALIZACIÓN ---
+      let canalDestino = prospecto.canal_contacto;
+      if (canalDestino === "Desde pilates") canalDestino = "Baja Pilates";
+
+      const canalesPermitidos = [
+        "Mostrador", "Whatsapp", "Instagram", "Facebook", "Google",
+        "Llamada", "Otro", "Pagina web", "Campaña",
+        "Comentarios/Stickers", "Baja Pilates"
+      ];
+
+      if (!canalesPermitidos.includes(canalDestino)) {
+        canalDestino = "Mostrador";
+      }
+
+      // --- F. INSERTAR ---
+      const observacionFinal = `Migreado desde ventas: ${prospecto.observacion || "Sin observación original."}`;
+
+      await VentasRemarketingModel.create({
+        ventas_prospecto_id: prospecto.id,
+        recaptacion_id: null,
+        usuario_id: null,
+        sede: (prospecto.sede || "Sede Desconocida").toLowerCase().trim(),
+        nombre_socio: prospecto.nombre,
+        dni: prospecto.dni || "Sin DNI",
+        tipo_prospecto: prospecto.tipo_prospecto || "Nuevo",
+        canal_contacto: canalDestino,
+        contacto: prospecto.contacto || "Sin contacto",
+        actividad: prospecto.actividad,
+        observacion: observacionFinal,
+        fecha: fechaCarga, 
+        
+        // Historial Clases
+        clase_prueba_1_fecha: null,
+        clase_prueba_1_tipo: null,
+        clase_prueba_1_obs: null,
+        clase_prueba_2_fecha: null,
+        clase_prueba_2_tipo: null,
+        clase_prueba_2_obs: null,
+        clase_prueba_3_fecha: null,
+        clase_prueba_3_tipo: null,
+        clase_prueba_3_obs: null,
+
+        contactado: 0, visitas: 0, n_contacto_1: 0, n_contacto_2: 0, n_contacto_3: 0,
+        enviado: 0, respondido: 0, agendado: 0, convertido: 0
+      });
+
+      creados++;
+      console.log(`--> ✅ [Creado] ${prospecto.nombre} (Origen: ${mesOrigenTexto})`);
+    }
+
+    console.log("---------------------------------------------------");
+    console.log(`--> 🏁 Migración Finalizada.`);
+    console.log(`--> ✅ Insertados: ${creados}`);
+    console.log(`--> ⏳ Omitidos (Fecha): ${omitidosPorFecha}`);
+    console.log(`--> 🔁 Omitidos (Duplicados): ${omitidosDuplicado}`);
+    console.log("---------------------------------------------------");
+
+  } catch (error) {
+    console.error("❌ Error en copiarVentasProspectosARemarketing:", error);
+  }
+};
+
 // Obtener las clases programadas para hoy (o fecha dada) para remarketing
 export const OBRS_ClasesHoy_CTS = async (req, res) => {
   try {
@@ -1282,7 +1546,7 @@ export const OBRS_ClasesHoy_CTS = async (req, res) => {
         numero_clase,
         fecha: fecha_clase,
         tipo: tipo_clase,
-        asesor_nombre: plain.usuario?.name || "Sin asesor",
+        asesor_nombre: plain.usuario?.name || "Sistema/Automático",
       };
     });
 
@@ -1520,14 +1784,33 @@ export const POST_convertirRemarketing_CTS = async (req, res) => {
 };
 
 // Tarea programada: se ejecuta el día 1 de cada mes a las 00:10 AM
+//export const SCHEDULE_VentasRemarketingCron = () => {
+//  // Tarea: '10 0 1 * *' -> Minuto 10, Hora 0, Día 1 del mes, Cualquier mes, Cualquier día de la semana
+//  cron.schedule("10 0 1 * *", ejecutarCopiaDeRemarketing, {
+//    //cron.schedule('*/1 * * * *', ejecutarCopiaDeRemarketing, {
+//    scheduled: true,
+//    timezone: "America/Argentina/Tucuman",
+//  });
+//  console.log(
+//    "-> [CRON] Tarea de Remarketing programada para ejecutarse el día 1 de cada mes a las 00:10 AM."
+//  );
+//};
+
 export const SCHEDULE_VentasRemarketingCron = () => {
-  // Tarea: '10 0 1 * *' -> Minuto 10, Hora 0, Día 1 del mes, Cualquier mes, Cualquier día de la semana
-  cron.schedule("10 0 1 * *", ejecutarCopiaDeRemarketing, {
-    //cron.schedule('*/1 * * * *', ejecutarCopiaDeRemarketing, {
+  // --- CONFIGURACIÓN PRODUCCIÓN: Día 1 de cada mes a las 00:10 AM ---
+  const cronExpresion = "10 0 1 * *"; // Minuto 10, Hora 0, Día 1 de cada mes
+
+  // Programar tarea para copiar prospectos de ventas a remarketing
+  cron.schedule(cronExpresion, copiarVentasProspectosARemarketing, {
     scheduled: true,
     timezone: "America/Argentina/Tucuman",
   });
-  console.log(
-    "-> [CRON] Tarea de Remarketing programada para ejecutarse el día 1 de cada mes a las 00:10 AM."
-  );
+
+  // Programar tarea para copiar lista de espera a remarketing
+  cron.schedule(cronExpresion, copiarListaEsperaPilatesAMensualRemarketing, {
+    scheduled: true,
+    timezone: "America/Argentina/Tucuman",
+  });
+
+  console.log("-> [CRON] Tareas programadas para ejecutarse el día 1 de cada mes a las 00:10 AM.");
 };
