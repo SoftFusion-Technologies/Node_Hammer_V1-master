@@ -9,6 +9,8 @@ import UsersModel from "./MD_TB_Users.js";
 import AuditoriaFechaFinModificadaPilatesModel from "./MD_TB_AuditoriaFechaFinModificadaPilates.js";
 import ClientesPilatesHistorialModel from "./MD_TB_ClientesPilatesHistorial.js";
 import ClientesPilatesHistorialDetalleModel from "./MD_TB_ClientesPilatesHistorialDetalle.js";
+import QuejasInternasImagenesModel from "./MD_TB_QuejasInternasImagenes.js";
+import MD_TB_QuejasInternas from "./MD_TB_QuejasInternas.js";
 import HistorialContactosPilatesModel from "./MD_TB_HistorialContactosPilates.js"; 
 import ListaEsperaPilates from "./MD_TB_ListaEsperaPilates.js";
 import ContactosListaEsperaPilatesModel from "./MD_TB_ContactosListaEsperaPilates.js";
@@ -140,7 +142,19 @@ const setupAssociations = () => {
     foreignKey: 'id_usuario',
     as: 'contactos_realizados_pilates'
   });
-// Un contacto pertenece a una persona de la lista de espera
+
+  MD_TB_QuejasInternas.QuejasInternasModel.hasMany(QuejasInternasImagenesModel.QuejasInternasImagenesModel, {
+    foreignKey: "id_queja",
+    as: "imagenes"
+  });
+
+  QuejasInternasImagenesModel.QuejasInternasImagenesModel.belongsTo(MD_TB_QuejasInternas.QuejasInternasModel, {
+    foreignKey: "id_queja",
+    as: "queja"
+  });
+  
+
+  // Un contacto pertenece a una persona de la lista de espera
   ContactosListaEsperaPilatesModel.belongsTo(ListaEsperaPilates, {
     foreignKey: "id_lista_espera",
     as: "persona_espera", // IMPORTANTE: Este alias debe coincidir con el usado en el controlador

@@ -19,6 +19,8 @@
 import MD_TB_QuejasInternas from '../Models/MD_TB_QuejasInternas.js';
 import QuejasPilatesModel from '../Models/MD_TB_QuejasPilates.js';
 import NotificationModel from '../Models/MD_TB_Notifications.js';
+import MD_TB_QuejasInternasImagenes from '../Models/MD_TB_QuejasInternasImagenes.js';
+const ImagenesModel = MD_TB_QuejasInternasImagenes.QuejasInternasImagenesModel;
 import { Op } from 'sequelize';
 
 // Asigna el modelo a una variable
@@ -64,7 +66,7 @@ export const OBRS_Quejas_CTS = async (req, res) => {
     const [registrosInternos, registrosPilates] = await Promise.all([
       QuejasInternasModel.findAll({
         where: whereClause,
-        raw: true // Traemos objetos planos para poder modificarlos fácil
+        include: [{ model: ImagenesModel, as: 'imagenes' }]
       }),
       QuejasPilatesModel.findAll({
         where: whereClause,
@@ -73,14 +75,19 @@ export const OBRS_Quejas_CTS = async (req, res) => {
     ]);
 
     // 2. Procesamos y etiquetamos GIMNASIO
-    const internasMarcadas = registrosInternos.map((q) => ({
-      ...q,
-      // 🔹 Usamos created_at como fecha canon (ya NO dependemos de la columna fecha)
-      fecha: q.created_at,
-      origen: 'GIMNASIO', // Etiqueta para el frontend (Badge)
-      es_pilates: false, // Flag lógico
-      tabla_origen: 'interna' // Útil si necesitas saber a qué endpoint llamar para borrar/editar
-    }));
+    const internasMarcadas = registrosInternos.map((q) => {
+      const quejaPlana = q.get({ plain: true });
+      const tieneImagenes = quejaPlana.imagenes && quejaPlana.imagenes.length > 0;
+      
+      return {
+        ...quejaPlana,
+        fecha: quejaPlana.created_at,
+        origen: 'GIMNASIO', // Etiqueta para el frontend (Badge)
+        es_pilates: false, // Flag lógico
+        tabla_origen: 'interna', // Útil si necesitas saber a qué endpoint llamar para borrar/editar
+        imagenes: tieneImagenes // Booleano que indica si tiene imágenes
+      };
+    });
 
     // 3. Procesamos y etiquetamos PILATES
     const pilatesMarcadas = registrosPilates.map((q) => ({
@@ -91,7 +98,8 @@ export const OBRS_Quejas_CTS = async (req, res) => {
       es_pilates: true,
       tabla_origen: 'pilates',
       tipo_usuario: 'cliente pilates',
-      creado_desde_qr: 0
+      creado_desde_qr: 0,
+      imagenes: false // Las quejas de Pilates no tienen imágenes por ahora
     }));
 
     // 4. UNIFICAMOS ambas listas
@@ -122,20 +130,19 @@ export const OBR_Queja_CTS = async (req, res) => {
         .json({ mensajeError: 'Faltan userName o userLevel.' });
     }
 
-    const registro = await QuejasInternasModel.findByPk(req.params.id);
-    if (!registro)
-      return res.status(404).json({ mensajeError: 'No encontrado.' });
+    const registro = await QuejasInternasModel.findByPk(req.params.id, {
+        include: [{ model: ImagenesModel, as: 'imagenes' }] 
+    });
+
+    if (!registro) return res.status(404).json({ mensajeError: 'No encontrado.' });
 
     // Si no es admin/gerente, solo puede ver lo que cargó él
-    if (
-      !isCoordinator(levelCanon) &&
-      String(registro.cargado_por).toLowerCase() !== email
-    ) {
-      return res.status(403).json({ mensajeError: 'Sin permiso.' });
-    }
+    if (!isCoordinator(levelCanon) && String(registro.cargado_por).toLowerCase() !== email) return res.status(403).json({ mensajeError: 'Sin permiso.' });
+    return res.json(registro);
 
     return res.json(registro);
   } catch (error) {
+    console.log(error);
     return res.status(500).json({ mensajeError: error.message });
   }
 };
@@ -145,32 +152,33 @@ export const CR_Queja_CTS = async (req, res) => {
   const { cargado_por, nombre, motivo, sede } = req.body;
 
   try {
-    // 1. Crear la queja
+    // Crear la queja principal
     const nuevaQueja = await QuejasInternasModel.create(req.body);
 
-    // 2. Crear la notificación relacionada usando Sequelize
-    const notiTitle = 'Nueva queja registrada';
-    const notiMessage = `Queja de ${nombre} en ${sede}. Motivo: ${motivo}`;
-    const module = 'quejas';
-    const reference_id = nuevaQueja.id;
-    const seen_by = [];
-    const created_by = cargado_por;
+    // Si el middleware Multer procesó archivos, los guardamos
+    if (req.files && req.files.length > 0) {
+      const promesas = req.files.map(archivo => {
+        return ImagenesModel.create({
+          id_queja: nuevaQueja.id,
+          tipo: 'QR-PAGINA',
+          url: archivo.filename 
+        });
+      });
+      await Promise.all(promesas);
+    }
 
-    // Crear la notificación en la base de datos
+    // Crear la notificación
     await NotificationModel.create({
-      title: notiTitle,
-      message: notiMessage,
-      module: module,
-      reference_id: reference_id,
-      seen_by: seen_by,
-      created_by: created_by
+      title: 'Nueva queja registrada',
+      message: `Queja de ${nombre} en ${sede}. Motivo: ${motivo}`,
+      module: 'quejas',
+      reference_id: nuevaQueja.id,
+      seen_by: [],
+      created_by: cargado_por
     });
 
-    res.json({
-      message: 'Queja registrada y notificación enviada correctamente'
-    });
+    res.json({ message: 'Queja registrada con éxito' });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ mensajeError: error.message });
   }
 };

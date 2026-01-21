@@ -5663,6 +5663,8 @@ app.put('/promos-mes/:id', multerUpload.single('file'), async (req, res) => {
 // app.use('/public', express.static(join(CURRENT_DIR, '../uploads')));
 app.use('/public', express.static(join(CURRENT_DIR, 'uploads')));
 
+app.use('/uploads', express.static(join(CURRENT_DIR, 'uploads')));
+
 // Servir imágenes estáticas desde la carpeta 'uploads/agendas'
 app.use(
   '/agendas-images-ver',
