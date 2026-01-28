@@ -1322,18 +1322,10 @@ export const copiarVentasProspectosARemarketing = async () => {
       // Diferencia de meses
       const diffMeses = (hoy.getFullYear() - fechaCarga.getFullYear()) * 12 + (hoy.getMonth() - fechaCarga.getMonth());
 
-      // CASO 1: Regla General (No última semana)
-      if (!esUltimaSemana && diffMeses < 1) {
-        // console.log(`--> ⏳ [Omitido - Muy Nuevo] ${prospecto.nombre} (Cargado: ${mesOrigenTexto} | No pasó 1 mes)`);
+      const mesesRequeridos = esUltimaSemana ? 2 : 1;
+      if (diffMeses !== mesesRequeridos) {
         omitidosPorFecha++;
-        continue; 
-      }
-
-      // CASO 2: Regla Última Semana (Necesita 2 meses)
-      if (esUltimaSemana && diffMeses < 2) {
-        // console.log(`--> 📅 [Omitido - Última Semana] ${prospecto.nombre} (Cargado: ${fechaCarga.toLocaleDateString()} | Esperando 2do mes)`);
-        omitidosPorFecha++;
-        continue; 
+        continue;
       }
 
       // --- D. VALIDACIÓN DE DUPLICADOS (CON LOGS) ---
@@ -1379,8 +1371,8 @@ export const copiarVentasProspectosARemarketing = async () => {
         actividad: prospecto.actividad,
         observacion: observacionFinal,
         fecha: fechaDestino,
-        createdAt: fechaDestino,
-        updatedAt: fechaDestino,
+        created_at: fechaDestino,
+        updated_at: fechaDestino,
         
         // Historial Clases
         clase_prueba_1_fecha: null,
