@@ -1137,7 +1137,7 @@ const ejecutarCopiaDeRemarketing = async () => {
 
 export const copiarListaEsperaPilatesAMensualRemarketing = async () => {
   try {
-    console.log("--> 🟢 Iniciando migración de Lista de Espera a Remarketing...");
+    // console.log("--> 🟢 Iniciando migración de Lista de Espera a Remarketing...");
 
     const fechaHoy = new Date();
     // Normalizamos al primer día del mes actual para la validación
@@ -1156,7 +1156,7 @@ export const copiarListaEsperaPilatesAMensualRemarketing = async () => {
       ]
     });
 
-    console.log(`--> 📊 Se encontraron ${contactosRechazados.length} candidatos en Lista de Espera.`);
+    // console.log(`--> 📊 Se encontraron ${contactosRechazados.length} candidatos en Lista de Espera.`);
 
     let creados = 0;
     let omitidos = 0;
@@ -1223,19 +1223,19 @@ export const copiarListaEsperaPilatesAMensualRemarketing = async () => {
       // 6. CREAR REGISTRO REAL
       await VentasRemarketingModel.create(datosParaInsertar);
       creados++;
-      console.log(`--> ✅ [Creado] ${datosParaInsertar.nombre_socio} en ${datosParaInsertar.sede}`);
+      // console.log(`--> ✅ [Creado] ${datosParaInsertar.nombre_socio} en ${datosParaInsertar.sede}`);
     }
 
-    console.log("---------------------------------------------------");
-    console.log(`--> 🏁 Proceso Finalizado.`);
-    console.log(`--> ✅ Insertados: ${creados}`);
-    console.log(`--> ⏭️  Omitidos (Duplicados): ${omitidos}`);
-    console.log("---------------------------------------------------");
+    // console.log("---------------------------------------------------");
+    // console.log(`--> 🏁 Proceso Finalizado.`);
+    // console.log(`--> ✅ Insertados: ${creados}`);
+    // console.log(`--> ⏭️  Omitidos (Duplicados): ${omitidos}`);
+    // console.log("---------------------------------------------------");
 
     // 7. LIMPIEZA: Después de copiar exitosamente, eliminamos de ListaEsperaPilates
     // todos los registros cuyo contacto esté en estado "Rechazado/Sin Respuesta" O "Confirmado"
     if (creados > 0 || omitidos > 0) {
-      console.log("--> 🗑️  Iniciando limpieza de Lista de Espera...");
+      // console.log("--> 🗑️  Iniciando limpieza de Lista de Espera...");
 
       // Obtener IDs de lista de espera a eliminar (aquellos con contactos Rechazados o Confirmados)
       const contactosParaLimpiar = await ContactosListaEsperaPilatesModel.findAll({
@@ -1259,10 +1259,10 @@ export const copiarListaEsperaPilatesAMensualRemarketing = async () => {
           }
         });
 
-        console.log(`--> ✅ Eliminados de Lista de Espera: ${eliminados} registros`);
-        console.log(`--> 🏁 Limpieza completada.`);
+        // console.log(`--> ✅ Eliminados de Lista de Espera: ${eliminados} registros`);
+        // console.log(`--> 🏁 Limpieza completada.`);
       } else {
-        console.log(`--> ℹ️  No hay registros para limpiar en Lista de Espera.`);
+        // console.log(`--> ℹ️  No hay registros para limpiar en Lista de Espera.`);
       }
     }
 
@@ -1273,9 +1273,13 @@ export const copiarListaEsperaPilatesAMensualRemarketing = async () => {
 
 export const copiarVentasProspectosARemarketing = async () => {
   try {
-    console.log("--> 🟢 Iniciando migración INTELIGENTE a Remarketing...");
+    // console.log("--> 🟢 Iniciando migración INTELIGENTE a Remarketing...");
 
     const hoy = new Date();
+    // Normalizamos la fecha al 1er día del mes actual para que el front los muestre en el mes de la copia
+    // y evitar problemas tipo 31 en febrero.
+    const fechaDestino = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    fechaDestino.setHours(0, 0, 0, 0);
 
     // 1. Buscamos TODOS los prospectos no convertidos
     const prospectosPendientes = await VentasProspectosModel.findAll({
@@ -1288,7 +1292,7 @@ export const copiarVentasProspectosARemarketing = async () => {
       }
     });
 
-    console.log(`--> 📊 Analizando ${prospectosPendientes.length} prospectos pendientes...`);
+    // console.log(`--> 📊 Analizando ${prospectosPendientes.length} prospectos pendientes...`);
 
     let creados = 0;
     let omitidosDuplicado = 0;
@@ -1300,7 +1304,7 @@ export const copiarVentasProspectosARemarketing = async () => {
       const fechaCargaRaw = prospecto.fecha || prospecto.createdAt || prospecto.created_at;
 
       if (!fechaCargaRaw) {
-         console.log(`--> ⚠️ [Omitido - Sin Fecha] ID ${prospecto.id} - ${prospecto.nombre}`);
+         // console.log(`--> ⚠️ [Omitido - Sin Fecha] ID ${prospecto.id} - ${prospecto.nombre}`);
          continue;
       }
 
@@ -1320,14 +1324,14 @@ export const copiarVentasProspectosARemarketing = async () => {
 
       // CASO 1: Regla General (No última semana)
       if (!esUltimaSemana && diffMeses < 1) {
-        console.log(`--> ⏳ [Omitido - Muy Nuevo] ${prospecto.nombre} (Cargado: ${mesOrigenTexto} | No pasó 1 mes)`);
+        // console.log(`--> ⏳ [Omitido - Muy Nuevo] ${prospecto.nombre} (Cargado: ${mesOrigenTexto} | No pasó 1 mes)`);
         omitidosPorFecha++;
         continue; 
       }
 
       // CASO 2: Regla Última Semana (Necesita 2 meses)
       if (esUltimaSemana && diffMeses < 2) {
-        console.log(`--> 📅 [Omitido - Última Semana] ${prospecto.nombre} (Cargado: ${fechaCarga.toLocaleDateString()} | Esperando 2do mes)`);
+        // console.log(`--> 📅 [Omitido - Última Semana] ${prospecto.nombre} (Cargado: ${fechaCarga.toLocaleDateString()} | Esperando 2do mes)`);
         omitidosPorFecha++;
         continue; 
       }
@@ -1340,7 +1344,7 @@ export const copiarVentasProspectosARemarketing = async () => {
       });
 
       if (existeDuplicado) {
-        console.log(`--> 🔁 [Omitido - Ya existe] ${prospecto.nombre}`);
+        // console.log(`--> 🔁 [Omitido - Ya existe] ${prospecto.nombre}`);
         omitidosDuplicado++;
         continue;
       }
@@ -1374,7 +1378,9 @@ export const copiarVentasProspectosARemarketing = async () => {
         contacto: prospecto.contacto || "Sin contacto",
         actividad: prospecto.actividad,
         observacion: observacionFinal,
-        fecha: fechaCarga, 
+        fecha: fechaDestino,
+        createdAt: fechaDestino,
+        updatedAt: fechaDestino,
         
         // Historial Clases
         clase_prueba_1_fecha: null,
@@ -1392,15 +1398,15 @@ export const copiarVentasProspectosARemarketing = async () => {
       });
 
       creados++;
-      console.log(`--> ✅ [Creado] ${prospecto.nombre} (Origen: ${mesOrigenTexto})`);
+      // console.log(`--> ✅ [Creado] ${prospecto.nombre} (Origen: ${mesOrigenTexto})`);
     }
 
-    console.log("---------------------------------------------------");
-    console.log(`--> 🏁 Migración Finalizada.`);
-    console.log(`--> ✅ Insertados: ${creados}`);
-    console.log(`--> ⏳ Omitidos (Fecha): ${omitidosPorFecha}`);
-    console.log(`--> 🔁 Omitidos (Duplicados): ${omitidosDuplicado}`);
-    console.log("---------------------------------------------------");
+    // console.log("---------------------------------------------------");
+    // console.log(`--> 🏁 Migración Finalizada.`);
+    // console.log(`--> ✅ Insertados: ${creados}`);
+    // console.log(`--> ⏳ Omitidos (Fecha): ${omitidosPorFecha}`);
+    // console.log(`--> 🔁 Omitidos (Duplicados): ${omitidosDuplicado}`);
+    // console.log("---------------------------------------------------");
 
   } catch (error) {
     console.error("❌ Error en copiarVentasProspectosARemarketing:", error);
