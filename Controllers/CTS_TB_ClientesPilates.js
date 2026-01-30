@@ -14,9 +14,8 @@ import UsuarioPilatesModel from '../Models/MD_TB_UsuariosPilates.js';
 import { CR_EventoHistorial_Alta_CTS } from './CTS_TB_ClientesPilatesHistorial.js';
 import { ER_HistorialPorCliente } from './CTS_TB_ClientesPilatesHistorial.js';
 import HorariosDeshabilitadosPilatesModel from '../Models/MD_TB_Horarios_deshabilitados_pilates.js';
-import { Op } from 'sequelize';
-
-import { MOVER_ClientePilatesARemarketing } from './CTS_TB_VentasRemarketing.js';
+import { ER_RegistrarBajaPilates } from './CTS_TB_PilatesBajas.js';
+import { Op, QueryTypes } from 'sequelize';
 
 if (!HorariosPilatesModel.associations?.instructor) {
   HorariosPilatesModel.belongsTo(UsuarioPilatesModel, {
@@ -315,6 +314,100 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
       });
     }
 
+    // =========================================================
+    // Porcentaje de asistencia por grupo lógico (LMV/MJ + hora)
+    // - Se calcula sobre los alumnos del grupo (plan/renovación válida)
+    // - Renovación válida = estado Renovacion programada y fecha_prometido_pago != null
+    // - No cuenta Clase de prueba ni renovaciones con fecha_prometido_pago null
+    // - Rango: desde inicio del mes actual hasta hoy
+    // =========================================================
+    const porcentajeAsistenciaPorGrupo = new Map();
+
+    const formatYmd = (dateObj) => {
+      if (!(dateObj instanceof Date)) return null;
+      const yyyy = String(dateObj.getFullYear());
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(dateObj.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    const hoy = new Date();
+    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    const inicioMesStr = formatYmd(inicioMes);
+    const hoyStr = formatYmd(hoy);
+
+    // groupKey -> Set(inscripcionId)
+    const inscripcionIdsPorGrupo = new Map();
+    for (const [groupKey, alumnos] of planGroupMap.entries()) {
+      for (const a of alumnos || []) {
+        const estadoLower = (a?.estado || '').toString().trim().toLowerCase();
+        const promisedDate = a?.fecha_prometido_pago ?? null;
+
+        const esPlan = estadoLower === 'plan';
+        const esRenovacionValida =
+          estadoLower === 'renovacion programada' && promisedDate !== null;
+
+        if (!esPlan && !esRenovacionValida) continue;
+        if (a?.sortId === null || a?.sortId === undefined) continue;
+
+        if (!inscripcionIdsPorGrupo.has(groupKey))
+          inscripcionIdsPorGrupo.set(groupKey, new Set());
+        inscripcionIdsPorGrupo.get(groupKey).add(Number(a.sortId));
+      }
+    }
+
+    const allInscripcionIds = Array.from(
+      new Set(
+        Array.from(inscripcionIdsPorGrupo.values()).flatMap((set) =>
+          Array.from(set),
+        ),
+      ),
+    ).filter((x) => Number.isFinite(x));
+
+    if (allInscripcionIds.length > 0) {
+      const asistenciasPorInscripcionRaw = await pool.query(
+        `SELECT
+           a.id_inscripcion AS id_inscripcion,
+           COUNT(*) AS total,
+           SUM(a.presente = 1) AS presentes
+         FROM asistencias_pilates a
+         WHERE a.id_inscripcion IN (:ids)
+           AND a.fecha BETWEEN :inicio AND :fin
+         GROUP BY a.id_inscripcion`,
+        {
+          replacements: {
+            ids: allInscripcionIds,
+            inicio: inicioMesStr,
+            fin: hoyStr
+          },
+          type: QueryTypes.SELECT
+        },
+      );
+
+      const asistenciasPorInscripcion = new Map();
+      for (const r of asistenciasPorInscripcionRaw || []) {
+        const idInscripcion = Number(r.id_inscripcion);
+        if (!idInscripcion) continue;
+        asistenciasPorInscripcion.set(idInscripcion, {
+          total: Number(r.total || 0),
+          presentes: Number(r.presentes || 0)
+        });
+      }
+
+      for (const [groupKey, idsSet] of inscripcionIdsPorGrupo.entries()) {
+        let total = 0;
+        let presentes = 0;
+        for (const idInscripcion of idsSet) {
+          const data = asistenciasPorInscripcion.get(Number(idInscripcion));
+          if (!data) continue;
+          total += Number(data.total || 0);
+          presentes += Number(data.presentes || 0);
+        }
+        const pct = total > 0 ? (presentes * 100) / total : 0;
+        porcentajeAsistenciaPorGrupo.set(groupKey, Number(pct.toFixed(2)));
+      }
+    }
+
     // Construcción final del objeto de horarios con alumnos
     const schedule = {};
 
@@ -405,6 +498,7 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
 
       schedule[horarioKey] = {
         coach: coachUpper,
+        porcentaje_asistencia_clases: porcentajeAsistenciaPorGrupo.get(groupKey) ?? 0,
         horarioId: horario.id,
         coachId: instructor?.id ?? null,
         alumnos: alumnosProcesados
@@ -713,31 +807,39 @@ export const UR_ClientesPilates_PlanRenovacion_CTS = async (req, res) => {
 export const ER_ClienteConInscripciones_CTS = async (req, res) => {
   try {
     const { id } = req.params;
-
-    // 1. Buscar inscripciones del cliente
-    const inscripciones = await InscripcionesPilatesModel.findAll({
-      where: { id_cliente: id },
-      attributes: ['id']
-    });
-    const inscripcionesIds = inscripciones.map((i) => i.id);
-
-    // 2. Eliminar asistencias vinculadas a esas inscripciones
-    if (inscripcionesIds.length > 0) {
-      await AsistenciasPilatesModel.destroy({
-        where: { id_inscripcion: inscripcionesIds }
-      });
-    }
-
-    // 3. Eliminar inscripciones del cliente
-    await InscripcionesPilatesModel.destroy({ where: { id_cliente: id } });
-
-    // 4. Eliminar el cliente
+    const {motivoCausa, idUsuarioGestion} = req.body;
+    
+    // 1. Eliminar el cliente
     const cliente = await ClientesPilatesModel.findByPk(id);
     if (!cliente) {
       return res
         .status(404)
         .json({ success: false, message: 'Cliente no encontrado' });
     }
+
+    // 2. Registrar en historial de bajas antes de eliminar inscripciones
+    try {
+      await ER_RegistrarBajaPilates(id, motivoCausa, idUsuarioGestion);
+    } catch (err) {
+      console.error('No se pudo registrar la baja en historial', err);
+    }
+
+    // 3. Buscar inscripciones del cliente
+    const inscripciones = await InscripcionesPilatesModel.findAll({
+      where: { id_cliente: id },
+      attributes: ['id']
+    });
+    const inscripcionesIds = inscripciones.map((i) => i.id);
+
+    // 4. Eliminar asistencias vinculadas a esas inscripciones
+    if (inscripcionesIds.length > 0) {
+      await AsistenciasPilatesModel.destroy({
+        where: { id_inscripcion: inscripcionesIds }
+      });
+    }
+
+    // 5. Eliminar inscripciones del cliente
+    await InscripcionesPilatesModel.destroy({ where: { id_cliente: id } });
 
     await ER_HistorialPorCliente(id);
     await cliente.destroy();

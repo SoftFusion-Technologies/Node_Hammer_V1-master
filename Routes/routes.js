@@ -371,6 +371,10 @@ import {
 } from '../Controllers/CTS_TB_ClientesPilates.js';
 
 import {
+  OBRS_BajasPilates_CTS
+} from '../Controllers/CTS_TB_PilatesBajas.js';
+
+import {
   OBRS_InscripcionesPilates_CTS,
   OBR_InscripcionesPilates_CTS,
   CR_InscripcionesPilates_CTS,
@@ -412,6 +416,18 @@ import {
   UR_HorarioDeshabilitadoPilates_CTS
 } from '../Controllers/CTS_TB_HorariosDeshabilitadosPilates.js';
 
+/* --------------------------------------------
+-------FIN DE CODIGO MODIFICADO Sergio Manrique---------
+-------------------------------------------- */
+
+/* --------------------------------------------
+-------INICIO DE CODIGO MODIFICADO Sergio Manrique FECHA 30-01-2026---------
+-------------------------------------------- */
+import { 
+  CR_sincronizarEstadisticas,
+  OBRS_EstadisticasCompletas,
+  OBRS_EstadisticasMesConMes
+} from "../Controllers/CTS_TB_PilatesEstadisticas.js";
 /* --------------------------------------------
 -------FIN DE CODIGO MODIFICADO Sergio Manrique---------
 -------------------------------------------- */
@@ -1157,7 +1173,7 @@ router.get(
   '/ventas_prospectos/alumnos-ultima-semana-mes-anterior',
   OBRS_VentasProspectosUltimaSemanaMesAnterior_CTS
 );
-/* FIN DE RUTAS INTEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
+/* FIN DE RUTAS INTGEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
 
 // Obtener un prospecto por ID
 router.get('/ventas_prospectos/:id', OBR_VentasProspecto_CTS);
@@ -1241,7 +1257,7 @@ router.post(
   '/ventas-remarketing/agenda/generar-hoy',
   /* requireAuth, */ POST_GenerarAgendaHoyRemarketing
 );
-/* FIN DE RUTAS INTEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
+/* FIN DE RUTAS INTGEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
 
 
 // ----------------------------------------------------------------
@@ -1284,6 +1300,9 @@ router.get(
 );
 router.put('/auditoria-pilates/cliente/:cliente_id', UR_AuditoriaFechaFin_CTS);
 
+/*  RUTAS INTGEGRADAS POR SERGIO MANRIQUE 30-01-2026 */
+router.get('/bajas-pilates/:id_sede', OBRS_BajasPilates_CTS);
+/* FIN DE RUTAS INTGEGRADAS POR SERGIO MANRIQUE 30-01-2026 */
 // ----------------------------------------------------------------
 // Rutas para operaciones CRUD en la tabla 'inscripciones_pilates'
 router.get('/inscripciones-pilates', OBRS_InscripcionesPilates_CTS);
@@ -1366,6 +1385,19 @@ router.delete("/pilates/historial-contactos/:id", ER_HistorialContacto_CTS);
 //  HECHO POR SERGIO MANRIQUE, FECHA: 22/12/2025
 //  FIN DE MODULO: ALUMNOS AUSENTES Y SEGUIMIENTO (Pilates)
 // =======================================================
+
+// =======================================================
+//  HECHO POR SERGIO MANRIQUE, FECHA: 22/01/2026
+//  FIN DE MODULO
+// =======================================================
+router.post('/pilates/estadisticas/sincronizar', CR_sincronizarEstadisticas); // Para insertar datos existentes
+router.get('/pilates/estadisticas/completo', OBRS_EstadisticasCompletas); 
+router.get('/pilates/estadisticas/completo/mes-con-mes', OBRS_EstadisticasMesConMes);
+// =======================================================
+//  HECHO POR SERGIO MANRIQUE, FECHA: 22/01/2026
+//  FIN DE MODULO
+// =======================================================
+
 
 router.post('/ventas-prospectos-horarios', CR_VentasProspectosHorario_CTS);
 router.get(

@@ -15,7 +15,15 @@ import HistorialContactosPilatesModel from "./MD_TB_HistorialContactosPilates.js
 import ListaEsperaPilates from "./MD_TB_ListaEsperaPilates.js";
 import ContactosListaEsperaPilatesModel from "./MD_TB_ContactosListaEsperaPilates.js";
 import { VentasComisionesRemarketingModel } from "./MD_TB_Ventas_comisiones_remarketing.js";
+const { SedeModel } = Sedes;
+import Sedes from "./MD_TB_sedes.js";
 import VentasRemarketingModel from "./MD_TB_VentasRemarketing.js";
+import PilatesBajasHistorial from "./MD_TB_PilatesBajasHistorial.js";
+import PilatesEstadisticasMensuales from "./MD_TB_PilatesEstadisticasMensuales.js";
+import PilatesEstadisticasPlanes from "./MD_TB_PilatesEstadisticasPlanes.js";
+import PilatesEstadisticasInstructores from "./MD_TB_PilatesEstadisticasInstructores.js";
+import UsuarioPilates from "./MD_TB_UsuariosPilates.js";
+
 
 // 2. Creamos una función para configurar las asociaciones
 const setupAssociations = () => {
@@ -192,7 +200,31 @@ const setupAssociations = () => {
     onUpdate: "CASCADE"
   });
 
-  console.log("Relaciones de Sequelize configuradas correctamente.");
+
+  // ===============================
+  // Relaciones de Inteligencia Pilates
+  // ===============================
+  PilatesBajasHistorial.belongsTo(SedeModel, { foreignKey: 'id_sede', as: 'sede' });
+
+  // Asociación: Baja gestionada por un usuario
+  PilatesBajasHistorial.belongsTo(UsersModel, {
+    foreignKey: "id_usuario_gestion",
+    as: "usuario_gestion"
+  });
+
+  // Estadísticas Mensuales y Planes
+  PilatesEstadisticasMensuales.belongsTo(SedeModel, { foreignKey: 'id_sede', as: 'sede' });
+  PilatesEstadisticasPlanes.belongsTo(SedeModel, { foreignKey: 'id_sede', as: 'sede' });
+
+
+  // Relación Instructores con Horarios
+  UsuarioPilates.hasMany(HorariosPilatesModel, { foreignKey: 'id_instructor', as: 'horarios' });
+
+  // Rendimiento Instructores
+  PilatesEstadisticasInstructores.belongsTo(UsuarioPilates, { foreignKey: 'usuario_id', as: 'usuarioInstructor' });
+  PilatesEstadisticasInstructores.belongsTo(SedeModel, { foreignKey: 'id_sede', as: 'sede' });
+
+  console.log("Relaciones de Inteligencia Pilates configuradas correctamente.");
 };
 
 // 3. Exportamos la función

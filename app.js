@@ -76,6 +76,7 @@ initConveniosRelaciones();
 // BENJAMIN ORELLANA 22-12-2025  IMPORTACIÓN DE MODELOS DE CONVENIOS INI
 import MD_TB_IntegrantesConve from './Models/MD_TB_IntegrantesConve.js';
 import MD_TB_ConveniosPlanesDisponibles from './Models/MD_TB_ConveniosPlanesDisponibles.js';
+import { programarSincronizacionEstadisticasPilatesDiario } from './Controllers/CTS_TB_PilatesEstadisticas.js';
 
 const IntegrantesConveModel = MD_TB_IntegrantesConve.IntegrantesConveModel;
 const ConveniosPlanesDisponiblesModel =
@@ -274,6 +275,9 @@ cron.schedule('0 0 * * *', () => {
   console.log('Cron job iniciado - eliminando novedades vencidas...');
   deleteOldNovedades();
 });
+
+//Cron importado de CTS_TB_PilatesEstadisticas.js para sincronizar estadisticas pilates diario
+programarSincronizacionEstadisticasPilatesDiario();
 
 const pool = mysql.createPool({
   host: 'localhost',
