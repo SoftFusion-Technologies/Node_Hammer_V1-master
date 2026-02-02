@@ -45,13 +45,6 @@ const whereClienteActivoParaConteos = {
   ],
 };
 
-const normalizarNombre = (valor) =>
-  (valor || "")
-    .toString()
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
 
 // Helper para determinar nombre de plan
 const obtenerNombrePlan = (inicio, fin) => {
@@ -69,7 +62,33 @@ const obtenerNombrePlan = (inicio, fin) => {
 // ============================================================================
 export const CR_sincronizarEstadisticas = async (req, res) => {
   try {
-    const { id_sede, anio, mes } = req.body;
+    if (!req?.body?.id_sede) {
+      const anio_actual = moment().year();
+      const mes_actual = moment().month() + 1;
+
+      const sedes_para_actualizar = await SedeModel.findAll({
+        where: {
+          nombre: { [Op.ne]: "Multisede" },
+          es_ciudad: 1,
+          cupo_maximo_pilates: { [Op.ne]: null },
+        },
+      });
+
+      for (const sede_item of sedes_para_actualizar) {
+        await CR_sincronizarEstadisticas(
+          { body: { id_sede: sede_item.id, anio: anio_actual, mes: mes_actual } },
+          { status: () => ({ json: () => {} }), json: () => {} }
+        );
+      }
+      /* console.log(`[CRON] Iniciando sincronización automática: Periodo ${mes_actual}/${anio_actual}`);
+      console.log(`[CRON] Sedes encontradas para procesar: ${sedes_para_actualizar.map(s => s.nombre).join(", ")}`);
+      console.log(`[CRON] Procesamiento finalizado para todas las sedes. ${sedes_para_actualizar.map(s => s.id ).join(", ")}`); */
+
+      if (res) return res.json({ message: "Sincronización automática de todas las sedes completada." });
+      return;
+    }
+    const { id_sede, anio = moment().year(), mes = moment().month() + 1 } = req.body;
+    /* console.log(`[LOG-SYNC] Ejecutando: Sede ID ${id_sede} | Periodo ${mes}/${anio}`); */
 
     const sedeInfo = await SedeModel.findOne({
       where: { id: id_sede, es_ciudad: 1 },
@@ -83,8 +102,11 @@ export const CR_sincronizarEstadisticas = async (req, res) => {
     const fechaFin = moment(fechaInicio).endOf("month").toDate();
 
     // --- A. RETENCIÓN GLOBAL & ALTAS/BAJAS ---
-    // 1. Clientes Iniciales: Ahora incluimos el modelo Clientes para tener el nombre
-    const clientesInicioRaw = await InscripcionesPilatesModel.findAll({
+    // Lógica simple: contar inscripciones únicas por período
+    // No restamos bajas porque son eventos separados
+    
+    // 1. Clientes Iniciales: inscritos antes del 1° del mes
+    const cantidad_inicio = await InscripcionesPilatesModel.count({
       where: { fecha_inscripcion: { [Op.lt]: fechaInicio } },
       include: [
         {
@@ -93,35 +115,26 @@ export const CR_sincronizarEstadisticas = async (req, res) => {
           where: { id_sede },
           attributes: [],
         },
-        { model: ClientesPilates, as: "cliente", attributes: ["nombre"] }, // Necesario para comparar con bajas
+        {
+          model: ClientesPilates,
+          as: "cliente",
+          where: whereClienteActivoParaConteos,
+          attributes: [],
+        },
       ],
-      attributes: ["id_cliente"],
-      group: ["id_cliente", "cliente.id"],
-      raw: true,
-      nest: true,
+      distinct: true,
+      col: "id_cliente",
     });
-    const cantidad_inicio = clientesInicioRaw.length;
 
-    // 2. Bajas del Mes: Obtenemos los nombres registrados en el historial
-    const bajasDelMes = await PilatesBajasHistorial.findAll({
+    // 2. Bajas DURANTE el mes (solo para reporte, no afecta conteo de inscritos)
+    const bajasDelMes = await PilatesBajasHistorial.count({
       where: {
         id_sede,
         fecha_baja: { [Op.between]: [fechaInicio, fechaFin] },
       },
-      attributes: ["nombre_cliente"],
-      raw: true,
     });
 
-    const nombresBajas = new Set(
-      bajasDelMes.map((b) => normalizarNombre(b.nombre_cliente)),
-    );
-
-    // Calculamos cuántos siguen comparando nombres (ya no IDs)
-    const siguen = clientesInicioRaw.filter(
-      (c) => !nombresBajas.has(normalizarNombre(c.cliente?.nombre)),
-    ).length;
-
-    // 3. Altas del Mes
+    // 3. Altas del Mes: inscripciones nuevas durante el mes
     const altas = await InscripcionesPilatesModel.count({
       where: { fecha_inscripcion: { [Op.between]: [fechaInicio, fechaFin] } },
       include: [
@@ -132,16 +145,105 @@ export const CR_sincronizarEstadisticas = async (req, res) => {
           attributes: [],
         },
       ],
+      distinct: true,
+      col: "id_cliente",
     });
 
-    // Cálculo de retención: (cantidad_fin / cantidad_inicio) * 100
-    const cantidad_fin = siguen + altas;
+    // 4. Clientes Finales: inscritos hasta el último día del mes
+    const cantidad_fin = await InscripcionesPilatesModel.count({
+      where: { fecha_inscripcion: { [Op.lte]: fechaFin } },
+      include: [
+        {
+          model: HorariosPilatesModel,
+          as: "horario",
+          where: { id_sede },
+          attributes: [],
+        },
+        {
+          model: ClientesPilates,
+          as: "cliente",
+          where: whereClienteActivoParaConteos,
+          attributes: [],
+        },
+      ],
+      distinct: true,
+      col: "id_cliente",
+    });
+
+    // Cálculo de retención
     const porcentaje_retencion =
       cantidad_inicio > 0 ? (cantidad_fin * 100) / cantidad_inicio : 0;
-
+    
+/*     console.log(`[SYNC ${mes}/${anio}] Sede ${id_sede}: inicio=${cantidad_inicio}, fin=${cantidad_fin}, bajas=${bajasDelMes}, altas=${altas}`);
+ */
     // --- B. OCUPACIÓN & ASISTENCIA ---
-    const totalCuposSede =
-      (await HorariosPilatesModel.count({ where: { id_sede } })) * 4;
+const horasRaw = await HorariosPilatesModel.findAll({
+      where: {
+        id_sede,
+        dia_semana: {
+          [Op.in]: ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes"],
+        },
+      },
+      attributes: [
+        "hora_inicio",
+        [
+          fn(
+            "MAX",
+            literal(
+              "CASE WHEN dia_semana IN ('Lunes','Miercoles','Viernes') THEN 1 ELSE 0 END",
+            ),
+          ),
+          "has_lmv",
+        ],
+        [
+          fn(
+            "MAX",
+            literal(
+              "CASE WHEN dia_semana IN ('Martes','Jueves') THEN 1 ELSE 0 END",
+            ),
+          ),
+          "has_mj",
+        ],
+      ],
+      group: ["hora_inicio"],
+      raw: true,
+    });
+
+    // 2. CAMBIO AQUI: Traemos los bloqueos activos de la sede
+    const bloqueos = await HorariosDeshabilitadosPilatesModel.findAll({
+      where: { sede_id: id_sede },
+      attributes: ["hora_label", "tipo_bloqueo"],
+      raw: true,
+    });
+
+    const bloqueosPorHora = new Map();
+    for (const b of bloqueos) {
+      if (!bloqueosPorHora.has(b.hora_label))
+        bloqueosPorHora.set(b.hora_label, new Set());
+      bloqueosPorHora.get(b.hora_label).add(b.tipo_bloqueo);
+    }
+
+    const cupoMaximo = sedeInfo?.cupo_maximo_pilates || 0;
+    let cuposHabilitados = 0;
+
+    for (const h of horasRaw) {
+      const label = moment(h.hora_inicio, "HH:mm:ss").format("HH:mm");
+      const tipos = bloqueosPorHora.get(label) || new Set();
+      let lmvOn = Number(h.has_lmv || 0);
+      let mjOn = Number(h.has_mj || 0);
+
+      if (tipos.has("todos")) {
+        lmvOn = 0;
+        mjOn = 0;
+      } else {
+        if (tipos.has("lmv")) lmvOn = 0;
+        if (tipos.has("mj")) mjOn = 0;
+      }
+
+      cuposHabilitados += (lmvOn + mjOn) * cupoMaximo;
+    }
+
+    const totalCuposSede = cuposHabilitados
     const alumnosActivos = await InscripcionesPilatesModel.count({
       include: [
         {
@@ -247,8 +349,8 @@ export const CR_sincronizarEstadisticas = async (req, res) => {
         anio,
         mes,
         cantidad_inicio_mes: cantidad_inicio,
-        cantidad_fin_mes: siguen + altas,
-        alumnos_dia_uno_que_siguen: siguen,
+        cantidad_fin_mes: cantidad_fin,
+        alumnos_dia_uno_que_siguen: cantidad_fin - altas,
         porcentaje_retencion_global: porcentaje_retencion.toFixed(2),
         porcentaje_ocupacion_total: porcentaje_ocupacion.toFixed(2),
         asistencias_totales_mes: asistenciasTotales,
@@ -261,10 +363,10 @@ export const CR_sincronizarEstadisticas = async (req, res) => {
         ltv_total_bajas,
       });
     } else {
+      // Actualizar SIN tocar cantidad_inicio_mes (se congela una sola vez)
       await estadisticasExistentes.update({
-        cantidad_inicio_mes: cantidad_inicio,
-        cantidad_fin_mes: siguen + altas,
-        alumnos_dia_uno_que_siguen: siguen,
+        cantidad_fin_mes: cantidad_fin,
+        alumnos_dia_uno_que_siguen: cantidad_fin - altas,
         porcentaje_retencion_global: porcentaje_retencion.toFixed(2),
         porcentaje_ocupacion_total: porcentaje_ocupacion.toFixed(2),
         asistencias_totales_mes: asistenciasTotales,
@@ -723,10 +825,24 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
     });
     if (!sedeInfo) return res.status(403).json({ message: "Sede no válida." });
 
+    const fechaInicioMesMoment = moment(`${anio}-${mes}-01`).startOf("month");
+    const fechaFinMesMoment = moment(`${anio}-${mes}-01`).endOf("month");
+    const fechaInicioMes = fechaInicioMesMoment.toDate();
+    const fechaFinMes = fechaFinMesMoment.toDate();
+    const fechaInicioMesStr = fechaInicioMesMoment.format("YYYY-MM-DD");
+    const fechaFinMesStr = fechaFinMesMoment.format("YYYY-MM-DD");
+    
+/*     console.log(`Rango de fechas: ${fechaInicioMesStr} a ${fechaFinMesStr}`)
+ */
     // 2. Recuperar Datos Mensuales (Ya procesados por la sincronización)
     let estadisticasMes = await PilatesEstadisticasMensuales.findOne({
       where: { id_sede, anio, mes },
     });
+
+    /* console.log(`Datos encontrados en PilatesEstadisticasMensuales:`, estadisticasMes ? 'SÍ' : 'NO')
+    if (estadisticasMes) {
+      console.log(`Cantidad inicio mes: ${estadisticasMes.cantidad_inicio_mes}, Cantidad fin: ${estadisticasMes.cantidad_fin_mes}`)
+    } */
 
     if (!estadisticasMes) {
       estadisticasMes = {
@@ -763,16 +879,11 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
       totalSociosEstudiados: estadisticasMes.ltv_total_bajas || 0,
     };
 
-    // 5. Fechas para Mostrador y Filtros
+    // 5. Fecha del mostrador (para filtrar datos hasta qué día mostrar)
     // Regla:
     // - Si el front manda `fecha`, la usamos tal cual.
     // - Si NO manda `fecha`, usamos como máximo "hoy" pero dentro del mes consultado,
     //   y si para ese día no hay asistencias creadas, caemos al ÚLTIMO día con datos.
-    const fechaInicioMesMoment = moment(`${anio}-${mes}-01`).startOf("month");
-    const fechaFinMesMoment = moment(`${anio}-${mes}-01`).endOf("month");
-    const fechaInicioMes = fechaInicioMesMoment.toDate();
-    const fechaFinMes = fechaFinMesMoment.toDate();
-
     const fechaSolicitada = fecha ? moment(fecha).format("YYYY-MM-DD") : null;
     const hoyMoment = moment().startOf("day");
     const fechaTopeSinParametro = moment
@@ -799,7 +910,6 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
       if (maxFecha) fechaMostrador = moment(maxFecha).format("YYYY-MM-DD");
     }
 
-    const fechaInicioMesStr = fechaInicioMesMoment.format("YYYY-MM-DD");
     const fechaMostradorStr = fechaMostrador;
 
     // 6. Cálculos en vivo para el Mostrador Diario (cupos por grupos LMV/MJ y bloqueos)
@@ -849,6 +959,7 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
     }
 
     const inscLmvRaw = await InscripcionesPilatesModel.findAll({
+      where: { fecha_inscripcion: { [Op.lte]: fechaFinMes } },
       include: [
         {
           model: HorariosPilatesModel,
@@ -857,6 +968,12 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
             id_sede,
             dia_semana: { [Op.in]: ["Lunes", "Miercoles", "Viernes"] },
           },
+          attributes: [],
+        },
+        {
+          model: ClientesPilates,
+          as: "cliente",
+          where: whereClienteActivoParaConteos,
           attributes: [],
         },
       ],
@@ -869,11 +986,18 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
     });
 
     const inscMjRaw = await InscripcionesPilatesModel.findAll({
+      where: { fecha_inscripcion: { [Op.lte]: fechaFinMes } },
       include: [
         {
           model: HorariosPilatesModel,
           as: "horario",
           where: { id_sede, dia_semana: { [Op.in]: ["Martes", "Jueves"] } },
+          attributes: [],
+        },
+        {
+          model: ClientesPilates,
+          as: "cliente",
+          where: whereClienteActivoParaConteos,
           attributes: [],
         },
       ],
@@ -926,7 +1050,7 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
     const cuposDeshabilitados = Math.max(0, cuposTeoricos - cuposHabilitados);
     const totalCupos = cuposHabilitados;
     const turnosLibres = Math.max(0, totalCupos - inscriptosHoy);
-    // Filtrar planes vencidos por sede a través de la inscripción -> horario
+    // Filtrar planes vencidos por sede a través de la inscripción -> horario (con filtro de fecha de inscripción)
     const planesVencidos = await ClientesPilates.count({
       where: { estado: "Plan", fecha_fin: { [Op.lt]: fechaMostrador } },
       include: [
@@ -934,6 +1058,7 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
           model: InscripcionesPilatesModel,
           as: "inscripciones",
           required: true,
+          where: { fecha_inscripcion: { [Op.lte]: fechaFinMes } },
           include: [
             {
               model: HorariosPilatesModel,
@@ -1104,6 +1229,7 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
     };
 
     const conteoGruposActualRaw = await InscripcionesPilatesModel.findAll({
+      where: { fecha_inscripcion: { [Op.lte]: fechaFinMes } },
       include: [
         {
           model: HorariosPilatesModel,
@@ -1178,8 +1304,13 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
        FROM asistencias_pilates a
        JOIN inscripciones_pilates i ON i.id = a.id_inscripcion
        JOIN horarios_pilates h ON h.id = i.id_horario
+       JOIN clientes_pilates c ON c.id = i.id_cliente
        WHERE h.id_sede = :id_sede
          AND a.fecha BETWEEN :inicio_mes AND :fin_hasta
+         AND (
+           c.estado = 'Plan'
+           OR (c.estado = 'Renovacion programada' AND c.fecha_prometido_pago IS NOT NULL)
+         )
        GROUP BY grupo, hora_inicio`,
       {
         replacements: {
@@ -1258,17 +1389,12 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
     });
 
     const alumnosInscritosActuales = await InscripcionesPilatesModel.count({
+      where: { fecha_inscripcion: { [Op.lte]: fechaFinMes } },
       include: [
         {
           model: HorariosPilatesModel,
           as: "horario",
           where: { id_sede },
-          attributes: [],
-        },
-        {
-          model: ClientesPilates,
-          as: "cliente",
-          where: whereClienteActivoParaConteos,
           attributes: [],
         },
       ],
@@ -1278,7 +1404,7 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
 
     const porcentajeOcupacionActual =
       totalCupos > 0
-        ? (Number(alumnosInscritosActuales || 0) * 100) / totalCupos
+        ? (Number(estadisticasMes.cantidad_fin_mes || 0) * 100) / totalCupos
         : 0;
 
     // =========================================================
@@ -1302,6 +1428,7 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
         alumnosInscritos: alumnosInscritosActuales,
         turnosHabilitados: totalCupos,
         porcentajeOcupacion: parseFloat(porcentajeOcupacionActual.toFixed(2)),
+        alumnosInscriptosContratados: estadisticasMes.cantidad_fin_mes,
       },
       asistenciaPromedio: parseFloat(porcentajeAsistenciaMes.toFixed(2)),
       retencionPorInstructor: instructoresStats.map((i) => {
@@ -1465,6 +1592,71 @@ export const OBRS_EstadisticasMesConMes = async (req, res) => {
       raw: true,
     });
 
+    const horasRaw = await HorariosPilatesModel.findAll({
+      where: {
+        id_sede,
+        dia_semana: {
+          [Op.in]: ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes"],
+        },
+      },
+      attributes: [
+        "hora_inicio",
+        [
+          fn(
+            "MAX",
+            literal(
+              "CASE WHEN dia_semana IN ('Lunes','Miercoles','Viernes') THEN 1 ELSE 0 END",
+            ),
+          ),
+          "has_lmv",
+        ],
+        [
+          fn(
+            "MAX",
+            literal(
+              "CASE WHEN dia_semana IN ('Martes','Jueves') THEN 1 ELSE 0 END",
+            ),
+          ),
+          "has_mj",
+        ],
+      ],
+      group: ["hora_inicio"],
+      raw: true,
+    });
+
+    const bloqueos = await HorariosDeshabilitadosPilatesModel.findAll({
+      where: { sede_id: id_sede },
+      attributes: ["hora_label", "tipo_bloqueo"],
+      raw: true,
+    });
+
+    const bloqueosPorHora = new Map();
+    for (const b of bloqueos) {
+      if (!bloqueosPorHora.has(b.hora_label))
+        bloqueosPorHora.set(b.hora_label, new Set());
+      bloqueosPorHora.get(b.hora_label).add(b.tipo_bloqueo);
+    }
+
+    const cupoMaximo = sedeInfo?.cupo_maximo_pilates || 0;
+    let capacidadRealHabilitada = 0;
+
+    for (const h of horasRaw) {
+      const label = moment(h.hora_inicio, "HH:mm:ss").format("HH:mm");
+      const tipos = bloqueosPorHora.get(label) || new Set();
+      let lmvOn = Number(h.has_lmv || 0);
+      let mjOn = Number(h.has_mj || 0);
+
+      if (tipos.has("todos")) {
+        lmvOn = 0;
+        mjOn = 0;
+      } else {
+        if (tipos.has("lmv")) lmvOn = 0;
+        if (tipos.has("mj")) mjOn = 0;
+      }
+
+      capacidadRealHabilitada += (lmvOn + mjOn) * cupoMaximo;
+    }
+
     // 4. Enriquecer cada mes con datos adicionales (Queries en paralelo)
     const resultado = await Promise.all(
       evolucionMensualRaw.map(async (mesActual, index) => {
@@ -1513,18 +1705,13 @@ export const OBRS_EstadisticasMesConMes = async (req, res) => {
         });
 
         // --- D. Cupos y Turnos (Cálculo derivado) ---
-        // Si ocupación = (inscritos / cupos) * 100  => Cupos = (inscritos * 100) / ocupación
         const inscritosFin = parseInt(mesActual.cantidad_fin_mes || 0);
-        const ocupacion = parseFloat(mesActual.porcentaje_ocupacion_total || 0);
-        let cupos_habilitados = 0;
-
-        if (ocupacion > 0) {
-          cupos_habilitados = Math.round((inscritosFin * 100) / ocupacion);
-        } else {
-          // Fallback si ocupación es 0: estimar con cupo maximo sede * horas promedio (o devolver 0)
-          cupos_habilitados = 0;
-        }
+        const cupos_habilitados = capacidadRealHabilitada;
         const turnos_libres = Math.max(0, cupos_habilitados - inscritosFin);
+        
+        const ocupacion = cupos_habilitados > 0 
+          ? parseFloat(((inscritosFin * 100) / cupos_habilitados).toFixed(2)) 
+          : 0;
 
         // --- E. Instructores (Agregación) ---
         const statsInstructores = await PilatesEstadisticasInstructores.findAll(
@@ -1599,7 +1786,7 @@ export const OBRS_EstadisticasMesConMes = async (req, res) => {
           porcentaje_retencion_global: parseFloat(
             mesActual.porcentaje_retencion_global || 0,
           ),
-          porcentaje_ocupacion_total: ocupacion,
+          porcentaje_ocupacion_total: ocupacion, 
           asistencias_totales_mes: parseInt(
             mesActual.asistencias_totales_mes || 0,
           ),
@@ -1666,7 +1853,7 @@ export const programarSincronizacionEstadisticasPilatesDiario = () => {
   // Todos los días a las 23:55
   const cronExpresion = "55 23 * * *";
 
-  cron.schedule(cronExpresion, CR_sincronizarEstadisticas, {
+  cron.schedule(cronExpresion, () => CR_sincronizarEstadisticas({}, null), {
     scheduled: true,
     timezone: "America/Argentina/Tucuman",
     name: "sincronizar-estadisticas-pilates-diario",
