@@ -15,6 +15,10 @@
 import PilatesBajasHistorial from "../Models/MD_TB_PilatesBajasHistorial.js";
 import UsersModel from "../Models/MD_TB_Users.js";
 import { SedeModel } from "../Models/MD_TB_sedes.js";
+import ClientesPilates from "../Models/MD_TB_ClientesPilates.js";
+import InscripcionesPilatesModel from "../Models/MD_TB_InscripcionesPilates.js";
+import { HorariosPilatesModel } from "../Models/MD_TB_HorariosPilates.js";
+import moment from "moment";
 
 // GET: Listar todas las bajas de pilates con nombre del cliente, sede y usuario que gestionó la baja
 export const OBRS_BajasPilates_CTS = async (req, res) => {
