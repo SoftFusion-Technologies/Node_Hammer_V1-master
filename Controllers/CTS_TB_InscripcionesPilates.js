@@ -15,6 +15,7 @@ import db from "../DataBase/db.js";
 import InscripcionesPilatesModel from "../Models/MD_TB_InscripcionesPilates.js";
 import AsistenciasPilatesModel from "../Models/MD_TB_AsistenciasPilates.js";
 import ClientesPilatesModel from "../Models/MD_TB_ClientesPilates.js";
+import dayjs from "dayjs";
 const AsistenciasModel = AsistenciasPilatesModel.AsistenciasPilatesModel;
 
 // Obtener todas las inscripciones
@@ -157,37 +158,59 @@ export const UR_InscripcionesPilates_CTS = async (req, res) => {
 export const UR_CambiarTurnoInscripcion_CTS = async (req, res) => {
   try {
     // 1. Obtenemos los datos que nos manda el frontend.
-    const { id_estudiante, id_horario_anterior, id_horario_nuevo } = req.body;
+    const { id_estudiante, id_horario_nuevo, fecha_nueva_fin } = req.body;
 
     // 2. Verificamos que tengamos toda la información necesaria.
-    if (!id_estudiante || !id_horario_anterior || !id_horario_nuevo) {
+    if (!id_estudiante || !id_horario_nuevo) {
       return res.status(400).json({
         mensajeError:
-          "Faltan datos. Se requiere id_estudiante, id_horario_anterior y id_horario_nuevo.",
+          "Faltan datos. Se requiere id_estudiante e id_horario_nuevo.",
       });
     }
 
-    // 3. Buscamos la inscripción específica del alumno en su horario anterior y la actualizamos.
+    // 3. Buscar la inscripción actual del alumno (la más reciente)
+    const inscripcionActual = await InscripcionesPilatesModel.findOne({
+      where: { id_cliente: id_estudiante },
+      order: [['fecha_inscripcion', 'DESC']],
+    });
+    if (!inscripcionActual) {
+      return res.status(404).json({
+        mensajeError: "No se encontró inscripción actual para el alumno.",
+      });
+    }
+
+    // 4. Actualizar la inscripción al nuevo horario
     const [numeroDeFilasActualizadas] = await InscripcionesPilatesModel.update(
-      { id_horario: id_horario_nuevo }, // El campo que queremos cambiar
+      { id_horario: id_horario_nuevo },
       {
         where: {
-          id_cliente: id_estudiante, // Condición 1: Que coincida el ID del alumno
-          id_horario: id_horario_anterior, // Condición 2: Que coincida el ID del horario viejo
+          id: inscripcionActual.id,
         },
       }
     );
 
-    // 4. Comprobamos si la actualización se realizó con éxito.
     if (numeroDeFilasActualizadas === 0) {
-      // Si es 0, significa que no se encontró ninguna inscripción que cumpla las condiciones.
       return res.status(404).json({
-        mensajeError:
-          "No se encontró la inscripción del alumno en el horario anterior. No se realizó ningún cambio.",
+        mensajeError: "No se pudo actualizar la inscripción actual.",
       });
     }
 
-    // 5. Si todo salió bien, enviamos una respuesta de éxito.
+    // 5. Si fecha_nueva_fin no es null, actualizar fechas en clientes_pilates
+    if (fecha_nueva_fin !== null && fecha_nueva_fin !== undefined) {
+      const nuevaFechaInicio = dayjs(fecha_nueva_fin).format('YYYY-MM-DD');
+      const nuevaFechaFin = dayjs(fecha_nueva_fin).add(1, 'day').format('YYYY-MM-DD');
+
+      await ClientesPilatesModel.update(
+        {
+          fecha_inicio: nuevaFechaInicio,
+          fecha_fin: nuevaFechaFin,
+        },
+        {
+          where: { id: id_estudiante },
+        }
+      );
+    }
+
     res.status(200).json({
       message: "¡Cambio de turno realizado con éxito!",
     });
