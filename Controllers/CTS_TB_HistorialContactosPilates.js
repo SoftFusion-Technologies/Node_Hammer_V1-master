@@ -24,7 +24,7 @@ export const OBRS_AlumnosAusentes_Dashboard_CTS = async (req, res) => {
   try {
     const { id_sede } = req.query;
 
-    // 1. Obtener clientes activos con sus inscripciones, asistencias e historial de contactos
+    // Obtener clientes activos con sus inscripciones, asistencias e historial de contactos
     const clientes = await ClientesPilatesModel.findAll({
       where: { estado: 'Plan' },
       attributes: ['id', 'nombre', 'telefono', 'observaciones'],
@@ -40,10 +40,9 @@ export const OBRS_AlumnosAusentes_Dashboard_CTS = async (req, res) => {
               required: true
             },
             {
-              // Filtrar por sede si se recibe el parámetro
               model: HorariosPilatesModel,
               as: 'horario',
-              where: id_sede ? { id_sede: id_sede } : undefined,
+              where: id_sede ? { id_sede } : undefined,
               required: true
             }
           ]
@@ -56,29 +55,39 @@ export const OBRS_AlumnosAusentes_Dashboard_CTS = async (req, res) => {
       ]
     });
 
-    // 2. Variables de control y fecha actual
-    const listaAusentes = [];
     const hoyDayjs = dayjs();
+    const listaAusentes = [];
     const mesActual = hoyDayjs.month();
     const anioActual = hoyDayjs.year();
 
     for (const cliente of clientes) {
-      // 3. Unificar asistencias de todas las inscripciones del cliente en un solo listado
+      // Unificar asistencias de todas las inscripciones
       let todasLasClases = [];
       if (cliente.inscripciones) {
         cliente.inscripciones.forEach((ins) => {
-          if (ins.asistencias && ins.asistencias.length > 0) {
+          if (ins.asistencias?.length) {
             todasLasClases = todasLasClases.concat(ins.asistencias);
           }
         });
       }
 
-      // 4. Filtrar solo clases pasadas (ayer hacia atrás) y ordenar por fecha reciente
+      //  Ajuste de filtro para incluir el día de hoy solo si es presente (1)
       todasLasClases = todasLasClases
-        .filter((clase) => dayjs(clase.fecha).isBefore(hoyDayjs, 'day'))
-        .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+        .filter((clase) => {
+          const esAntesDeHoy = dayjs(clase.fecha).isBefore(hoyDayjs, 'day');
+          const esHoy = dayjs(clase.fecha).isSame(hoyDayjs, 'day');
+          const estaPresente = clase.presente === true || clase.presente === 1;
 
-      // 5. Contar el total histórico de inasistencias acumuladas
+          return esAntesDeHoy || (esHoy && estaPresente);
+        })
+        .sort((a, b) => b.id - a.id);
+
+      // Si la última registrada es inasistencia (0), la ignoramos para el conteo (esperamos un día más)
+      if (todasLasClases.length > 0 && (todasLasClases[0].presente === 0 || todasLasClases[0].presente === false)) {
+        todasLasClases.shift();
+      }
+
+      // Contar el total histórico de ausencias
       let totalHistoricoAusencias = 0;
       for (const asistencia of todasLasClases) {
         if (!asistencia.presente) {
@@ -86,23 +95,26 @@ export const OBRS_AlumnosAusentes_Dashboard_CTS = async (req, res) => {
         }
       }
 
-      // 6. Regla de negocio: Solo procesar si el alumno tiene 2 o más faltas en total
+      // Calcular faltas consecutivas desde el último presente
+      let faltas_desde_ultimo_presente = 0;
+      for (const asistencia of todasLasClases) {
+        if (asistencia.presente === true || asistencia.presente === 1) {
+          break;
+        }
+        faltas_desde_ultimo_presente++;
+      }
+
+      // Procesar solo si el alumno tiene al menos 2 faltas históricas
       if (totalHistoricoAusencias >= 2) {
         let ultimoContactoFecha = null;
         let totalContactos = 0;
         let contactoRealizadoValor = 0;
         let contactoRealizadoTexto = null;
         let contactadoEsteMes = false;
-        
-        // --- NUEVO: Variable para detectar estado de espera ---
         let estaEsperandoRespuesta = false;
 
-        // 7. Analizar el historial de contactos para ver el último registro
-        if (
-          cliente.historial_contactos &&
-          cliente.historial_contactos.length > 0
-        ) {
-          // Ordenar para obtener el contacto más reciente primero
+        // Analizar historial de contactos para obtener datos relevantes
+        if (cliente.historial_contactos?.length) {
           cliente.historial_contactos.sort(
             (a, b) => new Date(b.fecha_contacto) - new Date(a.fecha_contacto)
           );
@@ -111,17 +123,11 @@ export const OBRS_AlumnosAusentes_Dashboard_CTS = async (req, res) => {
           totalContactos = cliente.historial_contactos.length;
           ultimoContactoFecha = registroReciente.fecha_contacto;
           contactoRealizadoTexto = registroReciente.contacto_realizado;
-          
-          // Capturamos el flag de la base de datos
           estaEsperandoRespuesta = registroReciente.esperando_respuesta;
-
-          // Convertir a número para comparar con las ausencias actuales
           contactoRealizadoValor = parseInt(
             registroReciente.contacto_realizado || 0,
             10
           );
-
-          // Verificar si ya fue contactado en el mes en curso
           const fechaUltimo = dayjs(ultimoContactoFecha);
           if (
             fechaUltimo.month() === mesActual &&
@@ -131,17 +137,43 @@ export const OBRS_AlumnosAusentes_Dashboard_CTS = async (req, res) => {
           }
         }
 
-        // 8. Lógica del Semáforo: Comparar faltas actuales vs faltas que tenía al ser contactado
-        // Si sumó más de 1 falta nueva desde el último contacto, va a ROJO
-        const diferencia = totalHistoricoAusencias - contactoRealizadoValor;
-        let estadoVisualCalculado = diferencia > 1 ? 'ROJO' : 'VERDE';
-
-        // SI ESTA EN ESPERA, FORZAMOS EL ESTADO VISUAL A AMARILLO (Prioridad)
+        // Lógica del semáforo visual para el dashboard
+        let estadoVisualCalculado = 'VERDE';
         if (estaEsperandoRespuesta) {
-            estadoVisualCalculado = 'AMARILLO';
+          estadoVisualCalculado = 'AMARILLO';
+        } else if (faltas_desde_ultimo_presente <= 2) {
+          estadoVisualCalculado = 'VERDE';
+        } else if (faltas_desde_ultimo_presente >= 3 && totalContactos === 0) {
+          estadoVisualCalculado = 'ROJO';
+        } else if (faltas_desde_ultimo_presente >= 3 && totalContactos > 0) {
+          const diferencia = totalHistoricoAusencias - contactoRealizadoValor;
+          if (diferencia >= 3) {
+            estadoVisualCalculado = 'ROJO';
+          } else {
+            estadoVisualCalculado = 'VERDE';
+          }
+          // Log de seguimiento post-contacto
+          /* console.log('[SEGUIMIENTO POST-CONTACTO]', {
+            cliente: cliente.nombre,
+            totalHistoricoAusencias,
+            contactoRealizadoValor,
+            diferencia
+          }); */
         }
 
-        // 9. Construir el objeto del alumno para el listado final
+        // Log general de depuración para cada alumno procesado
+/*         console.log('[ALUMNO]', {
+          id: cliente.id,
+          nombre: cliente.nombre,
+          faltas_desde_ultimo_presente,
+          totalHistoricoAusencias,
+          totalContactos,
+          contactoRealizadoValor,
+          esperando_respuesta: estaEsperandoRespuesta,
+          estadoFinal: estadoVisualCalculado
+        }); */
+
+        // Construcción del objeto final para la respuesta
         listaAusentes.push({
           id: cliente.id,
           nombre: cliente.nombre,
@@ -153,28 +185,26 @@ export const OBRS_AlumnosAusentes_Dashboard_CTS = async (req, res) => {
           contacto_realizado: contactoRealizadoTexto,
           total_contactos: totalContactos,
           racha_actual: totalHistoricoAusencias,
-          esperando_respuesta: estaEsperandoRespuesta // Enviamos el dato crudo también
+          faltas_desde_ultimo_presente,
+          esperando_respuesta: estaEsperandoRespuesta
         });
       }
     }
-    // 10. Ordenar por los que tiene más inasistencias acumuladas
+
+    // Ordenar por racha de ausencias y prioridad visual
     listaAusentes.sort((a, b) => b.racha_actual - a.racha_actual);
-    
-    // 11. Ordenar la lista final para mostrar ROJOS primero, luego AMARILLOS, luego VERDES
     listaAusentes.sort((a, b) => {
-        const prioridad = { 'ROJO': 3, 'AMARILLO': 2, 'VERDE': 1 };
-        const pA = prioridad[a.estado_visual] || 0;
-        const pB = prioridad[b.estado_visual] || 0;
-        return pB - pA;
+      const prioridad = { ROJO: 3, AMARILLO: 2, VERDE: 1 };
+      return (prioridad[b.estado_visual] || 0) - (prioridad[a.estado_visual] || 0);
     });
 
-    // 11. Enviar respuesta al frontend
     res.json(listaAusentes);
   } catch (error) {
     console.error('Error en OBRS_AlumnosAusentes_Dashboard_CTS:', error);
     res.status(500).json({ mensajeError: error.message });
   }
 };
+
 
 // --------------------------------------------------------------------------------
 // 2. CREAR (Registrar nuevo contacto)
