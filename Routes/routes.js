@@ -287,6 +287,7 @@ import { uploadQuejas } from '../utils/uploadConfig.js';
 import {
   OBRS_Quejas_CTS,
   OBR_Queja_CTS,
+  OBRS_checkNuevasQuejasQR_CTS,
   CR_Queja_CTS,
   ER_Queja_CTS,
   UR_Queja_CTS,
@@ -1024,6 +1025,7 @@ router.put('/sedes/:id', UR_Sede_CTS); // Actualizar sede por ID
 
 // Rutas básicas CRUD
 router.get('/quejas', OBRS_Quejas_CTS);
+router.get('/quejas/nuevas-qr', OBRS_checkNuevasQuejasQR_CTS);//Ruta incluida por Sergio Manrique 05/2/2026
 router.get('/quejas/:id', OBR_Queja_CTS);
 router.post('/quejas', uploadQuejas.array('imagenes', 3), CR_Queja_CTS);// Crear una nueva queja con hasta 3 imágenes
 router.put('/quejas/:id', UR_Queja_CTS);

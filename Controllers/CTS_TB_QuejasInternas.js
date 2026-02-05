@@ -59,17 +59,43 @@ export const OBRS_Quejas_CTS = async (req, res) => {
         .json({ mensajeError: 'Faltan userName o userLevel.' });
     }
 
-    // Filtro de permisos: Si es coordinador ve todo, si no, solo lo suyo
-    const whereClause = isCoordinator(levelCanon) ? {} : { cargado_por: email };
-
-    // 1. Ejecutamos ambas consultas en paralelo (Promise.all es más rápido)
+    // Filtro de permisos: Si es coordinador ve todo, si no, ve lo suyo y las QR- de su sede (sedeName)
+    let whereClauseInternas = {};
+    let whereClausePilates = {};
+    if (!isCoordinator(levelCanon)) {
+      // Usuarios comunes: pueden ver sus propias quejas y las cargadas por QR- de su sede
+      const sedeName = req.query.sedeName || req.body?.sedeName;
+      if (!sedeName) {
+        return res.status(400).json({ mensajeError: 'Falta la sedeName para filtrar quejas QR.' });
+      }
+      let sedeNormalizada = "";
+      if(sedeName === "SanMiguelBN"){
+        sedeNormalizada = "TUCUMÁN - BARRIO NORTE";
+      }else if(sedeName === "SMT"){
+        sedeNormalizada = "TUCUMÁN - BARRIO SUR";
+      }else{
+        sedeNormalizada = sedeName;
+      }
+      whereClauseInternas = {
+        [Op.or]: [
+          { cargado_por: email },
+          {
+            cargado_por: { [Op.like]: 'QR-%' },
+            sede: sedeNormalizada
+          }
+        ]
+      };
+      whereClausePilates = { cargado_por: email };
+    }
+    // Si es coordinador, ve todo
+    // Si no, ve según los filtros anteriores
     const [registrosInternos, registrosPilates] = await Promise.all([
       QuejasInternasModel.findAll({
-        where: whereClause,
+        where: isCoordinator(levelCanon) ? {} : whereClauseInternas,
         include: [{ model: ImagenesModel, as: 'imagenes' }]
       }),
       QuejasPilatesModel.findAll({
-        where: whereClause,
+        where: isCoordinator(levelCanon) ? {} : whereClausePilates,
         raw: true
       })
     ]);
@@ -120,6 +146,47 @@ export const OBRS_Quejas_CTS = async (req, res) => {
   }
 };
 
+//Ruta incluida por Sergio Manrique 05/2/2026
+export const OBRS_checkNuevasQuejasQR_CTS = async (req, res) => {
+try {
+    const { sedeName, lastId, userLevel } = req.query; 
+    
+    const idReferencia = lastId ? parseInt(lastId) : 0;
+    const sieteDiasAtras = new Date();
+    sieteDiasAtras.setDate(sieteDiasAtras.getDate() - 7);
+
+    // Normalización de nivel y chequeo de jerarquía
+    const nivelCanon = (userLevel || '').toUpperCase().trim();
+    const esAdmin = ['ADMIN', 'ADMINISTRADOR', 'GERENTE'].includes(nivelCanon) || sedeName === "MultiSede";
+
+    let sedeNormalizada = sedeName === "SanMiguelBN" ? "TUCUMÁN - BARRIO NORTE" : 
+                          sedeName === "SMT" ? "TUCUMÁN - BARRIO SUR" : sedeName;
+
+    const filtros = {
+      id: { [Op.gt]: idReferencia }, 
+      cargado_por: { [Op.like]: 'QR-%' },
+      resuelto: { [Op.ne]: 1 },
+      created_at: { [Op.gte]: sieteDiasAtras } 
+    };
+
+    // Si NO es admin, filtramos estrictamente por su sede
+    if (!esAdmin) {
+      filtros.sede = sedeNormalizada;
+    }
+
+    const nuevasQuejas = await QuejasInternasModel.findAll({
+      where: filtros,
+      attributes: ['id', 'motivo', 'sede'], 
+      order: [['id', 'ASC']]
+    });
+
+    return res.json(nuevasQuejas);
+  } catch (error) {
+    console.error("Error en monitoreo QR:", error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
 
 export const OBR_Queja_CTS = async (req, res) => {
   try {
@@ -137,10 +204,8 @@ export const OBR_Queja_CTS = async (req, res) => {
     if (!registro) return res.status(404).json({ mensajeError: 'No encontrado.' });
 
     // Si no es admin/gerente, solo puede ver lo que cargó él
-    if (!isCoordinator(levelCanon) && String(registro.cargado_por).toLowerCase() !== email) return res.status(403).json({ mensajeError: 'Sin permiso.' });
-    return res.json(registro);
+/*     if (!isCoordinator(levelCanon) && String(registro.cargado_por).toLowerCase() !== email) return res.status(403).json({ mensajeError: 'Sin permiso.' });*/    return res.json(registro);
 
-    return res.json(registro);
   } catch (error) {
     console.log(error);
     return res.status(500).json({ mensajeError: error.message });
