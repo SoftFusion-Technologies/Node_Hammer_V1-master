@@ -23,6 +23,7 @@ import PilatesEstadisticasMensuales from "./MD_TB_PilatesEstadisticasMensuales.j
 import PilatesEstadisticasPlanes from "./MD_TB_PilatesEstadisticasPlanes.js";
 import PilatesEstadisticasInstructores from "./MD_TB_PilatesEstadisticasInstructores.js";
 import UsuarioPilates from "./MD_TB_UsuariosPilates.js";
+import { PilatesCuposConDescuentosModel } from "./MD_TB_PilatesCuposConDescuentos.js";
 
 
 // 2. Creamos una función para configurar las asociaciones
@@ -223,6 +224,17 @@ const setupAssociations = () => {
   // Rendimiento Instructores
   PilatesEstadisticasInstructores.belongsTo(UsuarioPilates, { foreignKey: 'usuario_id', as: 'usuarioInstructor' });
   PilatesEstadisticasInstructores.belongsTo(SedeModel, { foreignKey: 'id_sede', as: 'sede' });
+
+  PilatesCuposConDescuentosModel.belongsTo(SedeModel, {
+    foreignKey: 'sede_id',
+    as: 'sede'
+  });
+
+  // 2. Un Descuento es creado por un Usuario
+  PilatesCuposConDescuentosModel.belongsTo(UsersModel, {
+    foreignKey: 'creado_por',
+    as: 'usuario_creador'
+  });
 
   console.log("Relaciones de Inteligencia Pilates configuradas correctamente.");
 };

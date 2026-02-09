@@ -77,6 +77,7 @@ initConveniosRelaciones();
 import MD_TB_IntegrantesConve from './Models/MD_TB_IntegrantesConve.js';
 import MD_TB_ConveniosPlanesDisponibles from './Models/MD_TB_ConveniosPlanesDisponibles.js';
 import { programarSincronizacionEstadisticasPilatesDiario } from './Controllers/CTS_TB_PilatesEstadisticas.js';
+import { iniciarCronEstadosPilates } from './Controllers/CTS_TB_PilatesCuposConDescuentos.js';
 
 const IntegrantesConveModel = MD_TB_IntegrantesConve.IntegrantesConveModel;
 const ConveniosPlanesDisponiblesModel =
@@ -94,6 +95,8 @@ if (process.env.NODE_ENV !== 'production') {
 
 // inicia cron diario (09:00 Tucumán)
 SCHEDULE_VentasAgendaCron();
+iniciarCronEstadosPilates();
+
 
 //---------- COMIENZO DE CODIGO HECHO POR MATIAS PALLERO. FECHA 27/11/2025
 // Inicia cron mensual para Remarketing, se ejecuta el día 1 de cada mes a las 00:10 AM

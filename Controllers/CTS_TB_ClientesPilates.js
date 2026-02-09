@@ -15,6 +15,7 @@ import { CR_EventoHistorial_Alta_CTS } from './CTS_TB_ClientesPilatesHistorial.j
 import { ER_HistorialPorCliente } from './CTS_TB_ClientesPilatesHistorial.js';
 import HorariosDeshabilitadosPilatesModel from '../Models/MD_TB_Horarios_deshabilitados_pilates.js';
 import { ER_RegistrarBajaPilates } from './CTS_TB_PilatesBajas.js';
+import { PilatesCuposConDescuentosModel } from '../Models/MD_TB_PilatesCuposConDescuentos.js';
 import { Op, QueryTypes } from 'sequelize';
 
 if (!HorariosPilatesModel.associations?.instructor) {
@@ -108,6 +109,8 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
       return asString.length >= 10 ? asString.slice(0, 10) : asString;
     };
 
+    const hoyStrDescuentos = formatDate(new Date());
+
     // Construcción de filtros para la consulta de horarios
     const horarioWhere = {};
     if (sedeId) horarioWhere.id_sede = Number(sedeId);
@@ -160,6 +163,7 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
     // Mapa auxiliar para agrupar IDs de horarios bajo el mismo "grupo lógico" (LMV/MJ + hora)
     // Ej: "1|07:00|LMV" -> [id_lunes, id_miercoles, id_viernes]
     const horariosPorGrupoLogico = new Map();
+    const hhmmSet = new Set();
 
     for (const horario of horarios) {
       const hhmmValue = formatTime(horario.hora_inicio);
@@ -176,12 +180,60 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
       groupKeySet.add(groupKey);
       horarioIdSet.add(horario.id);
       sedeIdsSet.add(horario.id_sede);
+      if (hhmmValue) hhmmSet.add(hhmmValue);
       if (timeWithSeconds) horaInicioSet.add(timeWithSeconds);
 
       if (!horariosPorGrupoLogico.has(groupKey)) {
         horariosPorGrupoLogico.set(groupKey, []);
       }
       horariosPorGrupoLogico.get(groupKey).push(horario.id);
+    }
+
+    // =========================================================
+    // Cupos con descuento por sede, horario y grupo (LMV/MJ)
+    // =========================================================
+    const descuentosPorGrupoKey = new Map();
+
+    if (sedeId && hhmmSet.size > 0) {
+      const descuentos = await PilatesCuposConDescuentosModel.findAll({
+        attributes: ['hora', 'grupo_dias', 'cantidad_cupos', 'porcentaje_descuento', 'fecha_inicio', 'fecha_fin'],
+        where: {
+          sede_id: Number(sedeId),
+          hora: { [Op.in]: Array.from(hhmmSet) },
+          estado: 'vigente',
+          fecha_inicio: { [Op.lte]: hoyStrDescuentos },
+          fecha_fin: { [Op.gte]: hoyStrDescuentos }
+        },
+        order: [
+          ['fecha_inicio', 'DESC'],
+          ['created_at', 'DESC']
+        ]
+      });
+
+      const addDescuento = (sede, hhmmValue, group, descuento) => {
+        const key = buildGroupKey(sede, hhmmValue, group);
+        if (!descuentosPorGrupoKey.has(key)) {
+          descuentosPorGrupoKey.set(key, {
+            cupos_descuento: Number(descuento.cantidad_cupos || 0),
+            porcentaje_descuento: descuento.porcentaje_descuento,
+            fecha_fin: descuento.fecha_fin
+          });
+        }
+      };
+
+      for (const descuento of descuentos || []) {
+        const hhmmValue = descuento.hora;
+        const grupo = descuento.grupo_dias;
+
+        if (grupo === 'L-M-V') {
+          addDescuento(Number(sedeId), hhmmValue, 'LMV', descuento);
+        } else if (grupo === 'M-J') {
+          addDescuento(Number(sedeId), hhmmValue, 'MJ', descuento);
+        } else if (grupo === 'Todos') {
+          addDescuento(Number(sedeId), hhmmValue, 'LMV', descuento);
+          addDescuento(Number(sedeId), hhmmValue, 'MJ', descuento);
+        }
+      }
     }
 
     // Consulta de inscripciones relevantes (plan, renovación, prueba)
@@ -501,6 +553,9 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
         porcentaje_asistencia_clases: porcentajeAsistenciaPorGrupo.get(groupKey) ?? 0,
         horarioId: horario.id,
         coachId: instructor?.id ?? null,
+        cupos_descuento: descuentosPorGrupoKey.get(groupKey)?.cupos_descuento ?? 0,
+        porcentaje_descuento: descuentosPorGrupoKey.get(groupKey)?.porcentaje_descuento ?? null,
+        fecha_vencimiento_descuento: descuentosPorGrupoKey.get(groupKey)?.fecha_fin ?? null,
         alumnos: alumnosProcesados
       };
     }

@@ -493,6 +493,15 @@ import {
 } from '../Controllers/CTS_TB_IntegrantesConveNotas.js';
 // BENJAMIN ORELLANA 21 DIC 2025 FIN
 
+
+import {
+  CR_PilatesCuposConDescuentos_CTS,
+  UR_PilatesCuposConDescuentos_CTS,
+  ER_PilatesCuposConDescuentos_CTS,
+  OBRS_PilatesCuposConDescuentos_CTS,
+  OBR_PilatesCuposConDescuentos_CTS
+} from '../Controllers/CTS_TB_PilatesCuposConDescuentos.js';
+
 // Crea un enrutador de Express
 const router = express.Router();
 
@@ -1431,6 +1440,27 @@ router.put(
 //  HECHO POR SERGIO MANRIQUE, FECHA: 12/01/2026
 //  FIN DE MODULO
 // =======================================================
+
+// =======================================================
+//  HECHO POR SERGIO MANRIQUE, FECHA: 06/02/2026
+//  INICIO DE MODULO
+// =======================================================
+// Obtener todos los descuentos (acepta ?sede_id=X como filtro opcional)
+router.get('/pilates-cupos-descuentos', OBRS_PilatesCuposConDescuentos_CTS);
+// Obtener un descuento específico por ID
+router.get('/pilates-cupos-descuentos/:id', OBR_PilatesCuposConDescuentos_CTS);
+// Crear una nueva regla de descuento
+router.post('/pilates-cupos-descuentos', CR_PilatesCuposConDescuentos_CTS);
+// Actualizar una regla de descuento existente
+router.put('/pilates-cupos-descuentos/:id', UR_PilatesCuposConDescuentos_CTS);
+// Eliminar una regla de descuento
+router.delete('/pilates-cupos-descuentos/:id', ER_PilatesCuposConDescuentos_CTS);
+
+// =======================================================
+//  HECHO POR SERGIO MANRIQUE, FECHA: 06/02/2026
+//  FIN DE MODULO
+// =======================================================
+
 
 router.post('/contactos-lista-espera', CR_crearContacto);
 router.put(
