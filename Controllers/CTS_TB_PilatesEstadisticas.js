@@ -170,9 +170,13 @@ export const CR_sincronizarEstadisticas = async (req, res) => {
       col: "id_cliente",
     });
 
+    /* console.log("La cantidad fin es de: ", cantidad_fin);
+    console.log("La cantidad inicio es de: ", cantidad_inicio);
+    console.log("La cantidad altas es de: ", altas); */
+
     // Cálculo de retención
     const porcentaje_retencion =
-      cantidad_inicio > 0 ? (cantidad_fin * 100) / cantidad_inicio : 0;
+    cantidad_inicio > 0 ? ((cantidad_fin - altas) * 100) / cantidad_inicio : 0;
     
 /*     console.log(`[SYNC ${mes}/${anio}] Sede ${id_sede}: inicio=${cantidad_inicio}, fin=${cantidad_fin}, bajas=${bajasDelMes}, altas=${altas}`);
  */
@@ -337,6 +341,8 @@ const horasRaw = await HorariosPilatesModel.findAll({
           mesAnteriorStats.cantidad_inicio_mes) *
         100;
     }
+
+    /* console.log("PORCENTAJE DE RETENCION GLBAOL: ", porcentaje_retencion.toFixed(2)); */
 
     // GUARDAR MENSUAL
     const estadisticasExistentes = await PilatesEstadisticasMensuales.findOne({
@@ -1410,6 +1416,11 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
     // =========================================================
     // CONSTRUCCIÓN DEL OBJETO DE RESPUESTA CONSOLIDADO
     // =========================================================
+    /* console.log(`Fecha mostrador final utilizada: ${fechaMostradorStr}`);
+    console.log(`Alumnos inscritos actuales: ${alumnosInscritosActuales}`);
+    console.log(`Total cupos habilitados: ${estadisticasMes.cantidad_inicio_mes}`);
+    console.log("altas del mes:", altasMes); */
+
     res.json({
       evolucionMensual,
       vidaMedia: {
@@ -1419,10 +1430,12 @@ export const OBRS_EstadisticasCompletas = async (req, res) => {
       retencion: {
         clientesIniciales: estadisticasMes.cantidad_inicio_mes,
         bajasMes: bajasMes,
+        alumnosDiaUnoQueSiguen: estadisticasMes.alumnos_dia_uno_que_siguen,
+        altasDuranteElMes: altasMes,
+        cantidadAlumnosContratados: estadisticasMes.cantidad_fin_mes,
         porcentajeRetencion: parseFloat(
-          (alumnosInscritosActuales * 100) /
-            estadisticasMes.cantidad_inicio_mes,
-        ).toFixed(2),
+        ((estadisticasMes.cantidad_fin_mes - altasMes) * 100) / (estadisticasMes.cantidad_inicio_mes || 1)
+      ).toFixed(2),
       },
       ocupacion: {
         alumnosInscritos: alumnosInscritosActuales,
