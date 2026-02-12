@@ -1021,6 +1021,7 @@ export const OBRS_ClientesProximosVencer_CTS = async (req, res) => {
 
 // Obtener horarios disponibles with cupo e inscriptos por sede para el apartado de ventas, así sepan cuántos lugares quedan en cada horario y grupo
 // Devuelve los horarios disponibles por sede, agrupando LMV/MJ, con cupo y cantidad de inscriptos para ventas.
+// Devuelve los horarios disponibles por sede, agrupando LMV/MJ, con cupo y cantidad de inscriptos para ventas.
 export const ESP_OBRS_HorariosDisponibles_CTS = async (req, res) => {
   try {
     const { sedeId } = req.query;
@@ -1120,7 +1121,8 @@ export const ESP_OBRS_HorariosDisponibles_CTS = async (req, res) => {
           grupo_label: groupLabels[grp] ?? grp,
           cupo_por_clase: sedeCupo,
           total_inscriptos: 0,
-          tipo_bloqueo: estaBloqueado
+          tipo_bloqueo: estaBloqueado,
+          descuento: null // Inicializamos el campo descuento
         });
       }
       return resultsMap.get(key);
@@ -1209,7 +1211,61 @@ export const ESP_OBRS_HorariosDisponibles_CTS = async (req, res) => {
     accumulateInscripciones(planYRenovaciones);
     accumulateInscripciones(pruebas);
 
-    // Paso 6: Ordena los resultados primero por grupo (LMV, MJ, OTRO) y luego por hora
+    // =========================================================================
+    //  Inyectar descuentos vigentes a los horarios disponibles
+    // =========================================================================
+    
+    // Obtener la fecha actual en formato YYYY-MM-DD para comparar vigencia
+    const hoy = new Date();
+    const year = hoy.getFullYear();
+    const month = String(hoy.getMonth() + 1).padStart(2, '0');
+    const day = String(hoy.getDate()).padStart(2, '0');
+    const fechaActual = `${year}-${month}-${day}`;
+
+    // Buscamos descuentos que pertenezcan a la sede, estén en estado 'vigente'
+    // y cuya fecha actual caiga dentro del rango inicio-fin.
+    const descuentosVigentes = await PilatesCuposConDescuentosModel.findAll({
+      where: {
+        sede_id: sedeId,
+        estado: 'vigente',
+        fecha_inicio: { [Op.lte]: fechaActual },
+        fecha_fin: { [Op.gte]: fechaActual }
+      },
+      attributes: ['hora', 'grupo_dias', 'cantidad_cupos', 'porcentaje_descuento', 'fecha_fin']
+    });
+
+    // Se itera los descuentos y los asignamos al resultsMap si existe la entrada correspondiente
+    for (const desc of descuentosVigentes) {
+        const horaDesc = desc.hora; // HH:mm
+        const grupoDesc = desc.grupo_dias; // Valores DB: 'L-M-V', 'M-J', 'Todos'
+
+        // Se determina a qué claves del mapa (grp|hhmm) afecta este descuento
+        const gruposAfectados = [];
+        if (grupoDesc === 'Todos') {
+            gruposAfectados.push('LMV', 'MJ');
+        } else if (grupoDesc === 'L-M-V') {
+            gruposAfectados.push('LMV');
+        } else if (grupoDesc === 'M-J') {
+            gruposAfectados.push('MJ');
+        }
+
+        // Se asigna el objeto descuento a cada grupo afectado en esa hora
+        for (const grp of gruposAfectados) {
+            const key = `${grp}|${horaDesc}`;
+            const entry = resultsMap.get(key);
+            
+            // se añade el descuento
+            if (entry) {
+                entry.descuento = {
+                    cantidad_cupos_descuento: desc.cantidad_cupos,
+                    porcentaje: desc.porcentaje_descuento,
+                    fecha_vencimiento: desc.fecha_fin
+                };
+            }
+        }
+    }
+
+    //Se ordena los resultados primero por grupo (LMV, MJ, OTRO) y luego por hora
     const groupOrder = {
       LMV: 0,
       MJ: 1,
