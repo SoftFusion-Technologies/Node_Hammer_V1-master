@@ -47,10 +47,10 @@ export const login_profesores_pilates = async (req, res) => {
     });
     if (results.length > 0) {
       const user = results[0];
-      const token = jwt.sign({ id: user.id, level: user.rol, sede_id: user.sede_id }, 'softfusion', {
+      const token = jwt.sign({ id: user.id, level: user.rol, sede_id: user.sede_id, nombre: user.nombre, apellido: user.apellido, telefono: user.telefono }, 'softfusion', {
         expiresIn: '1h'
       });
-      return res.json({ message: 'Success', token, level: user.rol, sede_id: user.sede_id });
+      return res.json({ message: 'Success', token, level: user.rol, sede_id: user.sede_id, nombre: user.nombre, apellido: user.apellido, telefono: user.telefono });
     } else {
       return res.json('Fail');
     }

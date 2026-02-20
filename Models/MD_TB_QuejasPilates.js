@@ -28,7 +28,7 @@ const QuejasPilatesModel = db.define('quejas_pilates', {
     allowNull: false
   },
   tipo_usuario: {
-    type: DataTypes.ENUM('cliente'),
+    type: DataTypes.ENUM('cliente', 'instructor'),
     allowNull: false,
     defaultValue: 'cliente'
   },

@@ -123,7 +123,7 @@ export const OBRS_Quejas_CTS = async (req, res) => {
       origen: 'PILATES',
       es_pilates: true,
       tabla_origen: 'pilates',
-      tipo_usuario: 'cliente pilates',
+      tipo_usuario: q.tipo_usuario === "cliente" ? "cliente pilates" : "instructor pilates",
       creado_desde_qr: 0,
       imagenes: false // Las quejas de Pilates no tienen imágenes por ahora
     }));

@@ -22,12 +22,24 @@ const isCoordinator = (level = "") => {
   return L === "ADMIN" || L === "ADMINISTRADOR" || L === "GERENTE";
 };
 
+// Helper para normalizar tipo de usuario según ENUM de BD
+const normalizeTipoUsuario = (tipo = "") => {
+  const value = toCanonical(tipo);
+
+  if (value.includes("INSTRUCTOR")) {
+    return 'instructor';
+  }
+
+  return 'cliente';
+};
+
 
 // Crear una nueva queja de Pilates
 export const CR_QuejaPilates_CTS = async (req, res) => {
-  const { cargado_por, nombre, contacto, motivo, sede } = req.body;
+  const { cargado_por, nombre, contacto, motivo, sede, tipo_usuario} = req.body;
 
   try {
+    const tipoUsuarioNormalizado = normalizeTipoUsuario(tipo_usuario);
     let nombreSede = 'Sede no especificada';
 
     // --- LÓGICA DE VERIFICACIÓN DE TIPO DE CAMPO 'SEDE' ---
@@ -54,7 +66,7 @@ export const CR_QuejaPilates_CTS = async (req, res) => {
     const nuevaQueja = await QuejasPilatesModel.create({
       cargado_por,
       nombre,
-      tipo_usuario: 'cliente',
+      tipo_usuario: tipoUsuarioNormalizado,
       contacto,
       motivo,
       resuelto: 0,
