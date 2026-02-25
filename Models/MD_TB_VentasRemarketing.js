@@ -29,6 +29,7 @@ const VentasRemarketingModel = db.define(
     ventas_prospecto_id: {
       type: DataTypes.BIGINT.UNSIGNED,
       allowNull: true, // Cambiado a true según la tabla
+      unique: true,
       references: {
         model: "ventas_prospectos",
         key: "id",
