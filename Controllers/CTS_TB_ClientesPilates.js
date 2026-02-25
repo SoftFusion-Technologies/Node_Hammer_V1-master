@@ -790,7 +790,9 @@ export const UR_ClientesPilates_Observaciones_CTS = async (req, res) => {
 };
 
 export const UR_ClientesPilates_PlanRenovacion_CTS = async (req, res) => {
+  let t;
   try {
+    t = await pool.transaction();
     // La ruta define :id en routes.js
     const { id } = req.params;
     const {
@@ -804,9 +806,10 @@ export const UR_ClientesPilates_PlanRenovacion_CTS = async (req, res) => {
     } = req.body;
 
     // Buscar al cliente por ID
-    const cliente = await ClientesPilatesModel.findByPk(id);
+    const cliente = await ClientesPilatesModel.findByPk(id, { transaction: t });
 
     if (!cliente) {
+      await t.rollback();
       return res.status(404).json({ message: 'Cliente no encontrado' });
     }
 
@@ -826,32 +829,31 @@ export const UR_ClientesPilates_PlanRenovacion_CTS = async (req, res) => {
 
     // 2. Manejar la lógica de estados de forma separada
     if (estado === 'Reprogramado') {
-      // CASO A: Es una "Reprogramación"
-      // El estado NO cambia, solo se actualiza la fecha de pago prometida.
       updates.fecha_prometido_pago = fechaPrometidoPago || null;
     } else if (estado === 'Renovacion programada') {
-      // CASO B: Se está pasando de "Plan" -> "Renovacion programada"
       updates.estado = 'Renovacion programada';
       updates.fecha_prometido_pago = fechaPrometidoPago || null;
-      // No tocamos fecha_inicio ni fecha_fin, preservamos las del plan anterior
     } else if (estado === 'Plan') {
-      // CASO C: Se está pasando de "Renovacion programada" -> "Plan"
       updates.estado = 'Plan';
       updates.fecha_inicio = fechaInicio || null;
       updates.fecha_fin = fechaFin || null;
-      updates.fecha_prometido_pago = null; // Limpiamos la fecha prometida
+      updates.fecha_prometido_pago = null;
     }
 
     console.log('Actualizaciones a aplicar:', updates);
 
-    // Actualizar cliente
-    await cliente.update(updates);
+    // Actualizar cliente dentro de la transacción
+    await cliente.update(updates, { transaction: t });
+
+    await t.commit();
 
     res.json({
       message: 'Estado del cliente actualizado correctamente',
       cliente
     });
+
   } catch (error) {
+    await t.rollback();
     console.error('Error en UR_ClientesPilates_PlanRenovacion_CTS:', error);
     res.status(500).json({ message: 'Error actualizando el cliente', error });
   }
