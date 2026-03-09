@@ -446,6 +446,7 @@ import {
 
 import {
   OBRS_AsistenciasFormato_CTS,
+  OBRS_CalendarioMensualAsistencias_CTS,
   UR_AsistenciaCliente_CTS,
   DEBUG_DispararCreacionAsistencias_CTS,
   OBRS_ReporteAsistenciaPrueba_CTS
@@ -1345,6 +1346,7 @@ router.put(
 );
 
 router.get('/asistencias-pilates/formato', OBRS_AsistenciasFormato_CTS);
+router.get('/asistencias-pilates/calendario-mensual', OBRS_CalendarioMensualAsistencias_CTS);
 router.put('/asistencias-pilates/marcar', UR_AsistenciaCliente_CTS);
 router.get(
   '/asistencias-pilates/crear-diarias',

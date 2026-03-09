@@ -15,7 +15,7 @@ import ClientesPilatesModel from "../Models/MD_TB_ClientesPilates.js";
 import UsersModel from "../Models/MD_TB_Users.js";
 import MD_TB_HorariosPilates from "../Models/MD_TB_HorariosPilates.js";
 import db from "../DataBase/db.js";
-import { Op, literal } from "sequelize";
+import { Op } from "sequelize";
 
 const HorariosPilatesModel = MD_TB_HorariosPilates.HorariosPilatesModel;
 
@@ -285,6 +285,120 @@ export const crearAsistenciasDiariasAusentes = async () => {
       error
     );
     throw error;
+  }
+};
+
+// Endpoint para obtener un reporte mensual de asistencias por fecha y hora, con opción de filtrar por sede.
+export const OBRS_CalendarioMensualAsistencias_CTS = async (req, res) => {
+  try {
+    const { anio, mes, id_sede } = req.query;
+
+    if (!anio || !mes) {
+      return res
+        .status(400)
+        .json({ mensajeError: "El año y mes son requeridos." });
+    }
+
+    const anioNum = Number(anio);
+    const mesNum = Number(mes);
+
+    if (
+      !Number.isInteger(anioNum) ||
+      !Number.isInteger(mesNum) ||
+      mesNum < 1 ||
+      mesNum > 12
+    ) {
+      return res.status(400).json({
+        mensajeError:
+          "Parámetros inválidos. 'anio' y 'mes' deben ser numéricos y el mes entre 1 y 12.",
+      });
+    }
+
+    let idSedeNum = null;
+    if (id_sede !== undefined && id_sede !== null && id_sede !== "") {
+      idSedeNum = Number(id_sede);
+      if (!Number.isInteger(idSedeNum) || idSedeNum <= 0) {
+        return res.status(400).json({
+          mensajeError:
+            "El parámetro 'id_sede' debe ser un entero positivo cuando se envía.",
+        });
+      }
+    }
+
+    const mesPadded = String(mesNum).padStart(2, "0");
+    const ultimoDiaMes = new Date(Date.UTC(anioNum, mesNum, 0)).getUTCDate();
+
+    const fechaInicio = `${anioNum}-${mesPadded}-01`;
+    const fechaFin = `${anioNum}-${mesPadded}-${String(ultimoDiaMes).padStart(2, "0")}`;
+
+    const whereHorario = {};
+    if (idSedeNum !== null) {
+      whereHorario.id_sede = idSedeNum;
+    }
+
+    const resultados = await AsistenciasPilatesModel.findAll({
+      attributes: [
+        "fecha",
+        [db.col("inscripcion->horario.hora_inicio"), "hora_inicio"],
+        [
+          db.fn(
+            "SUM",
+            db.literal("CASE WHEN asistencias_pilates.presente = 1 THEN 1 ELSE 0 END")
+          ),
+          "asistencias_totales",
+        ],
+        [db.fn("COUNT", db.col("asistencias_pilates.id")), "inscritos_totales"],
+      ],
+      where: {
+        fecha: {
+          [Op.between]: [fechaInicio, fechaFin],
+        },
+      },
+      include: [
+        {
+          model: InscripcionesPilatesModel,
+          as: "inscripcion",
+          attributes: [],
+          required: true,
+          include: [
+            {
+              model: HorariosPilatesModel,
+              as: "horario",
+              attributes: [],
+              required: true,
+              where: whereHorario,
+            },
+          ],
+        },
+      ],
+      group: ["fecha", "inscripcion->horario.hora_inicio"],
+      order: [
+        ["fecha", "ASC"],
+        [db.col("inscripcion->horario.hora_inicio"), "ASC"],
+      ],
+      raw: true,
+      subQuery: false,
+    });
+
+    const respuestaFormateada = {};
+
+    resultados.forEach((fila) => {
+      const fecha =
+        fila.fecha instanceof Date
+          ? fila.fecha.toISOString().slice(0, 10)
+          : String(fila.fecha).slice(0, 10);
+      const hora = String(fila.hora_inicio).slice(0, 5);
+
+      if (!respuestaFormateada[fecha]) {
+        respuestaFormateada[fecha] = {};
+      }
+
+      respuestaFormateada[fecha][hora] = `${Number(fila.asistencias_totales || 0)} de ${Number(fila.inscritos_totales || 0)}`;
+    });
+
+    res.json(respuestaFormateada);
+  } catch (error) {
+    res.status(500).json({ mensajeError: error.message });
   }
 };
 
