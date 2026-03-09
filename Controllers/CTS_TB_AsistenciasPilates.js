@@ -336,65 +336,148 @@ export const OBRS_CalendarioMensualAsistencias_CTS = async (req, res) => {
       whereHorario.id_sede = idSedeNum;
     }
 
-    const resultados = await AsistenciasPilatesModel.findAll({
-      attributes: [
-        "fecha",
-        [db.col("inscripcion->horario.hora_inicio"), "hora_inicio"],
-        [
-          db.fn(
-            "SUM",
-            db.literal("CASE WHEN asistencias_pilates.presente = 1 THEN 1 ELSE 0 END")
-          ),
-          "asistencias_totales",
-        ],
-        [db.fn("COUNT", db.col("asistencias_pilates.id")), "inscritos_totales"],
-      ],
+    // 1. CAMBIO AQUI
+    const todasInscripciones = await InscripcionesPilatesModel.findAll({
+      include: [
+        {
+          model: HorariosPilatesModel,
+          as: "horario",
+          where: whereHorario,
+        }
+      ]
+    });
+
+    // 2. CAMBIO AQUI
+    const inscritosPorGrupoYHora = {};
+
+    todasInscripciones.forEach((inscripcion) => {
+      const dia = inscripcion.horario.dia_semana;
+      const hora = String(inscripcion.horario.hora_inicio).slice(0, 5);
+      const idCliente = inscripcion.id_cliente;
+
+      let grupo = "SAB";
+      if (dia === "Lunes" || dia === "Miercoles" || dia === "Viernes") {
+        grupo = "LMV";
+      } else if (dia === "Martes" || dia === "Jueves") {
+        grupo = "MJ";
+      }
+
+      const clave = `${grupo}-${hora}`;
+      if (!inscritosPorGrupoYHora[clave]) {
+        inscritosPorGrupoYHora[clave] = new Set();
+      }
+      inscritosPorGrupoYHora[clave].add(idCliente);
+    });
+
+    // 3. CAMBIO AQUI
+    const todasAsistencias = await AsistenciasPilatesModel.findAll({
       where: {
         fecha: {
           [Op.between]: [fechaInicio, fechaFin],
-        },
+        }
       },
       include: [
         {
           model: InscripcionesPilatesModel,
           as: "inscripcion",
-          attributes: [],
-          required: true,
           include: [
             {
               model: HorariosPilatesModel,
               as: "horario",
-              attributes: [],
-              required: true,
-              where: whereHorario,
-            },
-          ],
-        },
-      ],
-      group: ["fecha", "inscripcion->horario.hora_inicio"],
-      order: [
-        ["fecha", "ASC"],
-        [db.col("inscripcion->horario.hora_inicio"), "ASC"],
-      ],
-      raw: true,
-      subQuery: false,
+              where: whereHorario
+            }
+          ]
+        }
+      ]
     });
 
+    // 4. CAMBIO AQUI
+    const asistenciasPorFechaYHora = {};
+
+    todasAsistencias.forEach((asistencia) => {
+      if (!asistencia.inscripcion || !asistencia.inscripcion.horario) return;
+      
+      if (asistencia.presente === 1 || asistencia.presente === true) {
+        const fecha = asistencia.fecha instanceof Date
+          ? asistencia.fecha.toISOString().slice(0, 10)
+          : String(asistencia.fecha).slice(0, 10);
+          
+        const hora = String(asistencia.inscripcion.horario.hora_inicio).slice(0, 5);
+        const idCliente = asistencia.inscripcion.id_cliente;
+
+        if (!asistenciasPorFechaYHora[fecha]) {
+          asistenciasPorFechaYHora[fecha] = {};
+        }
+        if (!asistenciasPorFechaYHora[fecha][hora]) {
+          asistenciasPorFechaYHora[fecha][hora] = new Set();
+        }
+
+        asistenciasPorFechaYHora[fecha][hora].add(idCliente);
+      }
+    });
+
+    // 5. CAMBIO AQUI
     const respuestaFormateada = {};
 
-    resultados.forEach((fila) => {
-      const fecha =
-        fila.fecha instanceof Date
-          ? fila.fecha.toISOString().slice(0, 10)
-          : String(fila.fecha).slice(0, 10);
-      const hora = String(fila.hora_inicio).slice(0, 5);
+    const fechaHoy = new Date();
+    const anioHoy = fechaHoy.getFullYear();
+    const mesHoy = fechaHoy.getMonth() + 1;
+    const diaHoy = fechaHoy.getDate();
 
-      if (!respuestaFormateada[fecha]) {
-        respuestaFormateada[fecha] = {};
+    let limiteDia = ultimoDiaMes;
+    if (anioNum === anioHoy && mesNum === mesHoy) {
+      limiteDia = diaHoy;
+    } else if (anioNum > anioHoy || (anioNum === anioHoy && mesNum > mesHoy)) {
+      limiteDia = 0;
+    }
+
+    for (let dia = 1; dia <= limiteDia; dia++) {
+      const diaStr = String(dia).padStart(2, "0");
+      const fechaActual = `${anioNum}-${mesPadded}-${diaStr}`;
+      
+      const fechaObj = new Date(Date.UTC(anioNum, mesNum - 1, dia));
+      const numeroDia = fechaObj.getUTCDay();
+
+      if (numeroDia === 0) continue;
+
+      let grupoDia = "SAB";
+      if (numeroDia === 1 || numeroDia === 3 || numeroDia === 5) {
+        grupoDia = "LMV";
+      } else if (numeroDia === 2 || numeroDia === 4) {
+        grupoDia = "MJ";
       }
 
-      respuestaFormateada[fecha][hora] = `${Number(fila.asistencias_totales || 0)} de ${Number(fila.inscritos_totales || 0)}`;
-    });
+      respuestaFormateada[fechaActual] = {};
+
+      const horasDelDia = new Set();
+      
+      for (const clave in inscritosPorGrupoYHora) {
+        if (clave.startsWith(grupoDia)) {
+          const hora = clave.split("-")[1];
+          horasDelDia.add(hora);
+        }
+      }
+
+      if (asistenciasPorFechaYHora[fechaActual]) {
+        for (const hora in asistenciasPorFechaYHora[fechaActual]) {
+          horasDelDia.add(hora);
+        }
+      }
+
+      horasDelDia.forEach(hora => {
+        const claveGrupo = `${grupoDia}-${hora}`;
+        
+        const totalInscritos = inscritosPorGrupoYHora[claveGrupo] 
+          ? inscritosPorGrupoYHora[claveGrupo].size 
+          : 0;
+
+        const totalPresentes = (asistenciasPorFechaYHora[fechaActual] && asistenciasPorFechaYHora[fechaActual][hora])
+          ? asistenciasPorFechaYHora[fechaActual][hora].size
+          : 0;
+
+        respuestaFormateada[fechaActual][hora] = `${totalPresentes} de ${totalInscritos}`;
+      });
+    }
 
     res.json(respuestaFormateada);
   } catch (error) {
