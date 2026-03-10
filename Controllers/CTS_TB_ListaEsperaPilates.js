@@ -110,7 +110,7 @@ export const OBRS_ListaEsperaPilates = async (req, res) => {
         ...plainItem,
         // Usamos el 'usersMap' que ahora sí está disponible
         nombre_usuario_cargado:
-          usersMap[plainItem.id_usuario_cargado].toUpperCase() || "N/D",
+          usersMap[plainItem.id_usuario_cargado]|| "REGISTRO WEB",
         // Adjuntamos los contactos si existen
         contacto_cliente: contactosPorLista[plainItem.id] || [],
       };
@@ -194,13 +194,6 @@ export const CR_ListaEsperaPilates = async (req, res) => {
     }
     if (observaciones && typeof observaciones !== "string") {
       return res.status(400).json({ error: "observaciones debe ser texto." });
-    }
-    if (!id_usuario_cargado || !/^\d+$/.test(id_usuario_cargado.toString())) {
-      return res
-        .status(400)
-        .json({
-          error: "id_usuario_cargado es obligatorio y debe ser numérico.",
-        });
     }
 
     // Crear DTO limpio
