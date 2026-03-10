@@ -287,10 +287,14 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
     const trialMap = new Map();
     // 4. Eliminar el cliente
 
+    const clientesIdsSet = new Set(); // 1. CAMBIO AQUI
+
     for (const inscripcion of inscripciones) {
       const cliente = inscripcion.cliente;
       const horario = inscripcion.horario;
       if (!cliente || !horario) continue;
+
+      clientesIdsSet.add(cliente.id); // 2. CAMBIO AQUI
 
       const hhmmValue = formatTime(horario.hora_inicio);
       const group = determineGroup(horario.dia_semana);
@@ -460,6 +464,39 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
       }
     }
 
+    const ultimasAsistenciasMapa = new Map(); // 3. CAMBIO AQUI
+    const arregloIdsClientes = Array.from(clientesIdsSet); // 4. CAMBIO AQUI
+
+    if (arregloIdsClientes.length > 0) { // 5. CAMBIO AQUI
+      const asistenciasRaw = await pool.query(
+        `SELECT
+           i.id_cliente,
+           MAX(a.fecha) AS ultima_fecha
+         FROM asistencias_pilates a
+         INNER JOIN inscripciones_pilates i ON a.id_inscripcion = i.id
+         WHERE i.id_cliente IN (:idsClientes) AND a.presente = 1
+         GROUP BY i.id_cliente`,
+        {
+          replacements: { idsClientes: arregloIdsClientes },
+          type: QueryTypes.SELECT
+        }
+      );
+
+      for (const fila of asistenciasRaw) {
+        if (fila.ultima_fecha) {
+          const fechaString = fila.ultima_fecha instanceof Date
+            ? fila.ultima_fecha.toISOString().slice(0, 10)
+            : String(fila.ultima_fecha).slice(0, 10);
+          const partesFecha = fechaString.split('-');
+          if (partesFecha.length === 3) {
+            const diaNumerico = parseInt(partesFecha[2], 10);
+            const mesNumerico = parseInt(partesFecha[1], 10);
+            ultimasAsistenciasMapa.set(Number(fila.id_cliente), `${diaNumerico}/${mesNumerico}`);
+          }
+        }
+      }
+    } // 6. CAMBIO AQUI
+
     // Construcción final del objeto de horarios con alumnos
     const schedule = {};
 
@@ -528,6 +565,8 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
           trialDetails = { date: formatDate(entry.fecha_inicio) };
         }
 
+        const diaAsistencia = ultimasAsistenciasMapa.get(entry.id) || null; // 7. CAMBIO AQUI
+
         alumnosProcesados.push({
           id: entry.id,
           name: (entry.nombre ?? '').toUpperCase(),
@@ -544,7 +583,8 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
           scheduledDetails: scheduledDetails,
 
           // NUEVA PROPIEDAD PARA EL FRONT
-          es_cupo_extra: esExtra
+          es_cupo_extra: esExtra,
+          ultimo_dia_asistencia: diaAsistencia // 8. CAMBIO AQUI
         });
       });
 

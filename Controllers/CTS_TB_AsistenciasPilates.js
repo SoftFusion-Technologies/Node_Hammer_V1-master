@@ -336,7 +336,6 @@ export const OBRS_CalendarioMensualAsistencias_CTS = async (req, res) => {
       whereHorario.id_sede = idSedeNum;
     }
 
-    // 1. CAMBIO AQUI
     const todasInscripciones = await InscripcionesPilatesModel.findAll({
       include: [
         {
@@ -347,7 +346,6 @@ export const OBRS_CalendarioMensualAsistencias_CTS = async (req, res) => {
       ]
     });
 
-    // 2. CAMBIO AQUI
     const inscritosPorGrupoYHora = {};
 
     todasInscripciones.forEach((inscripcion) => {
@@ -391,7 +389,6 @@ export const OBRS_CalendarioMensualAsistencias_CTS = async (req, res) => {
       ]
     });
 
-    // 4. CAMBIO AQUI
     const asistenciasPorFechaYHora = {};
 
     todasAsistencias.forEach((asistencia) => {
@@ -416,7 +413,6 @@ export const OBRS_CalendarioMensualAsistencias_CTS = async (req, res) => {
       }
     });
 
-    // 5. CAMBIO AQUI
     const respuestaFormateada = {};
 
     const fechaHoy = new Date();
