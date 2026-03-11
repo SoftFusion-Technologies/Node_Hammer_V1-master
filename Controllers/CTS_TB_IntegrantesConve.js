@@ -1833,6 +1833,34 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
         SELECT
           DATE_FORMAT(ic.fechaCreacion, '%Y-%m') AS cur_month,
 
+          /* =========================================================
+           * Benjamin Orellana - 11/03/2026
+           * Ajuste: permitir cambio de plan en el INICIO DEL CICLO actual.
+           * - Para planes multi-mes, el "inicio de ciclo" se deriva de:
+           *   cycle_start_month = DATE_SUB(fecha_vencimiento, (meses-1) MONTH)
+           * - Esto evita bloquear cambios en el mes 4/7/10... aunque la persona exista desde meses anteriores.
+           * - Mantiene bloqueo en meses intermedios (bloqueados) mientras el plan esté vigente.
+           * ========================================================= */
+          p.duracion_dias AS plan_duracion_dias,
+
+          CASE
+            WHEN p.duracion_dias IS NULL OR ic.fecha_vencimiento IS NULL THEN NULL
+            ELSE DATE_FORMAT(
+              DATE_SUB(
+                DATE(ic.fecha_vencimiento),
+                INTERVAL
+                  (
+                    CASE
+                      WHEN p.duracion_dias <= 30 THEN 0
+                      WHEN p.duracion_dias IN (360, 365, 366) THEN 11
+                      ELSE CEIL(p.duracion_dias / 30) - 1
+                    END
+                  ) MONTH
+              ),
+              '%Y-%m'
+            )
+          END AS cycle_start_month,
+
           /* identidad estricta (NO editable): dni/email/teléfono */
           CASE
             WHEN ic.dni IS NOT NULL AND TRIM(ic.dni) <> ''
@@ -1865,6 +1893,12 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
             FROM integrantes_conve s
             WHERE s.id_conv = :id_conv
               AND (
+                /* =========================================================
+                 * Benjamin Orellana - 11/03/2026
+                 * Ajuste: en identidad estricta, el "primer mes" se calcula por CICLO
+                 * (persona + plan_actual + vencimiento_actual) y no por el historial completo.
+                 * Permite cambiar el plan en el inicio de un nuevo ciclo (ej: mes 4) aunque el plan esté vigente.
+                 * ========================================================= */
                 /* Caso A: identidad estricta disponible => trackea por dni/email/teléfono */
                 (
                   (
@@ -1912,6 +1946,12 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
                       ELSE NULL
                     END
                   )
+                  /* NUEVO: acotar a mismo plan + mismo vencimiento (ciclo) */
+                  AND s.convenio_plan_id = :plan_id
+                  AND (
+                    (:fv IS NULL AND s.fecha_vencimiento IS NULL)
+                    OR (:fv IS NOT NULL AND s.fecha_vencimiento = :fv)
+                  )
                 )
 
                 OR
@@ -1945,6 +1985,7 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
           ) AS first_month_person
 
         FROM integrantes_conve ic
+        LEFT JOIN convenios_planes_disponibles p ON p.id = ic.convenio_plan_id
         WHERE ic.id = :id
         LIMIT 1
         `,
@@ -1969,10 +2010,21 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
       const firstMonth = check?.first_month_person || null;
       const curMonth = check?.cur_month || null;
 
-      const esMesCreacion =
+      // Benjamin Orellana - 11/03/2026 - Se habilita el cambio de plan en el inicio del ciclo (cycle_start_month),
+      // además del primer mes detectado por historial del ciclo (first_month_person).
+      const cycleStartMonth = check?.cycle_start_month || null;
+
+      const esMesCreacionPorHistorial =
         firstMonth && curMonth
           ? String(firstMonth) === String(curMonth)
           : false;
+
+      const esInicioDeCicloPorVencimiento =
+        cycleStartMonth && curMonth
+          ? String(cycleStartMonth) === String(curMonth)
+          : false;
+
+      const esMesCreacion = esMesCreacionPorHistorial || esInicioDeCicloPorVencimiento;
 
       // Si no podemos determinar firstMonth con seguridad, por seguridad NO habilitamos el cambio fuera de mes creación
       if (planVigente && !esMesCreacion) {

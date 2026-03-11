@@ -43,14 +43,14 @@ import { crearAsistenciasDiariasAusentes } from './Controllers/CTS_TB_Asistencia
 
 // Imports de Remarketing
 import { SCHEDULE_VentasRemarketingCron } from './Controllers/CTS_TB_VentasRemarketing.js';
-// SE COMENTAN IMPORTS OBSTOLETOS DE REMARKETING BENJAMIN ORELLANA 22-12-2025 
+// SE COMENTAN IMPORTS OBSTOLETOS DE REMARKETING BENJAMIN ORELLANA 22-12-2025
 // import Users from './Models/MD_TB_Users.js';
 // import VentasRemarketingModel from './Models/MD_TB_VentasRemarketing.js';
 // import { VentasProspectosModel } from './Models/MD_TB_ventas_prospectos.js';
 // import { SedeModel } from './Models/MD_TB_sedes.js';
 // import { VentasComisionesModel } from './Models/MD_TB_ventas_comisiones.js';
 // import remarketing_relaciones from './Models/remarketing_relaciones.js';
-// SE COMENTAN IMPORTS OBSTOLETOS DE REMARKETING BENJAMIN ORELLANA 22-12-2025 
+// SE COMENTAN IMPORTS OBSTOLETOS DE REMARKETING BENJAMIN ORELLANA 22-12-2025
 
 import setupAssociations from './Models/Asociaciones.js';
 
@@ -97,7 +97,6 @@ if (process.env.NODE_ENV !== 'production') {
 SCHEDULE_VentasAgendaCron();
 iniciarCronEstadosPilates();
 
-
 //---------- COMIENZO DE CODIGO HECHO POR MATIAS PALLERO. FECHA 27/11/2025
 // Inicia cron mensual para Remarketing, se ejecuta el día 1 de cada mes a las 00:10 AM
 
@@ -143,19 +142,19 @@ app.get('/', (req, res) => {
   }
 });
 // BENJAMIN ORELLANA 22-12-2025  ACTUALIZACION DE ENDPOINT PARA OBTENER INTEGRANTES DE CONVENIOS INI
-// Antes hacia un select pelado, ahora por modelo y 
-// trae datos del plan asociado al integrante 
+// Antes hacia un select pelado, ahora por modelo y
+// trae datos del plan asociado al integrante
 app.get('/admconvenios/:id_conv/integrantes', async (req, res) => {
   const { id_conv } = req.params;
 
   try {
-        // const results = await db.query(
-        //   'SELECT * FROM integrantes_conve i WHERE i.id_conv = :id_conv',
-        //   {
-        //     replacements: { id_conv },
-        //     type: db.QueryTypes.SELECT
-        //   }
-        // );
+    // const results = await db.query(
+    //   'SELECT * FROM integrantes_conve i WHERE i.id_conv = :id_conv',
+    //   {
+    //     replacements: { id_conv },
+    //     type: db.QueryTypes.SELECT
+    //   }
+    // );
 
     const results = await IntegrantesConveModel.findAll({
       where: { id_conv },
@@ -288,7 +287,6 @@ const pool = mysql.createPool({
   password: '123456',
   database: 'DB_HammerDESA_c1841398'
 });
-
 
 const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
 console.log('Current Directory:', CURRENT_DIR);
@@ -702,7 +700,6 @@ app.post(
     }
   }
 );
-
 
 app.get('/download/:id', async (req, res) => {
   const { id } = req.params;
@@ -1281,7 +1278,6 @@ app.delete('/novedades-vencimientos/:id', async (req, res) => {
 
 //R8 - SE AGREGAN FECHAS PARA TRABAJAR EN CONVENIOS FINAL - BENJAMIN ORELLANA */
 
-
 // Congelar (clonar) mes abierto -> mes siguiente (por MES, ignora horas)
 app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
   const { convenio_id } = req.params;
@@ -1546,6 +1542,70 @@ app.post('/congelamientos/:convenio_id/congelar', async (req, res) => {
     :nextMonthKey AS fechaCreacion,
     CASE
       WHEN src.convenio_plan_id IS NULL THEN NULL
+
+      /* Mensual (30 días): vigencia al último día del mes DESTINO, 00:00:00 */
+      WHEN p.duracion_dias = 30
+      THEN TIMESTAMP(LAST_DAY(DATE(:nextMonthKey)), '00:00:00')
+
+      /* Planes (trimestral/semestral/anual, etc.) */
+      WHEN p.duracion_dias IN (60, 90, 120, 150, 180, 240, 270, 300, 330, 360, 365, 366)
+      THEN
+        /* offsetMeses = mesesDelPlan - 1 */
+        CASE
+          /* Si el vencimiento actual ya quedó ANTES del mes destino, hay que RENOVAR */
+          WHEN COALESCE(
+            src.fecha_vencimiento,
+            TIMESTAMP(
+              LAST_DAY(
+                DATE_ADD(
+                  DATE(:sourceMonthKey),
+                  INTERVAL (
+                    CASE
+                      WHEN p.duracion_dias IN (360,365,366) THEN 11
+                      ELSE CEIL(p.duracion_dias / 30) - 1
+                    END
+                  ) MONTH
+                )
+              ),
+              '00:00:00'
+            )
+          ) < :nextMonthKey
+          THEN TIMESTAMP(
+            LAST_DAY(
+              DATE_ADD(
+                DATE(:nextMonthKey),
+                INTERVAL (
+                  CASE
+                    WHEN p.duracion_dias IN (360,365,366) THEN 11
+                    ELSE CEIL(p.duracion_dias / 30) - 1
+                  END
+                ) MONTH
+              )
+            ),
+            '00:00:00'
+          )
+
+          /* Si todavía estamos dentro del ciclo, mantenemos el vencimiento (o lo calculamos si venía NULL) */
+          ELSE COALESCE(
+            src.fecha_vencimiento,
+            TIMESTAMP(
+              LAST_DAY(
+                DATE_ADD(
+                  DATE(:sourceMonthKey),
+                  INTERVAL (
+                    CASE
+                      WHEN p.duracion_dias IN (360,365,366) THEN 11
+                      ELSE CEIL(p.duracion_dias / 30) - 1
+                    END
+                  ) MONTH
+                )
+              ),
+              '00:00:00'
+            )
+          )
+        END
+
+      /* Otros planes (valores raros, o datos mal cargados): comportamiento anterior */
       WHEN src.fecha_vencimiento IS NOT NULL THEN src.fecha_vencimiento
       WHEN p.duracion_dias IS NULL THEN NULL
       ELSE DATE_ADD(src.fechaCreacion, INTERVAL p.duracion_dias DAY)
@@ -3917,8 +3977,8 @@ const copiarAlumnosMesAnterior = async (over = {}) => {
       alumnoPrev.prospecto === 'nuevo'
         ? 'nuevo'
         : alumnoPrev.prospecto === 'prospecto' && alumnoPrev.c === 'c'
-        ? 'prospecto_c'
-        : null;
+          ? 'prospecto_c'
+          : null;
 
     // Crear SOCIO en el mes destino (socios SIN "c") y guardar el rastro
     const { id, ...alumnoSinId } = alumnoPrev.dataValues;
@@ -4349,26 +4409,29 @@ app.get('/notifications/clases-prueba/:userId', async (req, res) => {
 
 /* FUNCION INTGEGRADA POR SERGIO MANRIQUE 14-01-2025 */
 // Endpoint igual pero para ventas_remarketing
-app.get('/notifications/clases-prueba-remarketing/:userId', async (req, res) => {
-  const userId = Number(req.params.userId);
-  try {
-    // Traer user para saber sede/level
-    const [[user]] = await pool.query(
-      'SELECT id, level, sede FROM users WHERE id = ? LIMIT 1',
-      [userId]
-    );
-    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+app.get(
+  '/notifications/clases-prueba-remarketing/:userId',
+  async (req, res) => {
+    const userId = Number(req.params.userId);
+    try {
+      // Traer user para saber sede/level
+      const [[user]] = await pool.query(
+        'SELECT id, level, sede FROM users WHERE id = ? LIMIT 1',
+        [userId]
+      );
+      if (!user)
+        return res.status(404).json({ error: 'Usuario no encontrado' });
 
-    const level = norm(user.level);
-    const mappedSede = mapUserSedeToVp(user.sede); // null => todas
-    const isAdmin = level === 'admin';
+      const level = norm(user.level);
+      const mappedSede = mapUserSedeToVp(user.sede); // null => todas
+      const isAdmin = level === 'admin';
 
-    const params = [];
-    const sedeFilterSQL = !isAdmin && mappedSede ? ' AND vr.sede = ? ' : '';
-    if (!isAdmin && mappedSede) params.push(mappedSede);
+      const params = [];
+      const sedeFilterSQL = !isAdmin && mappedSede ? ' AND vr.sede = ? ' : '';
+      if (!isAdmin && mappedSede) params.push(mappedSede);
 
-    const [notis] = await pool.query(
-      `
+      const [notis] = await pool.query(
+        `
       SELECT
         vr.id AS prospecto_id,
         vr.nombre_socio AS nombre,
@@ -4423,17 +4486,22 @@ app.get('/notifications/clases-prueba-remarketing/:userId', async (req, res) => 
         ${sedeFilterSQL}
       ORDER BY vr.n_contacto_2 ASC, vr.nombre_socio
       `,
-      params
-    );
+        params
+      );
 
-    res.json(notis);
-  } catch (error) {
-    console.error('Error obteniendo notificaciones clase de prueba (remarketing):', error);
-    res
-      .status(500)
-      .json({ error: 'Error obteniendo notificaciones de clase de prueba (remarketing)' });
+      res.json(notis);
+    } catch (error) {
+      console.error(
+        'Error obteniendo notificaciones clase de prueba (remarketing):',
+        error
+      );
+      res.status(500).json({
+        error:
+          'Error obteniendo notificaciones de clase de prueba (remarketing)'
+      });
+    }
   }
-});
+);
 /* FIN DE FUNCION INTGEGRADA POR SERGIO MANRIQUE 14-01-2025 */
 
 app.patch(
@@ -4457,27 +4525,29 @@ app.patch(
 );
 
 /* FUNCION INTGEGRADA POR SERGIO MANRIQUE 14-01-2025 */
-  // PATCH para ventas_remarketing
-  app.patch(
-    '/notifications/clases-prueba-remarketing/:prospectoId/enviado',
-    async (req, res) => {
-      const prospectoId = Number(req.params.prospectoId);
-      try {
-        const [r] = await pool.query(
-          'UPDATE ventas_remarketing SET n_contacto_2 = 1, updated_at = NOW() WHERE id = ?',
-          [prospectoId]
-        );
-        if (r.affectedRows === 0) {
-          return res.status(404).json({ error: 'Prospecto no encontrado' });
-        }
-        res.json({ ok: true, n_contacto_2: 1 });
-      } catch (e) {
-        console.error('PATCH enviado error (remarketing):', e);
-        res.status(500).json({ error: 'No se pudo marcar como enviado (remarketing)' });
+// PATCH para ventas_remarketing
+app.patch(
+  '/notifications/clases-prueba-remarketing/:prospectoId/enviado',
+  async (req, res) => {
+    const prospectoId = Number(req.params.prospectoId);
+    try {
+      const [r] = await pool.query(
+        'UPDATE ventas_remarketing SET n_contacto_2 = 1, updated_at = NOW() WHERE id = ?',
+        [prospectoId]
+      );
+      if (r.affectedRows === 0) {
+        return res.status(404).json({ error: 'Prospecto no encontrado' });
       }
+      res.json({ ok: true, n_contacto_2: 1 });
+    } catch (e) {
+      console.error('PATCH enviado error (remarketing):', e);
+      res
+        .status(500)
+        .json({ error: 'No se pudo marcar como enviado (remarketing)' });
     }
-  );
-  /* FIN DE FUNCION INTGEGRADA POR SERGIO MANRIQUE 14-01-2025 */
+  }
+);
+/* FIN DE FUNCION INTGEGRADA POR SERGIO MANRIQUE 14-01-2025 */
 
 // GET /prospectos-alertas
 app.get('/prospectos-alertas', async (req, res) => {
@@ -4551,7 +4621,7 @@ app.get('/prospectos-remarketing-alertas', async (req, res) => {
 
   res.json(rows);
 });
-  /* FIN DE FUNCION INTGEGRADA POR SERGIO MANRIQUE 19-01-2025 */
+/* FIN DE FUNCION INTGEGRADA POR SERGIO MANRIQUE 19-01-2025 */
 
 async function deleteOldNotifications() {
   try {
@@ -4792,7 +4862,8 @@ app.post(
         instructivoUrl = await guardarArchivo(instructivoFile);
       }
 
-      const esDestacado = destacado === "true" || destacado === true || destacado === 1 ? 1 : 0;
+      const esDestacado =
+        destacado === 'true' || destacado === true || destacado === 1 ? 1 : 0;
 
       // Insertar en la nueva tabla 'promocion_tarjetas'
       await pool.query(
@@ -4870,8 +4941,8 @@ app.put(
 
 app.put('/promocion-tarjetas/:id/destacado', async (req, res) => {
   const { id } = req.params;
-  const { destacado } = req.body; 
-  
+  const { destacado } = req.body;
+
   try {
     await pool.query(
       'UPDATE promocion_tarjetas SET destacado = ? WHERE id = ?',
