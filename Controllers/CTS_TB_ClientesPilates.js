@@ -388,10 +388,10 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
     };
 
     const hoy = new Date();
-    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    const inicioMesStr = formatYmd(inicioMes);
+    const hace30Dias = new Date();
+    hace30Dias.setDate(hoy.getDate() - 30);
+    const inicioMesStr = formatYmd(hace30Dias);
     const hoyStr = formatYmd(hoy);
-
     // groupKey -> Set(inscripcionId)
     const inscripcionIdsPorGrupo = new Map();
     for (const [groupKey, alumnos] of planGroupMap.entries()) {
