@@ -488,10 +488,13 @@ export const ESP_OBRS_HorarioClientesPilates_CTS = async (req, res) => {
           // Convertimos a objeto Date por si viene como string desde la DB
           const fecha = fila.ultima_fecha instanceof Date
             ? fila.ultima_fecha
-            : new Date(fila.ultima_fecha);
+            : new Date(fila.ultima_fecha + 'T00:00:00');
 
-          // Formato argentino dd/mm/aaaa
-          const fechaFormateada = fecha.toLocaleDateString('es-AR');
+          const dia = fecha.getDate();
+          const mes = fecha.getMonth() + 1;
+          const anio = fecha.getFullYear();
+
+          const fechaFormateada = `${dia}/${mes}/${anio}`;
 
           ultimasAsistenciasMapa.set(
             Number(fila.id_cliente),
