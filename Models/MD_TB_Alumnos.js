@@ -12,7 +12,7 @@ export const AlumnosModel = db.define(
     nombre: { type: DataTypes.STRING, allowNull: true },
     // Nuevo campo `prospecto`
     prospecto: {
-      type: DataTypes.ENUM('nuevo', 'prospecto', 'socio'),
+      type: DataTypes.ENUM('nuevo', 'prospecto', 'socio','nma'),
       allowNull: false,
       defaultValue: 'nuevo'
     },

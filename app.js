@@ -4008,7 +4008,13 @@ const copiarAlumnosMesAnterior = async (over = {}) => {
            SELECT 1 FROM alumnos_nuevos WHERE idAlumno = ? AND marca = 1
          )`,
         [nuevo.id, primerDia, primerDia, nuevo.id]
-      );
+      )
+      
+      // marcar como NMA
+      await pool.execute(
+        `UPDATE alumnos SET prospecto = 'nma' WHERE id = ?`,
+        [nuevo.id]
+      );;
       console.log(
         `Copiado como SOCIO y marcado amarillo: ${alumnoPrev.nombre} -> ${mesActual}-${anioActual}`
       );
