@@ -4077,10 +4077,69 @@ const eliminarDuplicados = async () => {
   console.log('✅ Duplicados eliminados correctamente.');
 };
 
+/*
+ * Convierte a 'socio' los alumnos NMA del mes anterior
+ * que tengan al menos una asistencia desde el día 20 (estado 'P').
+ * Los que no cumplen, siguen como NMA.
+ */
+const normalizarNMA = async () => {
+  try {
+    const ahora = new Date();
+    const finMesAnterior = new Date(ahora.getFullYear(), ahora.getMonth(), 0);
+
+    const mesAnterior = finMesAnterior.getMonth() + 1;
+    const anioAnterior = finMesAnterior.getFullYear();
+
+    // 1) Obtener ids de alumnos con al menos una asistencia >= 20 y estado P
+    const asistencias = await AsistenciasModel.findAll({
+      attributes: [
+        [Sequelize.fn('DISTINCT', Sequelize.col('alumno_id')), 'alumno_id']
+      ],
+      where: {
+        mes: mesAnterior,
+        anio: anioAnterior,
+        dia: { [Op.gte]: 20 },
+        estado: 'P'
+      },
+      raw: true
+    });
+
+    const alumnosIds = asistencias.map((a) => a.alumno_id);
+
+    if (!alumnosIds.length) {
+      console.log('🔄 NMA → socio: no hay alumnos con asistencias >= día 20');
+      return;
+    }
+
+    // 2) Actualizar solo los NMA de ese mes/año y que estén en esos ids
+    const [affectedRows] = await AlumnosModel.update(
+      { prospecto: 'socio' },
+      {
+        where: {
+          prospecto: 'nma',
+          mes: mesAnterior,
+          anio: anioAnterior,
+          id: { [Op.in]: alumnosIds }
+        }
+      }
+    );
+
+    console.log(`🔄 NMA → socio (>= día 20): ${affectedRows}`);
+  } catch (e) {
+    console.error('❌ Error normalizando NMA:', e);
+  }
+};
+
+
 // Programar la tarea para que se ejecute el día 1 de cada mes a las 00:05
 cron.schedule('5 0 1 * *', async () => {
   try {
     await cerrarMesAnterior();
+  } catch (e) {
+    console.error(e);
+  }
+  try {
+    await normalizarNMA(); 
   } catch (e) {
     console.error(e);
   }
