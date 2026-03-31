@@ -22,6 +22,7 @@ import PilatesBajasHistorial from "./MD_TB_PilatesBajasHistorial.js";
 import PilatesEstadisticasMensuales from "./MD_TB_PilatesEstadisticasMensuales.js";
 import PilatesEstadisticasPlanes from "./MD_TB_PilatesEstadisticasPlanes.js";
 import PilatesEstadisticasInstructores from "./MD_TB_PilatesEstadisticasInstructores.js";
+import PreventaModel from "./MD_TB_Preventas.js";
 import UsuarioPilates from "./MD_TB_UsuariosPilates.js";
 import { PilatesCuposConDescuentosModel } from "./MD_TB_PilatesCuposConDescuentos.js";
 
@@ -179,6 +180,21 @@ const setupAssociations = () => {
   ContactosListaEsperaPilatesModel.belongsTo(UsersModel, {
     foreignKey: "id_usuario_contacto",
     as: "usuario_autor",
+  });
+
+  PreventaModel.belongsTo(SedeModel, {
+    foreignKey: "id_sede",
+    as: "sede",
+  });
+
+  PreventaModel.belongsTo(UsersModel, {
+    foreignKey: "id_usuario_contacto",
+    as: "usuario_contacto",
+  });
+
+  SedeModel.hasMany(PreventaModel, {
+    foreignKey: "id_sede",
+    as: "preventas",
   });
 
   // ===============================

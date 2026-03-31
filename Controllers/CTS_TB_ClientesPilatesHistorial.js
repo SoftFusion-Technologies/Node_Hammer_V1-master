@@ -194,6 +194,74 @@ export const CR_EventoHistorial_Alta_CTS = async ({
 };
 
 // ==========================================
+// CREAR EVENTO DE ALTA DESDE PREVENTA
+// ==========================================
+export const CR_EventoHistorial_Preventa_Alta_CTS = async ({
+  cliente_id,
+  id_preventa = null,
+  horario_id = null,
+}) => {
+  const t = await db.transaction();
+  try {
+    if (!cliente_id) {
+      throw new Error("cliente_id es requerido para historial de preventa");
+    }
+
+    const resumen =
+      "SE DIO DE ALTA EL ALUMNO POR PRIMERA VEZ EN LA SECCION DE PREVENTA";
+
+    const nuevoEvento = await ClientesPilatesHistorialModel.create(
+      {
+        cliente_id,
+        tipo_evento: "ALTA",
+        usuario_id: null,
+        resumen,
+        fecha_evento: new Date(),
+      },
+      { transaction: t }
+    );
+
+    const detalles = [
+      {
+        campo: "origen_alta",
+        valor_anterior: null,
+        valor_nuevo: "PREVENTA",
+      },
+      {
+        campo: "id_preventa",
+        valor_anterior: null,
+        valor_nuevo: id_preventa != null ? String(id_preventa) : null,
+      },
+      {
+        campo: "horario_id",
+        valor_anterior: null,
+        valor_nuevo: horario_id != null ? String(horario_id) : null,
+      },
+    ].filter((item) => item.valor_nuevo !== null);
+
+    if (detalles.length > 0) {
+      await ClientesPilatesHistorialDetalleModel.bulkCreate(
+        detalles.map((item) => ({
+          historial_id: nuevoEvento.id,
+          campo: item.campo,
+          valor_anterior: item.valor_anterior,
+          valor_nuevo: item.valor_nuevo,
+        })),
+        {
+          transaction: t,
+        }
+      );
+    }
+
+    await t.commit();
+    return { evento_id: nuevoEvento.id };
+  } catch (error) {
+    await t.rollback();
+    throw error;
+  }
+};
+
+// ==========================================
 // ELIMINAR HISTORIAL DE UN CLIENTE
 // ==========================================
 export const ER_HistorialPorCliente = async (

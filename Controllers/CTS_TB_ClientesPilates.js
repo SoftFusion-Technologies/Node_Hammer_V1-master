@@ -11,12 +11,17 @@ import AsistenciasPilatesModel from '../Models/MD_TB_AsistenciasPilates.js';
 import { HorariosPilatesModel } from '../Models/MD_TB_HorariosPilates.js';
 import { SedeModel } from '../Models/MD_TB_sedes.js';
 import UsuarioPilatesModel from '../Models/MD_TB_UsuariosPilates.js';
-import { CR_EventoHistorial_Alta_CTS } from './CTS_TB_ClientesPilatesHistorial.js';
+import {
+  CR_EventoHistorial_Alta_CTS,
+  CR_EventoHistorial_Preventa_Alta_CTS
+} from './CTS_TB_ClientesPilatesHistorial.js';
 import { ER_HistorialPorCliente } from './CTS_TB_ClientesPilatesHistorial.js';
+import { CR_InscripcionPilates_Preventa_CTS } from './CTS_TB_InscripcionesPilates.js';
 import HorariosDeshabilitadosPilatesModel from '../Models/MD_TB_Horarios_deshabilitados_pilates.js';
 import { ER_RegistrarBajaPilates } from './CTS_TB_PilatesBajas.js';
 import { PilatesCuposConDescuentosModel } from '../Models/MD_TB_PilatesCuposConDescuentos.js';
 import { Op, QueryTypes } from 'sequelize';
+import dayjs from 'dayjs';
 
 if (!HorariosPilatesModel.associations?.instructor) {
   HorariosPilatesModel.belongsTo(UsuarioPilatesModel, {
@@ -1170,6 +1175,8 @@ export const ESP_OBRS_HorariosDisponibles_CTS = async (req, res) => {
           hhmm,
           grp,
           grupo_label: groupLabels[grp] ?? grp,
+          horario_id: null,
+          horario_ids: [],
           cupo_por_clase: sedeCupo,
           total_inscriptos: 0,
           tipo_bloqueo: estaBloqueado,
@@ -1192,6 +1199,13 @@ export const ESP_OBRS_HorariosDisponibles_CTS = async (req, res) => {
       // Crea la entrada en el mapa de resultados si corresponde
       const entry = ensureEntry(grp, hhmm);
       if (!entry) continue;
+
+      if (!entry.horario_ids.includes(horario.id)) {
+        entry.horario_ids.push(horario.id);
+      }
+      if (entry.horario_id === null) {
+        entry.horario_id = horario.id;
+      }
 
       // Relaciona el id del horario con su clave de grupo y hora
       const key = `${grp}|${hhmm}`;
@@ -1251,6 +1265,13 @@ export const ESP_OBRS_HorariosDisponibles_CTS = async (req, res) => {
           if (!entry) continue;
           key = `${grp}|${hhmm}`;
           horarioKeyById.set(horario.id, key);
+
+          if (!entry.horario_ids.includes(horario.id)) {
+            entry.horario_ids.push(horario.id);
+          }
+          if (entry.horario_id === null) {
+            entry.horario_id = horario.id;
+          }
         }
 
         // Incrementa el contador de inscriptos para ese horario y grupo
@@ -1362,5 +1383,78 @@ export const EXISTE_ClientePruebaPorNombre_CTS = async (req, res) => {
     }
   } catch (error) {
     return res.status(500).json({ existe: false, mensajeError: error.message });
+  }
+};
+
+// Crear cliente Pilates desde preventa
+export const CR_ClientePilates_Preventa = async ({
+  nombre_apellido,
+  celular,
+  duracion_plan,
+  usuario_id = null,
+  observaciones = null,
+  id_preventa = null,
+  horario_id = null,
+}) => {
+  try {
+    const nombre = nombre_apellido ? String(nombre_apellido).trim() : null;
+    const telefono = celular ? String(celular).trim() : null;
+    const duracionNormalizada = duracion_plan
+      ? String(duracion_plan).trim().toUpperCase()
+      : null;
+
+    if (!nombre) {
+      throw new Error("El nombre es requerido para crear el cliente de Pilates");
+    }
+
+    if (!telefono) {
+      throw new Error("El teléfono es requerido para crear el cliente de Pilates");
+    }
+
+    if (!duracionNormalizada || !["SEMESTRAL", "ANUAL"].includes(duracionNormalizada)) {
+      throw new Error("La duración del plan debe ser SEMESTRAL o ANUAL");
+    }
+
+    const fecha_inicio = "2026-05-06";
+    const fecha_fin =
+      duracionNormalizada === "SEMESTRAL"
+        ? dayjs(fecha_inicio).add(179, "day").format("YYYY-MM-DD")
+        : dayjs(fecha_inicio).add(359, "day").format("YYYY-MM-DD");
+
+    const nuevoCliente = await ClientesPilatesModel.create({
+      nombre,
+      telefono,
+      estado: "Plan",
+      fecha_inicio,
+      fecha_fin,
+      observaciones:
+        observaciones ||
+        `Alta automática desde preventa${id_preventa ? ` ID ${id_preventa}` : ""}`,
+      id_contacto: null,
+      fecha_contacto: null,
+    });
+
+    const nuevaInscripcion = horario_id
+      ? await CR_InscripcionPilates_Preventa_CTS({
+          id_cliente: nuevoCliente.id,
+          horario_id,
+          fecha_inscripcion: fecha_inicio,
+        })
+      : null;
+
+    const historial = await CR_EventoHistorial_Preventa_Alta_CTS({
+      cliente_id: nuevoCliente.id,
+      id_preventa,
+      horario_id,
+    });
+
+    return {
+      cliente: nuevoCliente,
+      inscripcion: nuevaInscripcion,
+      historial,
+    };
+  } catch (error) {
+    console.error("Error en CR_ClientePilates_Preventa:", error);
+    throw error;
   }
 };

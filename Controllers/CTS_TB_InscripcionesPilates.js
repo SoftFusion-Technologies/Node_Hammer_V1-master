@@ -249,6 +249,52 @@ export const ER_InscripcionesByCliente_CTS = async (idCliente) => {
     );
   }
 };
+
+// Crear inscripción automática desde preventa usando el horario ya seleccionado
+export const CR_InscripcionPilates_Preventa_CTS = async ({
+  id_cliente,
+  horario_id,
+  fecha_inscripcion = null,
+}) => {
+  try {
+    const clienteId = Number(id_cliente);
+    const horarioId = Number(horario_id);
+
+    if (!Number.isInteger(clienteId) || clienteId <= 0) {
+      throw new Error("id_cliente inválido para inscripción de preventa");
+    }
+
+    if (!Number.isInteger(horarioId) || horarioId <= 0) {
+      throw new Error("horario_id inválido para inscripción de preventa");
+    }
+
+    const fechaNormalizada = fecha_inscripcion
+      ? dayjs(fecha_inscripcion).format("YYYY-MM-DD")
+      : dayjs().format("YYYY-MM-DD");
+
+    const nuevaInscripcion = await InscripcionesPilatesModel.create({
+      id_cliente: clienteId,
+      id_horario: horarioId,
+      fecha_inscripcion: fechaNormalizada,
+    });
+
+    const cliente = await ClientesPilatesModel.findByPk(clienteId);
+    const hoy = dayjs().format("YYYY-MM-DD");
+
+    if (cliente && cliente.fecha_inicio === hoy) {
+      await AsistenciasPilatesModel.create({
+        id_inscripcion: nuevaInscripcion.id,
+        fecha: hoy,
+        presente: false,
+      });
+    }
+
+    return nuevaInscripcion;
+  } catch (error) {
+    console.error("Error en CR_InscripcionPilates_Preventa_CTS:", error);
+    throw error;
+  }
+};
 // Eliminar inscripción
 export const ER_InscripcionesPilates_CTS = async (req, res) => {
   try {
