@@ -70,7 +70,8 @@ export const VentasProspectosModel = db.define(
         'monteros',
         'concepcion',
         'barrio sur',
-        'barrio norte'
+        'barrio norte',
+        'yerba buena - aconquija'
       ),
       allowNull: false
     },
