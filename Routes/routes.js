@@ -130,7 +130,8 @@ import {
   OBRS_Instructores_CTS,
   CR_Users_CTS,
   ER_Users_CTS,
-  UR_Users_CTS
+  UR_Users_CTS,
+  UR_Activada_Users_CTS
   // Importa los controladores necesarios para la tabla password_reset - tb_15
 } from '../Controllers/CTS_TB_Users.js';
 
@@ -494,6 +495,15 @@ import {
 } from '../Controllers/CTS_TB_IntegrantesConveNotas.js';
 // BENJAMIN ORELLANA 21 DIC 2025 FIN
 
+import { 
+  CR_Preventa_CTS, 
+  OBRS_Preventas_CTS, 
+  UR_Preventa_CTS,
+  UR_Preventa_Contacto_CTS,
+  ER_Preventa_CTS 
+} from '../Controllers/CTS_TB_Preventas.js';
+import { uploadPreventaTransferencia } from '../utils/uploadPreventasConfig.js';
+
 
 import {
   CR_PilatesCuposConDescuentos_CTS,
@@ -502,6 +512,81 @@ import {
   OBRS_PilatesCuposConDescuentos_CTS,
   OBR_PilatesCuposConDescuentos_CTS
 } from '../Controllers/CTS_TB_PilatesCuposConDescuentos.js';
+
+import {
+  CR_CuentaBancaria_CTS,
+  UR_CuentaBancaria_CTS,
+  ER_CuentaBancaria_CTS,
+  OBRS_obtenerCuentasBancarias_CTS,
+  OBRS_verificarCuentaUsuario
+} from '../Controllers/RRHH/CTS_TB_RRHH_CuentasBancarias.js';
+
+import {
+  OBR_RRHHHorario_CTS,
+  OBRS_RRHHHorarios_CTS,
+  OBRS_verificarHorariosUsuario_RRHH_CTS,
+  CR_RRHHHorario_CTS,
+  UR_RRHHHorario_CTS,
+  ER_RRHHHorario_CTS
+} from '../Controllers/RRHH/CTS_TB_RRHHHorarios.js';
+
+import {
+  OBRS_RRHHMarcaciones_CTS,
+  OBRS_HorasAcumuladasMesActual_CTS,
+  CR_RRHHMarcacion_CTS,
+  UR_RRHHMarcacion_CTS,
+  UR_RRHHMarcacionSalida_CTS,
+  ER_RRHHMarcacion_CTS,
+  OBRS_PendientesPorAlumnoYSede_CTS,
+    OBRS_CantidadPendientes_CTS,
+    OBRS_UsuariosConMarcacionFacialSinSalida_CTS
+}from '../Controllers/RRHH/CTS_TB_RRHHMarcaciones.js';
+
+import {
+  OBRS_RRHHLiquidaciones_CTS,
+  OBR_RRHHLiquidacion_CTS,
+  OBRS_PendientesLiquidar_CTS,
+  CR_EmitirLiquidacion_CTS,
+  UPD_AnularLiquidacion_CTS
+} from '../Controllers/RRHH/CTS_TB_RRHHLiquidaciones.js';
+
+import {
+  OBRS_RRHHLiquidacionDetalle_CTS,
+  OBR_RRHHLiquidacionDetalle_CTS
+} from '../Controllers/RRHH/CTS_TB_RRHHLiquidacionDetalle.js';
+
+import {
+  OBRS_RRHHUsuarioSede_CTS,
+  OBRS_RRHHUsuarioSedePorUsuario_CTS,
+  CR_RRHHUsuarioSede_CTS,
+  UR_RRHHUsuarioSede_CTS
+} from '../Controllers/RRHH/CTS_TB_RRHHUsuarioSede.js';
+
+import {
+OBRS_RRHH_CredencialesFaciales_CTS, 
+  OBR_RRHH_CredencialPorUsuario_CTS, 
+  CR_RRHH_CredencialesFaciales_CTS, 
+  UR_RRHH_CredencialesFaciales_CTS, 
+  ER_RRHH_CredencialesFaciales_CTS
+} from "../Controllers/RRHH/CTS_TB_RRHH_CredencialesFaciales.js"
+
+import { 
+  OBRS_RRHHConversaciones_CTS, 
+  OBRS_CantidadNoLeidas_RRHHConversaciones_CTS,
+  OBR_RRHHConversacion_CTS, 
+  CR_RRHHConversacion_CTS, 
+  UR_RRHHConversacion_CTS, 
+  ER_RRHHConversacion_CTS 
+} from '../Controllers/RRHH/CTS_TB_RRHHConversaciones.js';
+
+import { 
+  OBRS_RRHHConversacionMensajes_CTS, 
+  OBR_RRHHConversacionMensaje_CTS,
+  OBRS_RRHHConversacionMensajesPorUsuarioSede_CTS, 
+  CR_RRHHConversacionMensaje_CTS, 
+  UR_RRHHConversacionMensaje_CTS, 
+  ER_RRHHConversacionMensaje_CTS 
+} from '../Controllers/RRHH/CTS_TB_RRHHConversacionMensajes.js';
 
 // Crea un enrutador de Express
 const router = express.Router();
@@ -750,6 +835,8 @@ router.delete('/users/:id', ER_Users_CTS);
 
 // Actualizar un registro en Users_CTS por su ID
 router.put('/users/:id', UR_Users_CTS);
+// Actualizar un registro en Users_CTS por su ID
+router.patch('/users/:id/activada', UR_Activada_Users_CTS);
 
 // Ruta para obtener solo usuarios con level = 'instructor'
 router.get('/instructores', OBRS_Instructores_CTS);
@@ -1633,6 +1720,22 @@ import {
   CR_ConvenioChatMessageRead_CTS
 } from '../Controllers/CTS_TB_ConvenioChat.js';
 
+// Rutas para el módulo de Preventas
+/* Sergio Manrique 20-02-2026 */
+router.post(
+  '/preventas',
+  uploadPreventaTransferencia.fields([
+    { name: 'comprobante', maxCount: 1 },
+    { name: 'file', maxCount: 1 }
+  ]),
+  CR_Preventa_CTS
+);
+router.get('/preventas', OBRS_Preventas_CTS);
+router.put('/preventas/:id', UR_Preventa_CTS);
+router.put('/preventas/contacto/:id', UR_Preventa_Contacto_CTS);
+router.delete('/preventas/:id', ER_Preventa_CTS);
+/* Sergio Manrique 20-02-2026 */
+
 // Convenio Chat
 router.get('/convenio-chat/thread', OBR_ConvenioChatThread_ByConvenio_CTS);
 router.patch('/convenio-chat/thread/:id/nombre', UPD_ConvenioChatThread_SetNombre_CTS);
@@ -1647,6 +1750,104 @@ router.post('/convenio-chat/acciones/marcar-leido', MARCAR_LEIDO_ConvenioChatAcc
 router.post('/convenio-chat/messages/:id/read', CR_ConvenioChatMessageRead_CTS);
 
 // BENJAMIN ORELLANA 28 DIC 2025 FIN
+
+
+/*
+ * Sergio Manrique - RRHH
+ * Inicio de Rutas
+ */
+// ==========================================
+// CUENTAS BANCARIAS
+// ==========================================
+router.post('/rrhh/cuentas-bancarias', CR_CuentaBancaria_CTS);
+router.get('/rrhh/cuentas-bancarias', OBRS_obtenerCuentasBancarias_CTS);
+router.put('/rrhh/cuentas-bancarias/:id', UR_CuentaBancaria_CTS);
+router.delete('/rrhh/cuentas-bancarias/:id', ER_CuentaBancaria_CTS);
+router.get('/rrhh/verificar-cuenta-usuario', OBRS_verificarCuentaUsuario);
+
+
+// ==========================================
+// HORARIOS PACTADOS
+// ==========================================
+router.get('/rrhh/horarios', OBRS_RRHHHorarios_CTS);
+router.get('/rrhh/horarios/:id', OBR_RRHHHorario_CTS);
+router.get('/rrhh/horarios/usuario/:id', OBR_RRHHHorario_CTS);
+router.get('/rrhh/horarios/usuario/', OBR_RRHHHorario_CTS);
+router.post('/rrhh/horarios', CR_RRHHHorario_CTS );
+router.put('/rrhh/horarios/:id', UR_RRHHHorario_CTS);
+router.delete('/rrhh/horarios/:id', ER_RRHHHorario_CTS);
+router.get('/rrhh/verificar-horarios-usuario', OBRS_verificarHorariosUsuario_RRHH_CTS);
+
+
+// ==========================================
+// MARCACIONES Y ASISTENCIA
+// ==========================================
+router.get('/rrhh/marcaciones', OBRS_RRHHMarcaciones_CTS);
+router.get('/rrhh/marcaciones/cantidad/notificaciones/pendientes', OBRS_CantidadPendientes_CTS);
+router.get('/rrhh/marcaciones/notificaciones/pendientes', OBRS_PendientesPorAlumnoYSede_CTS);
+router.get('/rrhh/marcaciones/horas-acumuladas', OBRS_HorasAcumuladasMesActual_CTS);
+router.post('/rrhh/marcaciones', CR_RRHHMarcacion_CTS);
+router.patch('/rrhh/marcaciones/:id', UR_RRHHMarcacion_CTS);
+router.patch("/rrhh/marcaciones/:id/salida", UR_RRHHMarcacionSalida_CTS);
+router.delete('/rrhh/marcaciones/:id', ER_RRHHMarcacion_CTS);
+router.get('/rrhh/marcaciones/facial-sin-salida', OBRS_UsuariosConMarcacionFacialSinSalida_CTS);
+
+// ===============================
+// LIQUIDACIONES
+// ===============================
+router.get('/rrhh/liquidaciones', OBRS_RRHHLiquidaciones_CTS);
+router.get('/rrhh/liquidaciones/resumen/:usuario_id', OBRS_PendientesLiquidar_CTS);
+router.get('/rrhh/liquidaciones/:id', OBR_RRHHLiquidacion_CTS);
+router.post('/rrhh/liquidaciones', CR_EmitirLiquidacion_CTS);
+router.put('/rrhh/liquidaciones/:id/anular', UPD_AnularLiquidacion_CTS);
+
+// ===============================
+// DETALLE DE LIQUIDACIÓN
+// ===============================
+router.get('/rrhh/liquidacion-detalle', OBRS_RRHHLiquidacionDetalle_CTS);
+router.get('/rrhh/liquidacion-detalle/:id', OBR_RRHHLiquidacionDetalle_CTS);
+
+// ==========================================
+// VINCULACIÓN USUARIO - SEDE
+// ==========================================
+router.get('/rrhh/usuario-sede', OBRS_RRHHUsuarioSede_CTS);
+router.get('/rrhh/usuario-sede/usuario/:usuario_id', OBRS_RRHHUsuarioSedePorUsuario_CTS);
+router.post('/rrhh/usuario-sede', CR_RRHHUsuarioSede_CTS);
+router.put('/rrhh/usuario-sede/:id', UR_RRHHUsuarioSede_CTS);
+
+// ==========================================
+// BIOMETRÍA Y CREDENCIALES FACIALES
+// ==========================================
+router.get('/rrhh/credenciales-faciales', OBRS_RRHH_CredencialesFaciales_CTS);
+router.get('/rrhh/credenciales-faciales/usuario/:id_usuario', OBR_RRHH_CredencialPorUsuario_CTS);
+router.post('/rrhh/credenciales-faciales', CR_RRHH_CredencialesFaciales_CTS);
+router.put('/rrhh/credenciales-faciales/:id', UR_RRHH_CredencialesFaciales_CTS);
+router.delete('/rrhh/credenciales-faciales/:id', ER_RRHH_CredencialesFaciales_CTS);
+
+// ==========================================
+// NOVEDADES (CONVERSACIONES)
+// ==========================================
+router.get('/rrhh-conversaciones', OBRS_RRHHConversaciones_CTS);
+router.get('/rrhh-conversaciones/cantidad/mensajes-no-leidos', OBRS_CantidadNoLeidas_RRHHConversaciones_CTS);
+router.get('/rrhh-conversaciones/:id', OBR_RRHHConversacion_CTS);
+router.post('/rrhh-conversaciones', CR_RRHHConversacion_CTS);
+router.put('/rrhh-conversaciones/:id', UR_RRHHConversacion_CTS);
+router.delete('/rrhh-conversaciones/:id', ER_RRHHConversacion_CTS);
+
+// ==========================================
+// MENSAJES Y ACLARACIONES (NOVEDADES)
+// ==========================================
+router.get('/rrhh-mensajes', OBRS_RRHHConversacionMensajes_CTS);
+router.get('/rrhh-mensajes/por-usuario-sede', OBRS_RRHHConversacionMensajesPorUsuarioSede_CTS);
+router.get('/rrhh-mensajes/:id', OBR_RRHHConversacionMensaje_CTS);
+router.post('/rrhh-mensajes', CR_RRHHConversacionMensaje_CTS);
+router.put('/rrhh-mensajes/:id', UR_RRHHConversacionMensaje_CTS);
+router.delete('/rrhh-mensajes/:id', ER_RRHHConversacionMensaje_CTS);
+
+/*
+ * Sergio Manrique - RRHH
+ * Fin de Rutas
+ */
 
 // Exporta el enrutador
 export default router;
