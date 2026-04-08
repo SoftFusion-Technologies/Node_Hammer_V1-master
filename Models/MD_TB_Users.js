@@ -46,6 +46,11 @@ const UsersModel = db.define(
       type: DataTypes.STRING,
       allowNull: false
     },
+    level_admin: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 3
+    },
     sede: {
       type: DataTypes.STRING,
       allowNull: true // Puedes ajustar esto según tus requisitos
@@ -65,6 +70,11 @@ const UsersModel = db.define(
     updated_at: {
       type: DataTypes.DATE,
       allowNull: true // Puedes ajustar esto según tus requisitos
+    },
+    activada: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
     }
   },
   {

@@ -33,6 +33,21 @@ export const SedeModel = db.define(
       allowNull: false, // No se permite nulo
       unique: true // No se permiten nombres duplicados
     },
+    latitud: {
+      type: DataTypes.DECIMAL(10, 7),
+      allowNull: true,
+      defaultValue: null
+    },
+    longitud: {
+      type: DataTypes.DECIMAL(10, 7),
+      allowNull: true,
+      defaultValue: null
+    },
+    radio_permitido_metros: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 120
+    },
     estado: {
       type: DataTypes.STRING,
       allowNull: false, // No se permite nulo

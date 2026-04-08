@@ -2,6 +2,7 @@
 
 // 1. Importamos todos los modelos que vamos a relacionar
 import ClientesPilatesModel from "./MD_TB_ClientesPilates.js";
+// ...existing code...
 import InscripcionesPilatesModel from "./MD_TB_InscripcionesPilates.js";
 import AsistenciasPilatesModel from "./MD_TB_AsistenciasPilates.js";
 import { HorariosPilatesModel } from "./MD_TB_HorariosPilates.js";
@@ -11,7 +12,7 @@ import ClientesPilatesHistorialModel from "./MD_TB_ClientesPilatesHistorial.js";
 import ClientesPilatesHistorialDetalleModel from "./MD_TB_ClientesPilatesHistorialDetalle.js";
 import QuejasInternasImagenesModel from "./MD_TB_QuejasInternasImagenes.js";
 import MD_TB_QuejasInternas from "./MD_TB_QuejasInternas.js";
-import HistorialContactosPilatesModel from "./MD_TB_HistorialContactosPilates.js"; 
+import HistorialContactosPilatesModel from "./MD_TB_HistorialContactosPilates.js";
 import ListaEsperaPilates from "./MD_TB_ListaEsperaPilates.js";
 import ContactosListaEsperaPilatesModel from "./MD_TB_ContactosListaEsperaPilates.js";
 import { VentasComisionesRemarketingModel } from "./MD_TB_Ventas_comisiones_remarketing.js";
@@ -25,7 +26,15 @@ import PilatesEstadisticasInstructores from "./MD_TB_PilatesEstadisticasInstruct
 import PreventaModel from "./MD_TB_Preventas.js";
 import UsuarioPilates from "./MD_TB_UsuariosPilates.js";
 import { PilatesCuposConDescuentosModel } from "./MD_TB_PilatesCuposConDescuentos.js";
-
+import RRHHCuentasBancariasModel from "./RRHH/MD_TB_RRHH_CuentasBancarias.js";
+import RRHHHorariosModel from "./RRHH/MD_TB_RRHHHorarios.js";
+import RRHHMarcacionesModel from "./RRHH/MD_TB_RRHHMarcaciones.js";
+import RRHHLiquidacionesModel from "./RRHH/MD_TB_RRHHLiquidaciones.js";
+import RRHHLiquidacionDetalleModel from "./RRHH//MD_TB_RRHHLiquidacionDetalle.js";
+import RRHHCredencialesFacialesModel from "./RRHH/MD_TB_RRHH_CredencialesFaciales.js";
+import RRHHConversacionesModel from "./RRHH/MD_TB_RRHHConversaciones.js";
+import RRHHConversacionMensajesModel from "./RRHH/MD_TB_RRHHConversacionMensajes.js";
+import RRHH_UsuarioSede from "./RRHH/MD_TB_RRHHUsuarioSede.js";
 
 // 2. Creamos una función para configurar las asociaciones
 const setupAssociations = () => {
@@ -99,9 +108,9 @@ const setupAssociations = () => {
   ClientesPilatesHistorialModel.hasMany(
     ClientesPilatesHistorialDetalleModel,
     {
-      foreignKey: "historial_id",
-      as: "detalles",
-      onDelete: "CASCADE",
+    foreignKey: "historial_id",
+    as: "detalles",
+    onDelete: "CASCADE",
     }
   );
 
@@ -154,12 +163,12 @@ const setupAssociations = () => {
   });
 
   MD_TB_QuejasInternas.QuejasInternasModel.hasMany(QuejasInternasImagenesModel.QuejasInternasImagenesModel, {
-    foreignKey: "id_queja",
+      foreignKey: "id_queja",
     as: "imagenes"
   });
 
   QuejasInternasImagenesModel.QuejasInternasImagenesModel.belongsTo(MD_TB_QuejasInternas.QuejasInternasModel, {
-    foreignKey: "id_queja",
+      foreignKey: "id_queja",
     as: "queja"
   });
   
@@ -248,9 +257,259 @@ const setupAssociations = () => {
 
   // 2. Un Descuento es creado por un Usuario
   PilatesCuposConDescuentosModel.belongsTo(UsersModel, {
-    foreignKey: 'creado_por',
-    as: 'usuario_creador'
+    foreignKey: "creado_por",
+    as: "usuario_creador",
   });
+
+    // ===============================
+  // Relaciones de RRHH_UsuarioSede
+  // ===============================
+  // Un registro pertenece a un usuario
+  RRHH_UsuarioSede.belongsTo(UsersModel, {
+    foreignKey: "usuario_id",
+    as: "usuario",
+  });
+  // Un registro pertenece a una sede
+  RRHH_UsuarioSede.belongsTo(SedeModel, {
+    foreignKey: "sede_id",
+    as: "sede",
+  });
+  // Un usuario puede tener muchas sedes asignadas
+  UsersModel.hasMany(RRHH_UsuarioSede, {
+    foreignKey: "usuario_id",
+    as: "sedes_usuario",
+  });
+  // Una sede puede tener muchos usuarios asignados
+  SedeModel.hasMany(RRHH_UsuarioSede, {
+    foreignKey: "sede_id",
+    as: "usuarios_sede",
+  });
+
+// ===============================
+  // Relaciones de Biometría
+  // ===============================
+  RRHHCredencialesFacialesModel.belongsTo(UsersModel, {
+    foreignKey: "id_usuario",
+    as: "usuario",
+  });
+
+  UsersModel.hasOne(RRHHCredencialesFacialesModel, {
+    foreignKey: "id_usuario",
+    as: "credencial_facial",
+  });
+
+  // ===============================
+  // Relaciones de RRHH: Datos Administrativos
+  // ===============================
+
+  // Cuentas Bancarias
+  UsersModel.hasMany(RRHHCuentasBancariasModel, {
+    foreignKey: "usuario_id",
+    as: "cuentas_bancarias",
+  });
+
+  RRHHCuentasBancariasModel.belongsTo(UsersModel, {
+    foreignKey: "usuario_id",
+    as: "usuario",
+  });
+
+  // Horarios Pactados
+  UsersModel.hasMany(RRHHHorariosModel, {
+    foreignKey: "usuario_id",
+    as: "rrhh_horarios",
+  });
+
+  RRHHHorariosModel.belongsTo(UsersModel, {
+    foreignKey: "usuario_id",
+    as: "usuario",
+  });
+
+  SedeModel.hasMany(RRHHHorariosModel, {
+    foreignKey: "sede_id",
+    as: "rrhh_horarios",
+  });
+
+  RRHHHorariosModel.belongsTo(SedeModel, {
+    foreignKey: "sede_id",
+    as: "sede",
+  });
+
+  // ===============================
+  // Relaciones de RRHH: Asistencia (Marcaciones)
+  // ===============================
+  RRHHMarcacionesModel.belongsTo(UsersModel, {
+    foreignKey: "usuario_id",
+    as: "usuario",
+  });
+
+  RRHHMarcacionesModel.belongsTo(UsersModel, {
+    foreignKey: "aprobado_por",
+    as: "aprobador",
+  });
+
+  RRHHMarcacionesModel.belongsTo(SedeModel, {
+    foreignKey: "sede_id",
+    as: "sede",
+  });
+
+    RRHHMarcacionesModel.belongsTo(RRHHHorariosModel, {
+  foreignKey: "horario_id",
+  as: "horario",
+  });
+
+  UsersModel.hasMany(RRHHMarcacionesModel, {
+    foreignKey: "usuario_id",
+    as: "marcaciones",
+  });
+
+  UsersModel.hasMany(RRHHMarcacionesModel, {
+    foreignKey: "aprobado_por",
+    as: "marcaciones_aprobadas",
+  });
+
+  SedeModel.hasMany(RRHHMarcacionesModel, {
+    foreignKey: "sede_id",
+    as: "marcaciones",
+  });
+
+    RRHHHorariosModel.hasMany(RRHHMarcacionesModel, {
+    foreignKey: "horario_id",
+    as: "marcaciones",
+  });
+
+  // ===============================
+  // Relaciones de RRHHLiquidaciones
+  // ===============================
+  RRHHLiquidacionesModel.belongsTo(UsersModel, {
+    foreignKey: "usuario_id",
+    as: "usuario",
+  });
+
+  RRHHLiquidacionesModel.belongsTo(SedeModel, {
+    foreignKey: "sede_id",
+    as: "sede",
+  });
+
+  RRHHLiquidacionesModel.belongsTo(RRHHCuentasBancariasModel, {
+    foreignKey: "cuenta_bancaria_id",
+    as: "cuenta_bancaria",
+  });
+
+  RRHHLiquidacionesModel.belongsTo(UsersModel, {
+    foreignKey: "liquidado_por",
+    as: "liquidador",
+  });
+
+  UsersModel.hasMany(RRHHLiquidacionesModel, {
+    foreignKey: "usuario_id",
+    as: "liquidaciones_recibidas",
+  });
+
+  UsersModel.hasMany(RRHHLiquidacionesModel, {
+    foreignKey: "liquidado_por",
+    as: "liquidaciones_realizadas",
+  });
+
+  SedeModel.hasMany(RRHHLiquidacionesModel, {
+    foreignKey: "sede_id",
+    as: "rrhh_liquidaciones",
+  });
+
+// ===============================
+  // Relaciones de RRHHLiquidacionDetalle
+  // ===============================
+  RRHHLiquidacionesModel.hasMany(RRHHLiquidacionDetalleModel, {
+    foreignKey: "liquidacion_id",
+    as: "detalles",
+  });
+
+  RRHHLiquidacionDetalleModel.belongsTo(RRHHLiquidacionesModel, {
+    foreignKey: "liquidacion_id",
+    as: "liquidacion",
+  });
+
+  RRHHLiquidacionDetalleModel.belongsTo(RRHHMarcacionesModel, {
+    foreignKey: "marcacion_id",
+    as: "marcacion",
+  });
+
+  RRHHMarcacionesModel.hasMany(RRHHLiquidacionDetalleModel, {
+    foreignKey: "marcacion_id",
+    as: "detalles_liquidacion",
+  });
+
+  // ===============================
+  //Vinculación directa marcaciones <-> liquidación
+  // ===============================
+  RRHHMarcacionesModel.belongsTo(RRHHLiquidacionesModel, {
+    foreignKey: "liquidacion_id",
+    as: "liquidacion",
+  });
+
+  RRHHLiquidacionesModel.hasMany(RRHHMarcacionesModel, {
+    foreignKey: "liquidacion_id",
+    as: "marcaciones_liquidadas",
+  });
+
+  // ===============================
+  // Relaciones de RRHH Conversaciones
+  // ===============================
+  RRHHConversacionesModel.belongsTo(UsersModel, {
+    foreignKey: "usuario_id",
+    as: "usuario",
+  });
+
+  RRHHConversacionesModel.belongsTo(SedeModel, {
+    foreignKey: "sede_id",
+    as: "sede",
+  });
+
+  UsersModel.hasOne(RRHHConversacionesModel, {
+    foreignKey: "usuario_id",
+    as: "rrhh_conversacion",
+  });
+
+  SedeModel.hasMany(RRHHConversacionesModel, {
+    foreignKey: "sede_id",
+    as: "rrhh_conversaciones",
+  });
+
+  // ===============================
+  // Relaciones de RRHH Conversacion Mensajes
+  // ===============================
+  RRHHConversacionMensajesModel.belongsTo(RRHHConversacionesModel, {
+    foreignKey: "conversacion_id",
+    as: "conversacion",
+  });
+
+  RRHHConversacionesModel.hasMany(RRHHConversacionMensajesModel, {
+    foreignKey: "conversacion_id",
+    as: "mensajes",
+  });
+
+  RRHHConversacionMensajesModel.belongsTo(UsersModel, {
+    foreignKey: "emisor_user_id",
+    as: "emisor",
+  });
+
+  RRHHConversacionMensajesModel.belongsTo(UsersModel, {
+    foreignKey: "resuelto_por",
+    as: "resolutor",
+  });
+
+  RRHHConversacionMensajesModel.belongsTo(RRHHMarcacionesModel, {
+    foreignKey: "marcacion_id",
+    as: "marcacion",
+  });
+
+  RRHHMarcacionesModel.hasMany(RRHHConversacionMensajesModel, {
+    foreignKey: "marcacion_id",
+    as: "mensajes_aclaracion",
+  });
+
+
+
+
 
   console.log("Relaciones de Inteligencia Pilates configuradas correctamente.");
 };
