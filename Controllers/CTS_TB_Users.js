@@ -101,4 +101,33 @@ export const UR_Users_CTS = async (req, res) => {
   }
 };
 
+// Actualizar el estado "activada" de un registro en Users por su ID
+export const UR_Activada_Users_CTS = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { activada } = req.body;
+
+    // Validar que el valor de "activada" sea 0 o 1
+    if (activada !== 0 && activada !== 1) {
+      return res.status(400).json({ mensajeError: 'El valor de activada debe ser 0 o 1' });
+    }
+
+    const [numRowsUpdated] = await UsersModel.update({ activada }, {
+      where: { id }
+    });
+
+    if (numRowsUpdated === 1) {
+      const registroActualizado = await UsersModel.findByPk(id);
+      res.json({
+        message: 'Estado "activada" actualizado correctamente',
+        registroActualizado
+      });
+    } else {
+      res.status(404).json({ mensajeError: 'Registro no encontrado' });
+    }
+  } catch (error) {
+    res.status(500).json({ mensajeError: error.message });
+  }
+};
+
 

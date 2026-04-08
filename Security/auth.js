@@ -15,7 +15,7 @@ export const login = async (req, res) => {
 
     if (results.length > 0) {
       const user = results[0];
-      const token = jwt.sign({ id: user.id, level: user.level, sede: user.sede, name: user.name }, 'softfusion', {
+      const token = jwt.sign({ id: user.id, level: user.level,level_admin: user.level_admin, sede: user.sede, name: user.name, activada: user.activada }, 'softfusion', {
         expiresIn: '1h'
       });
 
@@ -23,9 +23,11 @@ export const login = async (req, res) => {
         message: 'Success',
         token,
         level: user.level,
+        level_admin: user.level_admin,
         id: user.id, // ← se incluye aquí el ID
         sede: user.sede,
-        name: user.name
+        name: user.name,
+        activada: user.activada
       });
     } else {
       return res.json('Fail');

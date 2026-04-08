@@ -59,22 +59,37 @@ export const OBR_Sede_CTS = async (req, res) => {
 // Crear un nuevo registro en SedeModel
 export const CR_Sede_CTS = async (req, res) => {
   try {
-    const { nombre, estado, cupo_maximo_pilates, es_ciudad } = req.body;
-    const registro = await SedeModel.create({ nombre, estado, cupo_maximo_pilates, es_ciudad });
+    let { nombre, estado, cupo_maximo_pilates, es_ciudad, latitud, longitud, radio_permitido_metros } = req.body;
+
+    if (latitud === "") latitud = null;
+    if (longitud === "") longitud = null;
+    if (radio_permitido_metros === "") radio_permitido_metros = null;
+
+    const registro = await SedeModel.create({
+      nombre,
+      estado,
+      cupo_maximo_pilates,
+      es_ciudad,
+      latitud,
+      longitud,
+      radio_permitido_metros
+    });
+
     if (es_ciudad === 1) {
       const horariosResult = await insertarHorariosPorDefectoParaSedeCiudad(registro.id);
       if (!horariosResult.success) {
-        return res
-          .status(500)
-          .json({
-            message: "Sede creada, pero error al insertar horarios",
-            error: horariosResult.message,
-            registro,
-          });
+        return res.status(500).json({
+          message: "Sede creada, pero error al insertar horarios",
+          error: horariosResult.message,
+          registro
+        });
       }
     }
+
     res.json({ message: 'Sede creada correctamente', registro });
+
   } catch (error) {
+    console.error('Error al crear sede:', error);
     res.json({ mensajeError: error.message });
   }
 };
@@ -178,7 +193,25 @@ export const ObtenerCantidadAlumnosPorSede_CTS = async (req, res) => {
 export const UR_Sede_CTS = async (req, res) => {
   try {
     const { id } = req.params;
-    const [numRowsUpdated] = await SedeModel.update(req.body, {
+    let data = { ...req.body };
+
+    const toNull = (value) => {
+      if (value === "" || value === undefined || value === null) {
+        return null;
+      }
+      return value;
+    };
+
+    data.latitud = toNull(data.latitud);
+    data.longitud = toNull(data.longitud);
+    data.radio_permitido_metros = toNull(data.radio_permitido_metros);
+
+    // Si no hay coordenadas, tampoco tiene sentido el radio
+    if (!data.latitud || !data.longitud) {
+      data.radio_permitido_metros = null;
+    }
+
+    const [numRowsUpdated] = await SedeModel.update(data, {
       where: { id }
     });
 
@@ -186,23 +219,25 @@ export const UR_Sede_CTS = async (req, res) => {
       const registroActualizado = await SedeModel.findByPk(id);
 
       if (registroActualizado.es_ciudad) {
-        // Contamos si ya tiene horarios para no crear duplicados
         const horariosExistentes = await HorariosPilatesModel.count({
           where: { id_sede: id },
         });
-        // Si es de Pilates y NO tiene horarios, los creamos
+
         if (horariosExistentes === 0) {
           console.log(`La sede ${registroActualizado.nombre} (ID: ${id}) fue marcada para Pilates y no tenía horarios. Creando horarios por defecto...`);
           await insertarHorariosPorDefectoParaSedeCiudad(id);
         }
       }
+
       res.json({
         message: 'Sede actualizada correctamente',
         registroActualizado
       });
+
     } else {
       res.status(404).json({ mensajeError: 'Sede no encontrada' });
     }
+
   } catch (error) {
     res.status(500).json({ mensajeError: error.message });
   }
