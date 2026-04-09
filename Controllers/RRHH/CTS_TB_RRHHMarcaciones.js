@@ -927,7 +927,7 @@ export const OBRS_PendientesPorAlumnoYSede_CTS = async (req, res) => {
   try {
     // Traer todas las marcaciones pendientes
     const pendientes = await RRHHMarcacionesModel.findAll({
-      where: { estado_aprobacion: "pendiente" },
+      where: { estado_aprobacion: "pendiente", eliminado: 0 },
       attributes: ["usuario_id", "sede_id"],
     });
 
