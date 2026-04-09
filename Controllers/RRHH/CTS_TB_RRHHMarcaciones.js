@@ -1036,48 +1036,48 @@ export const OBRS_UsuariosConMarcacionFacialSinSalida_CTS = async (
 
 export const procesarMarcacionesAutomaticas_CTS = async () => {
   try {
-    const ayer = dayjs().tz(TZ).subtract(1, "day");
-    const fechaAyerStr = ayer.format("YYYY-MM-DD");
-    const diaSemanaAyer = ayer.day();
+    // Usamos la fecha de hoy, no la de ayer, ya que el cron se ejecuta a las 23:59, justo antes de que cambie el día.
+    const hoy = dayjs().tz(TZ);
+    const fechaHoyStr = hoy.format("YYYY-MM-DD");
+    const diaSemanaHoy = hoy.day();
 
-    if (diaSemanaAyer === 0) return;
+    if (diaSemanaHoy === 0) return;
 
     const horariosPlanificados = await RRHHHorariosModel.findAll({
       where: {
-        dia_semana: diaSemanaAyer,
+        dia_semana: diaSemanaHoy,
         eliminado: 0,
-        fecha_vigencia_desde: { [Op.lte]: fechaAyerStr },
+        fecha_vigencia_desde: { [Op.lte]: fechaHoyStr },
         [Op.or]: [
           { fecha_vigencia_hasta: null },
-          { fecha_vigencia_hasta: { [Op.gte]: fechaAyerStr } },
+          { fecha_vigencia_hasta: { [Op.gte]: fechaHoyStr } },
         ],
       },
       include: [{
         model: UsersModel,
         as: 'usuario', 
-        attributes: ['id', 'level_admin'], // Solo traemos lo necesario
+        attributes: ['id', 'level_admin'],
         where: {
-          level_admin: { [Op.ne]: 1 } // Trae todos los que NO sean 1 (!= 1)
+          level_admin: { [Op.ne]: 1 }
         }
       }]
     });
 
     console.log(
-      `[CRON] Procesando fecha: ${fechaAyerStr}. Turnos: ${horariosPlanificados.length}`,
+      `[CRON] Procesando fecha actual: ${fechaHoyStr}. Turnos a revisar: ${horariosPlanificados.length}`,
     );
 
     for (const horario of horariosPlanificados) {
       const inicioTurno = dayjs(
-        `${fechaAyerStr} ${horario.hora_entrada}`,
+        `${fechaHoyStr} ${horario.hora_entrada}`,
       ).toDate();
-      const finTurno = dayjs(`${fechaAyerStr} ${horario.hora_salida}`).toDate();
+      const finTurno = dayjs(`${fechaHoyStr} ${horario.hora_salida}`).toDate();
 
-      // 2. Verificamos si ya existe marcación incluyendo el horario_id para ser más precisos
       const marcacionExistente = await RRHHMarcacionesModel.findOne({
         where: {
           usuario_id: horario.usuario_id,
-          horario_id: horario.id, // <-- AGREGADO: Buscamos por el ID del horario
-          fecha: fechaAyerStr,
+          horario_id: horario.id,
+          fecha: fechaHoyStr,
           eliminado: 0,
         },
       });
@@ -1089,9 +1089,9 @@ export const procesarMarcacionesAutomaticas_CTS = async () => {
 
         await RRHHMarcacionesModel.create({
           usuario_id: horario.usuario_id,
-          horario_id: horario.id, // <-- AGREGADO: Guardamos la relación
+          horario_id: horario.id,
           sede_id: horario.sede_id,
-          fecha: fechaAyerStr,
+          fecha: fechaHoyStr,
           hora_entrada: inicioTurno,
           hora_salida: finTurno,
           estado: "normal",
