@@ -504,8 +504,7 @@ export const OBRS_HorasAcumuladasMesActual_CTS = async (req, res) => {
   }
 };
 
-// ─── Crear marcación ──────────────────────────────────────────────────────────
-// ─── Crear marcación (Actualizado con lógica de Extras manuales) ───────────────
+// ─── Crear marcación ──────
 export const CR_RRHHMarcacion_CTS = async (req, res) => {
   try {
     const body = req.body;
@@ -519,7 +518,7 @@ export const CR_RRHHMarcacion_CTS = async (req, res) => {
 
     // Validación de GPS para registros directos (app/facial)
     if (
-      body.estado_aprobacion === "aprobada" &&
+      (body.origen === "facial") &&
       body.latitud &&
       body.longitud &&
       !body.hora_salida
@@ -538,10 +537,14 @@ export const CR_RRHHMarcacion_CTS = async (req, res) => {
         Number(sede.longitud),
       );
 
-      if (distanciaMetros > (sede.radio_permitido_metros || 120)) {
+      const radioPermitido = sede.radio_permitido_metros || 120;
+
+      if (distanciaMetros > radioPermitido) {
         return res
           .status(400)
-          .json({ mensajeError: "Fuera de rango permitido." });
+          .json({ 
+            mensajeError: `Fuera de rango permitido. Te encuentras a ${Math.round(distanciaMetros)} metros de la sede (Máximo permitido: ${radioPermitido}m).` 
+          });
       }
     }
 
