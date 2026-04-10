@@ -1318,4 +1318,3 @@ cron.schedule(
     timezone: TZ,
   }
 );
-procesarMarcacionesAutomaticas_CTS()
