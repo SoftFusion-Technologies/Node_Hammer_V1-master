@@ -64,6 +64,7 @@ import initHxRelaciones from './Models/hx_relaciones.js';
 import initConveniosRelaciones from './Models/convenios_relaciones.js';
 // BENJAMIN ORELLANA 22-12-2025  SE ADICIONA RELACIONES EN CONVENIOS
 
+import initDebitosAutomaticosRelaciones from './Models/Debitos_Automaticos/debitos_automaticos_relaciones.js';
 import './Models/ventas_relaciones.js';
 // … importar db y modelos antes si corresponde …
 
@@ -72,7 +73,7 @@ initHxRelaciones();
 // BENJAMIN ORELLANA 22-12-2025  SE ADICIONA RELACIONES EN CONVENIOS
 initConveniosRelaciones();
 // BENJAMIN ORELLANA 22-12-2025  SE ADICIONA RELACIONES EN CONVENIOS
-
+initDebitosAutomaticosRelaciones();
 // BENJAMIN ORELLANA 22-12-2025  IMPORTACIÓN DE MODELOS DE CONVENIOS INI
 import MD_TB_IntegrantesConve from './Models/MD_TB_IntegrantesConve.js';
 import MD_TB_ConveniosPlanesDisponibles from './Models/MD_TB_ConveniosPlanesDisponibles.js';
@@ -84,6 +85,30 @@ const ConveniosPlanesDisponiblesModel =
   MD_TB_ConveniosPlanesDisponibles.ConveniosPlanesDisponiblesModel;
 // BENJAMIN ORELLANA 22-12-2025  IMPORTACIÓN DE MODELOS DE CONVENIOS FIN
 
+// BENJAMIN ORELLANA 08-04-2026 IMPORTACIÓN DEL CRON QUE LIMPIA LAS SOLICITUDES
+import { limpiarSolicitudesAprobadasVencidas_CRON } from './Controllers/Debitos_Automaticos/CTS_TB_DebitosAutomaticosSolicitudes.js';
+/* Benjamin Orellana - 08/04/2026 - Cron diario que elimina a las 07:00 AM las solicitudes aprobadas en días anteriores */
+cron.schedule(
+  '0 7 * * *',
+  async () => {
+    console.log(
+      '[CRON] Iniciando limpieza diaria de solicitudes aprobadas de Débitos Automáticos...'
+    );
+
+    try {
+      await limpiarSolicitudesAprobadasVencidas_CRON();
+    } catch (error) {
+      console.error(
+        '[CRON] Error ejecutando limpieza diaria de Débitos Automáticos:',
+        error
+      );
+    }
+  },
+  {
+    scheduled: true,
+    timezone: 'America/Argentina/Buenos_Aires'
+  }
+);
 // CONFIGURACION PRODUCCION
 if (process.env.NODE_ENV !== 'production') {
   dotenv.config();
@@ -4008,13 +4033,12 @@ const copiarAlumnosMesAnterior = async (over = {}) => {
            SELECT 1 FROM alumnos_nuevos WHERE idAlumno = ? AND marca = 1
          )`,
         [nuevo.id, primerDia, primerDia, nuevo.id]
-      )
-      
+      );
+
       // marcar como NMA
-      await pool.execute(
-        `UPDATE alumnos SET prospecto = 'nma' WHERE id = ?`,
-        [nuevo.id]
-      );;
+      await pool.execute(`UPDATE alumnos SET prospecto = 'nma' WHERE id = ?`, [
+        nuevo.id
+      ]);
       console.log(
         `Copiado como SOCIO y marcado amarillo: ${alumnoPrev.nombre} -> ${mesActual}-${anioActual}`
       );
@@ -4130,7 +4154,6 @@ const normalizarNMA = async () => {
   }
 };
 
-
 // Programar la tarea para que se ejecute el día 1 de cada mes a las 00:05
 cron.schedule('5 0 1 * *', async () => {
   try {
@@ -4139,7 +4162,7 @@ cron.schedule('5 0 1 * *', async () => {
     console.error(e);
   }
   try {
-    await normalizarNMA(); 
+    await normalizarNMA();
   } catch (e) {
     console.error(e);
   }

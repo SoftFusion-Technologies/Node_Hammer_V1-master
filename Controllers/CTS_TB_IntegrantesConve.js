@@ -703,8 +703,8 @@ const buildIntegrantesPdfHtml = ({ meta, registros, totals }) => {
           <td class="cell">
             <div class="strong">${escapeHtml(nombre)}</div>
             <div class="muted">DNI: ${escapeHtml(dni)} · Tel: ${escapeHtml(
-        tel
-      )}</div>
+              tel
+            )}</div>
             <div class="muted">${escapeHtml(email)}</div>
           </td>
 
@@ -1623,41 +1623,12 @@ export const CR_IntegrantesConve_CTS = async (req, res) => {
 export const ER_IntegrantesConve_CTS = async (req, res) => {
   const t = await db.transaction();
   try {
-    const { id } = req.params;
+    const id = Number(req.params.id);
 
-    // ==============================
-    // ANTERIOR
-    // ==============================
-    /*
-    // 1) Obtener convenio + mes del registro
-    const info = await getIntegranteMonthInfo(id, t);
-    if (!info) {
+    if (!Number.isFinite(id) || id <= 0) {
       await t.rollback();
-      return res.status(404).json({ mensajeError: 'Registro no encontrado' });
+      return res.status(400).json({ mensajeError: 'ID inválido.' });
     }
-
-    const convenioId = Number(info.id_conv);
-    const monthStart = info.monthStart;
-
-    // 2) Bloqueo: solo mes abierto y no congelado
-    await assertMesEditable({
-      convenio_id: convenioId,
-      monthStart,
-      transaction: t
-    });
-
-    // 3) Eliminar
-    const deleted = await IntegrantesConveModel.destroy({
-      where: { id },
-      transaction: t
-    });
-    */
-
-    // ==============================
-    // NUEVO
-    // Criterio: si NO está congelado, debe dejar borrar aunque NO sea el mes abierto.
-    // Por eso: requireOpenMonth = false.
-    // ==============================
 
     // 1) Obtener convenio + mes del registro
     const info = await getIntegranteMonthInfo(id, t);
@@ -1669,23 +1640,20 @@ export const ER_IntegrantesConve_CTS = async (req, res) => {
     const convenioId = Number(info.id_conv);
     const monthStart = info.monthStart;
 
-    // (opcional) Si querés que el criterio aplique solo cuando permiteFec=1, lo dejamos calculado:
+    // 2) Ver si el convenio maneja fechas
     const permiteFec = await getConvenioPermiteFec(convenioId, t);
 
-    // 2) Bloqueo:
-    // - Mantiene validación "no pasado" (punto 0) + "no congelado" (punto 1)
-    // - NO exige mes abierto (punto 2) => requireOpenMonth: false
-    // Nota: esto se alinea con "si no está congelado, puedo borrar".
-    await assertMesEditable({
-      convenio_id: convenioId,
-      monthStart,
-      transaction: t,
-      requireOpenMonth: false
-      // si quisieras condicionar: requireOpenMonth: false (igual),
-      // o incluso: requireOpenMonth: !permiteFec (pero vos querés que NO exija mes abierto)
-    });
+    // 3) Solo validar reglas mensuales si el convenio maneja fechas
+    if (permiteFec) {
+      await assertMesEditable({
+        convenio_id: convenioId,
+        monthStart,
+        transaction: t,
+        requireOpenMonth: false
+      });
+    }
 
-    // 3) Eliminar
+    // 4) Eliminar
     const deleted = await IntegrantesConveModel.destroy({
       where: { id },
       transaction: t
@@ -2024,7 +1992,8 @@ export const UR_IntegrantesConve_CTS = async (req, res) => {
           ? String(cycleStartMonth) === String(curMonth)
           : false;
 
-      const esMesCreacion = esMesCreacionPorHistorial || esInicioDeCicloPorVencimiento;
+      const esMesCreacion =
+        esMesCreacionPorHistorial || esInicioDeCicloPorVencimiento;
 
       // Si no podemos determinar firstMonth con seguridad, por seguridad NO habilitamos el cambio fuera de mes creación
       if (planVigente && !esMesCreacion) {
@@ -2165,20 +2134,28 @@ export const Autorizar_Integrante_CTS = async (req, res) => {
         .json({ mensajeError: 'Estado de autorización no válido' });
     }
 
-    // 1) Obtener mes del registro y bloquear
+    // 1) Obtener mes + convenio del registro
     const info = await getIntegranteMonthInfo(id, t);
     if (!info) {
       await t.rollback();
       return res.status(404).json({ mensajeError: 'Registro no encontrado' });
     }
 
-    await assertMesEditable({
-      convenio_id: Number(info.id_conv),
-      monthStart: info.monthStart,
-      transaction: t
-    });
+    const convenioId = Number(info.id_conv);
 
-    // 2) Update
+    // 2) Ver si el convenio maneja fechas
+    const permiteFec = await getConvenioPermiteFec(convenioId, t);
+
+    // 3) Solo validar mes editable si el convenio trabaja con fechas
+    if (permiteFec) {
+      await assertMesEditable({
+        convenio_id: convenioId,
+        monthStart: info.monthStart,
+        transaction: t
+      });
+    }
+
+    // 4) Update
     const [numRowsUpdated] = await IntegrantesConveModel.update(
       { estado_autorizacion },
       { where: { id }, transaction: t }

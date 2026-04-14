@@ -11,7 +11,7 @@
 */
 
 import express from 'express'; // Importa la librería Express
-
+import { uploadPreventaTransferencia } from '../utils/uploadPreventasConfig.js';
 import {
   OBR_Trabajo_CTS,
   OBRS_Trabajo_CTS,
@@ -294,7 +294,7 @@ import {
   UR_Queja_CTS,
   MARCAR_Resuelto_Queja_CTS,
   MARCAR_NoResuelto_Queja_CTS
-} from '../Controllers/CTS_TB_QuejasInternas.js'
+} from '../Controllers/CTS_TB_QuejasInternas.js';
 import {
   CR_QuejaPilates_CTS,
   UR_QuejaPilates_CTS,
@@ -354,7 +354,7 @@ import {
   GET_AgendaHoyCountRemarketing,
   PATCH_AgendaDoneRemarketing,
   POST_GenerarAgendaHoyRemarketing // opcional (para pruebas/manual)
-} from "../Controllers/CTS_TB_VentasAgendaRemarketing.js"
+} from '../Controllers/CTS_TB_VentasAgendaRemarketing.js';
 
 import {
   OBRS_ClientesPilates_CTS,
@@ -372,9 +372,7 @@ import {
   UR_ClientesPilates_PlanRenovacion_CTS
 } from '../Controllers/CTS_TB_ClientesPilates.js';
 
-import {
-  OBRS_BajasPilates_CTS
-} from '../Controllers/CTS_TB_PilatesBajas.js';
+import { OBRS_BajasPilates_CTS } from '../Controllers/CTS_TB_PilatesBajas.js';
 
 import {
   OBRS_InscripcionesPilates_CTS,
@@ -425,11 +423,11 @@ import {
 /* --------------------------------------------
 -------INICIO DE CODIGO MODIFICADO Sergio Manrique FECHA 30-01-2026---------
 -------------------------------------------- */
-import { 
+import {
   CR_sincronizarEstadisticas,
   OBRS_EstadisticasCompletas,
   OBRS_EstadisticasMesConMes
-} from "../Controllers/CTS_TB_PilatesEstadisticas.js";
+} from '../Controllers/CTS_TB_PilatesEstadisticas.js';
 /* --------------------------------------------
 -------FIN DE CODIGO MODIFICADO Sergio Manrique---------
 -------------------------------------------- */
@@ -442,8 +440,8 @@ import {
 import {
   OBRS_VentasRemarketingHorario_CTS,
   CR_VentasRemarketingHorario_CTS,
-  PUT_VentasRemarketingHorarioPorRemarketing_CTS,
-}from "../Controllers/CTS_TB_VentasRemarketingHorarios.js";
+  PUT_VentasRemarketingHorarioPorRemarketing_CTS
+} from '../Controllers/CTS_TB_VentasRemarketingHorarios.js';
 
 import {
   OBRS_AsistenciasFormato_CTS,
@@ -495,15 +493,13 @@ import {
 } from '../Controllers/CTS_TB_IntegrantesConveNotas.js';
 // BENJAMIN ORELLANA 21 DIC 2025 FIN
 
-import { 
-  CR_Preventa_CTS, 
-  OBRS_Preventas_CTS, 
+import {
+  CR_Preventa_CTS,
+  OBRS_Preventas_CTS,
   UR_Preventa_CTS,
   UR_Preventa_Contacto_CTS,
-  ER_Preventa_CTS 
+  ER_Preventa_CTS
 } from '../Controllers/CTS_TB_Preventas.js';
-import { uploadPreventaTransferencia } from '../utils/uploadPreventasConfig.js';
-
 
 import {
   CR_PilatesCuposConDescuentos_CTS,
@@ -538,9 +534,9 @@ import {
   UR_RRHHMarcacionSalida_CTS,
   ER_RRHHMarcacion_CTS,
   OBRS_PendientesPorAlumnoYSede_CTS,
-    OBRS_CantidadPendientes_CTS,
-    OBRS_UsuariosConMarcacionFacialSinSalida_CTS
-}from '../Controllers/RRHH/CTS_TB_RRHHMarcaciones.js';
+  OBRS_CantidadPendientes_CTS,
+  OBRS_UsuariosConMarcacionFacialSinSalida_CTS
+} from '../Controllers/RRHH/CTS_TB_RRHHMarcaciones.js';
 
 import {
   OBRS_RRHHLiquidaciones_CTS,
@@ -563,29 +559,29 @@ import {
 } from '../Controllers/RRHH/CTS_TB_RRHHUsuarioSede.js';
 
 import {
-OBRS_RRHH_CredencialesFaciales_CTS, 
-  OBR_RRHH_CredencialPorUsuario_CTS, 
-  CR_RRHH_CredencialesFaciales_CTS, 
-  UR_RRHH_CredencialesFaciales_CTS, 
+  OBRS_RRHH_CredencialesFaciales_CTS,
+  OBR_RRHH_CredencialPorUsuario_CTS,
+  CR_RRHH_CredencialesFaciales_CTS,
+  UR_RRHH_CredencialesFaciales_CTS,
   ER_RRHH_CredencialesFaciales_CTS
-} from "../Controllers/RRHH/CTS_TB_RRHH_CredencialesFaciales.js"
+} from '../Controllers/RRHH/CTS_TB_RRHH_CredencialesFaciales.js';
 
-import { 
-  OBRS_RRHHConversaciones_CTS, 
+import {
+  OBRS_RRHHConversaciones_CTS,
   OBRS_CantidadNoLeidas_RRHHConversaciones_CTS,
-  OBR_RRHHConversacion_CTS, 
-  CR_RRHHConversacion_CTS, 
-  UR_RRHHConversacion_CTS, 
-  ER_RRHHConversacion_CTS 
+  OBR_RRHHConversacion_CTS,
+  CR_RRHHConversacion_CTS,
+  UR_RRHHConversacion_CTS,
+  ER_RRHHConversacion_CTS
 } from '../Controllers/RRHH/CTS_TB_RRHHConversaciones.js';
 
-import { 
-  OBRS_RRHHConversacionMensajes_CTS, 
+import {
+  OBRS_RRHHConversacionMensajes_CTS,
   OBR_RRHHConversacionMensaje_CTS,
-  OBRS_RRHHConversacionMensajesPorUsuarioSede_CTS, 
-  CR_RRHHConversacionMensaje_CTS, 
-  UR_RRHHConversacionMensaje_CTS, 
-  ER_RRHHConversacionMensaje_CTS 
+  OBRS_RRHHConversacionMensajesPorUsuarioSede_CTS,
+  CR_RRHHConversacionMensaje_CTS,
+  UR_RRHHConversacionMensaje_CTS,
+  ER_RRHHConversacionMensaje_CTS
 } from '../Controllers/RRHH/CTS_TB_RRHHConversacionMensajes.js';
 
 // Crea un enrutador de Express
@@ -1122,9 +1118,9 @@ router.put('/sedes/:id', UR_Sede_CTS); // Actualizar sede por ID
 
 // Rutas básicas CRUD
 router.get('/quejas', OBRS_Quejas_CTS);
-router.get('/quejas/nuevas-qr', OBRS_checkNuevasQuejasQR_CTS);//Ruta incluida por Sergio Manrique 05/2/2026
+router.get('/quejas/nuevas-qr', OBRS_checkNuevasQuejasQR_CTS); //Ruta incluida por Sergio Manrique 05/2/2026
 router.get('/quejas/:id', OBR_Queja_CTS);
-router.post('/quejas', uploadQuejas.array('imagenes', 3), CR_Queja_CTS);// Crear una nueva queja con hasta 3 imágenes
+router.post('/quejas', uploadQuejas.array('imagenes', 3), CR_Queja_CTS); // Crear una nueva queja con hasta 3 imágenes
 router.put('/quejas/:id', UR_Queja_CTS);
 router.delete('/quejas/:id', ER_Queja_CTS);
 
@@ -1349,15 +1345,23 @@ router.post(
 );
 
 /* RUTAS INTGEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
-router.get('/ventas-remarketing/agenda/hoy', /* requireAuth, */ GET_AgendaHoyRemarketing);
-router.get('/ventas-remarketing/agenda/hoy/count', /* requireAuth, */ GET_AgendaHoyCountRemarketing);
-router.patch('/ventas-remarketing/agenda/:id/done', /* requireAuth, */ PATCH_AgendaDoneRemarketing);
+router.get(
+  '/ventas-remarketing/agenda/hoy',
+  /* requireAuth, */ GET_AgendaHoyRemarketing
+);
+router.get(
+  '/ventas-remarketing/agenda/hoy/count',
+  /* requireAuth, */ GET_AgendaHoyCountRemarketing
+);
+router.patch(
+  '/ventas-remarketing/agenda/:id/done',
+  /* requireAuth, */ PATCH_AgendaDoneRemarketing
+);
 router.post(
   '/ventas-remarketing/agenda/generar-hoy',
   /* requireAuth, */ POST_GenerarAgendaHoyRemarketing
 );
 /* FIN DE RUTAS INTGEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
-
 
 // ----------------------------------------------------------------
 // Rutas para operaciones CRUD en la tabla 'inscripciones_pilates'
@@ -1433,7 +1437,10 @@ router.put(
 );
 
 router.get('/asistencias-pilates/formato', OBRS_AsistenciasFormato_CTS);
-router.get('/asistencias-pilates/calendario-mensual', OBRS_CalendarioMensualAsistencias_CTS);
+router.get(
+  '/asistencias-pilates/calendario-mensual',
+  OBRS_CalendarioMensualAsistencias_CTS
+);
 router.put('/asistencias-pilates/marcar', UR_AsistenciaCliente_CTS);
 router.get(
   '/asistencias-pilates/crear-diarias',
@@ -1479,8 +1486,8 @@ router.get(
   OBR_HistorialContacto_PorIdCliente_CTS
 );
 router.post('/pilates/historial-contactos', CR_HistorialContacto_CTS);
-router.patch("/pilates/historial-contactos/:id", UR_HistorialContacto_CTS);
-router.delete("/pilates/historial-contactos/:id", ER_HistorialContacto_CTS);
+router.patch('/pilates/historial-contactos/:id', UR_HistorialContacto_CTS);
+router.delete('/pilates/historial-contactos/:id', ER_HistorialContacto_CTS);
 // =======================================================
 //  HECHO POR SERGIO MANRIQUE, FECHA: 22/12/2025
 //  FIN DE MODULO: ALUMNOS AUSENTES Y SEGUIMIENTO (Pilates)
@@ -1491,13 +1498,15 @@ router.delete("/pilates/historial-contactos/:id", ER_HistorialContacto_CTS);
 //  FIN DE MODULO
 // =======================================================
 router.post('/pilates/estadisticas/sincronizar', CR_sincronizarEstadisticas); // Para insertar datos existentes
-router.get('/pilates/estadisticas/completo', OBRS_EstadisticasCompletas); 
-router.get('/pilates/estadisticas/completo/mes-con-mes', OBRS_EstadisticasMesConMes);
+router.get('/pilates/estadisticas/completo', OBRS_EstadisticasCompletas);
+router.get(
+  '/pilates/estadisticas/completo/mes-con-mes',
+  OBRS_EstadisticasMesConMes
+);
 // =======================================================
 //  HECHO POR SERGIO MANRIQUE, FECHA: 22/01/2026
 //  FIN DE MODULO
 // =======================================================
-
 
 router.post('/ventas-prospectos-horarios', CR_VentasProspectosHorario_CTS);
 router.get(
@@ -1543,13 +1552,15 @@ router.post('/pilates-cupos-descuentos', CR_PilatesCuposConDescuentos_CTS);
 // Actualizar una regla de descuento existente
 router.put('/pilates-cupos-descuentos/:id', UR_PilatesCuposConDescuentos_CTS);
 // Eliminar una regla de descuento
-router.delete('/pilates-cupos-descuentos/:id', ER_PilatesCuposConDescuentos_CTS);
+router.delete(
+  '/pilates-cupos-descuentos/:id',
+  ER_PilatesCuposConDescuentos_CTS
+);
 
 // =======================================================
 //  HECHO POR SERGIO MANRIQUE, FECHA: 06/02/2026
 //  FIN DE MODULO
 // =======================================================
-
 
 router.post('/contactos-lista-espera', CR_crearContacto);
 router.put(
@@ -1625,11 +1636,26 @@ router.delete('/ventas-comisiones/:id', DEL_eliminarVentaComision_CTS);
 
 /* RUTAS INTGEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
 //Comisiones remarketing
-router.get('/ventas-comisiones-remarketing', GET_listarVentasComisionesRemarketing_CTS);
-router.patch('/ventas-comisiones-remarketing/:id', PUT_actualizarVentaComisionRemarketing_CTS);
-router.put('/ventas-comisiones-remarketing/:id/aprobar', PUT_aprobarVentaComisionRemarketing_CTS);
-router.put('/ventas-comisiones-remarketing/:id/rechazar', PUT_rechazarVentaComisionRemarketing_CTS);
-router.delete('/ventas-comisiones-remarketing/:id', DEL_eliminarVentaComision_CTS);
+router.get(
+  '/ventas-comisiones-remarketing',
+  GET_listarVentasComisionesRemarketing_CTS
+);
+router.patch(
+  '/ventas-comisiones-remarketing/:id',
+  PUT_actualizarVentaComisionRemarketing_CTS
+);
+router.put(
+  '/ventas-comisiones-remarketing/:id/aprobar',
+  PUT_aprobarVentaComisionRemarketing_CTS
+);
+router.put(
+  '/ventas-comisiones-remarketing/:id/rechazar',
+  PUT_rechazarVentaComisionRemarketing_CTS
+);
+router.delete(
+  '/ventas-comisiones-remarketing/:id',
+  DEL_eliminarVentaComision_CTS
+);
 /* FIN RUTAS INTGEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
 
 // Import controlador Comisiones Vigentes
@@ -1645,9 +1671,9 @@ const {
   OBR_ComisionPorCodigo_CTS
 } = ComisionesVigentesCtrl;
 
-import ComisionesVigentesRemarketing from "../Controllers/CTS_TB_VentasComisionesVigentesRemarketing.js";
+import ComisionesVigentesRemarketing from '../Controllers/CTS_TB_VentasComisionesVigentesRemarketing.js';
 const {
-    OBRS_ComisionesVigentesRemarketing_CTS,
+  OBRS_ComisionesVigentesRemarketing_CTS,
   OBR_ComisionVigenteRemarketing_CTS,
   CR_ComisionVigenteRemarketing_CTS,
   UR_ComisionVigenteRemarketing_CTS,
@@ -1672,15 +1698,39 @@ router.post('/comisiones-vigentes/desactivar', DESACTIVAR_Comisiones_Mes_CTS); /
 router.get('/comisiones-vigentes/by-codigo', OBR_ComisionPorCodigo_CTS); // query: codigo,mes,anio
 
 /* RUTAS INTGEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
-router.get('/comisiones-vigentes-remarketing', OBRS_ComisionesVigentesRemarketing_CTS); // list (filtros: mes,anio,solo_activas,codigo)
-router.get('/comisiones-vigentes-remarketing/:id', OBR_ComisionVigenteRemarketing_CTS); // get by id
-router.post('/comisiones-vigentes-remarketing', CR_ComisionVigenteRemarketing_CTS); // create
-router.put('/comisiones-vigentes-remarketing/:id', UR_ComisionVigenteRemarketing_CTS); // update
-router.delete('/comisiones-vigentes-remarketing/:id', ER_ComisionVigenteRemarketing_CTS); // delete (hard)
+router.get(
+  '/comisiones-vigentes-remarketing',
+  OBRS_ComisionesVigentesRemarketing_CTS
+); // list (filtros: mes,anio,solo_activas,codigo)
+router.get(
+  '/comisiones-vigentes-remarketing/:id',
+  OBR_ComisionVigenteRemarketing_CTS
+); // get by id
+router.post(
+  '/comisiones-vigentes-remarketing',
+  CR_ComisionVigenteRemarketing_CTS
+); // create
+router.put(
+  '/comisiones-vigentes-remarketing/:id',
+  UR_ComisionVigenteRemarketing_CTS
+); // update
+router.delete(
+  '/comisiones-vigentes-remarketing/:id',
+  ER_ComisionVigenteRemarketing_CTS
+); // delete (hard)
 // Utilitarios de período
-router.post('/comisiones-vigentes-remarketing/duplicar', DUP_ComisionesRemarketing_Mes_CTS); // body: origen_mes,origen_anio,destino_mes,destino_anio
-router.post('/comisiones-vigentes-remarketing/desactivar', DESACTIVAR_ComisionesRemarketing_Mes_CTS); // body/query: mes,anio o periodo_inicio
-router.get('/comisiones-vigentes-remarketing/by-codigo', OBR_ComisionRemarketingPorCodigo_CTS); // query: codigo,mes,anio
+router.post(
+  '/comisiones-vigentes-remarketing/duplicar',
+  DUP_ComisionesRemarketing_Mes_CTS
+); // body: origen_mes,origen_anio,destino_mes,destino_anio
+router.post(
+  '/comisiones-vigentes-remarketing/desactivar',
+  DESACTIVAR_ComisionesRemarketing_Mes_CTS
+); // body/query: mes,anio o periodo_inicio
+router.get(
+  '/comisiones-vigentes-remarketing/by-codigo',
+  OBR_ComisionRemarketingPorCodigo_CTS
+); // query: codigo,mes,anio
 /* FIN RUTAS INTGEGRADAS POR SERGIO MANRIQUE 14-01-2025 */
 
 // SE ADICIONAN LAS RUTAS RELACIONADAS A CONVENIOS Y PLANES DE CONVENIO
@@ -1738,19 +1788,27 @@ router.delete('/preventas/:id', ER_Preventa_CTS);
 
 // Convenio Chat
 router.get('/convenio-chat/thread', OBR_ConvenioChatThread_ByConvenio_CTS);
-router.patch('/convenio-chat/thread/:id/nombre', UPD_ConvenioChatThread_SetNombre_CTS);
+router.patch(
+  '/convenio-chat/thread/:id/nombre',
+  UPD_ConvenioChatThread_SetNombre_CTS
+);
 
 router.get('/convenio-chat/messages', OBRS_ConvenioChatMessages_CTS);
 router.post('/convenio-chat/messages', CR_ConvenioChatMessage_CTS);
 router.patch('/convenio-chat/messages/:id', UPD_ConvenioChatMessage_CTS);
-router.delete('/convenio-chat/messages/:id', ER_ConvenioChatMessage_SoftDelete_CTS);
+router.delete(
+  '/convenio-chat/messages/:id',
+  ER_ConvenioChatMessage_SoftDelete_CTS
+);
 
-router.post('/convenio-chat/acciones/marcar-leido', MARCAR_LEIDO_ConvenioChatAccion_CTS);
+router.post(
+  '/convenio-chat/acciones/marcar-leido',
+  MARCAR_LEIDO_ConvenioChatAccion_CTS
+);
 
 router.post('/convenio-chat/messages/:id/read', CR_ConvenioChatMessageRead_CTS);
 
 // BENJAMIN ORELLANA 28 DIC 2025 FIN
-
 
 /*
  * Sergio Manrique - RRHH
@@ -1765,7 +1823,6 @@ router.put('/rrhh/cuentas-bancarias/:id', UR_CuentaBancaria_CTS);
 router.delete('/rrhh/cuentas-bancarias/:id', ER_CuentaBancaria_CTS);
 router.get('/rrhh/verificar-cuenta-usuario', OBRS_verificarCuentaUsuario);
 
-
 // ==========================================
 // HORARIOS PACTADOS
 // ==========================================
@@ -1773,30 +1830,47 @@ router.get('/rrhh/horarios', OBRS_RRHHHorarios_CTS);
 router.get('/rrhh/horarios/:id', OBR_RRHHHorario_CTS);
 router.get('/rrhh/horarios/usuario/:id', OBR_RRHHHorario_CTS);
 router.get('/rrhh/horarios/usuario/', OBR_RRHHHorario_CTS);
-router.post('/rrhh/horarios', CR_RRHHHorario_CTS );
+router.post('/rrhh/horarios', CR_RRHHHorario_CTS);
 router.put('/rrhh/horarios/:id', UR_RRHHHorario_CTS);
 router.delete('/rrhh/horarios/:id', ER_RRHHHorario_CTS);
-router.get('/rrhh/verificar-horarios-usuario', OBRS_verificarHorariosUsuario_RRHH_CTS);
-
+router.get(
+  '/rrhh/verificar-horarios-usuario',
+  OBRS_verificarHorariosUsuario_RRHH_CTS
+);
 
 // ==========================================
 // MARCACIONES Y ASISTENCIA
 // ==========================================
 router.get('/rrhh/marcaciones', OBRS_RRHHMarcaciones_CTS);
-router.get('/rrhh/marcaciones/cantidad/notificaciones/pendientes', OBRS_CantidadPendientes_CTS);
-router.get('/rrhh/marcaciones/notificaciones/pendientes', OBRS_PendientesPorAlumnoYSede_CTS);
-router.get('/rrhh/marcaciones/horas-acumuladas', OBRS_HorasAcumuladasMesActual_CTS);
+router.get(
+  '/rrhh/marcaciones/cantidad/notificaciones/pendientes',
+  OBRS_CantidadPendientes_CTS
+);
+router.get(
+  '/rrhh/marcaciones/notificaciones/pendientes',
+  OBRS_PendientesPorAlumnoYSede_CTS
+);
+router.get(
+  '/rrhh/marcaciones/horas-acumuladas',
+  OBRS_HorasAcumuladasMesActual_CTS
+);
 router.post('/rrhh/marcaciones', CR_RRHHMarcacion_CTS);
 router.patch('/rrhh/marcaciones/:id', UR_RRHHMarcacion_CTS);
-router.patch("/rrhh/marcaciones/:id/salida", UR_RRHHMarcacionSalida_CTS);
+router.patch('/rrhh/marcaciones/:id/salida', UR_RRHHMarcacionSalida_CTS);
 router.delete('/rrhh/marcaciones/:id', ER_RRHHMarcacion_CTS);
-router.get('/rrhh/marcaciones/facial-sin-salida', OBRS_UsuariosConMarcacionFacialSinSalida_CTS);
+router.get(
+  '/rrhh/marcaciones/facial-sin-salida',
+  OBRS_UsuariosConMarcacionFacialSinSalida_CTS
+);
 
 // ===============================
 // LIQUIDACIONES
 // ===============================
 router.get('/rrhh/liquidaciones', OBRS_RRHHLiquidaciones_CTS);
-router.get('/rrhh/liquidaciones/resumen/:usuario_id', OBRS_PendientesLiquidar_CTS);
+router.get(
+  '/rrhh/liquidaciones/resumen/:usuario_id',
+  OBRS_PendientesLiquidar_CTS
+);
 router.get('/rrhh/liquidaciones/:id', OBR_RRHHLiquidacion_CTS);
 router.post('/rrhh/liquidaciones', CR_EmitirLiquidacion_CTS);
 router.put('/rrhh/liquidaciones/:id/anular', UPD_AnularLiquidacion_CTS);
@@ -1811,7 +1885,10 @@ router.get('/rrhh/liquidacion-detalle/:id', OBR_RRHHLiquidacionDetalle_CTS);
 // VINCULACIÓN USUARIO - SEDE
 // ==========================================
 router.get('/rrhh/usuario-sede', OBRS_RRHHUsuarioSede_CTS);
-router.get('/rrhh/usuario-sede/usuario/:usuario_id', OBRS_RRHHUsuarioSedePorUsuario_CTS);
+router.get(
+  '/rrhh/usuario-sede/usuario/:usuario_id',
+  OBRS_RRHHUsuarioSedePorUsuario_CTS
+);
 router.post('/rrhh/usuario-sede', CR_RRHHUsuarioSede_CTS);
 router.put('/rrhh/usuario-sede/:id', UR_RRHHUsuarioSede_CTS);
 
@@ -1819,16 +1896,25 @@ router.put('/rrhh/usuario-sede/:id', UR_RRHHUsuarioSede_CTS);
 // BIOMETRÍA Y CREDENCIALES FACIALES
 // ==========================================
 router.get('/rrhh/credenciales-faciales', OBRS_RRHH_CredencialesFaciales_CTS);
-router.get('/rrhh/credenciales-faciales/usuario/:id_usuario', OBR_RRHH_CredencialPorUsuario_CTS);
+router.get(
+  '/rrhh/credenciales-faciales/usuario/:id_usuario',
+  OBR_RRHH_CredencialPorUsuario_CTS
+);
 router.post('/rrhh/credenciales-faciales', CR_RRHH_CredencialesFaciales_CTS);
 router.put('/rrhh/credenciales-faciales/:id', UR_RRHH_CredencialesFaciales_CTS);
-router.delete('/rrhh/credenciales-faciales/:id', ER_RRHH_CredencialesFaciales_CTS);
+router.delete(
+  '/rrhh/credenciales-faciales/:id',
+  ER_RRHH_CredencialesFaciales_CTS
+);
 
 // ==========================================
 // NOVEDADES (CONVERSACIONES)
 // ==========================================
 router.get('/rrhh-conversaciones', OBRS_RRHHConversaciones_CTS);
-router.get('/rrhh-conversaciones/cantidad/mensajes-no-leidos', OBRS_CantidadNoLeidas_RRHHConversaciones_CTS);
+router.get(
+  '/rrhh-conversaciones/cantidad/mensajes-no-leidos',
+  OBRS_CantidadNoLeidas_RRHHConversaciones_CTS
+);
 router.get('/rrhh-conversaciones/:id', OBR_RRHHConversacion_CTS);
 router.post('/rrhh-conversaciones', CR_RRHHConversacion_CTS);
 router.put('/rrhh-conversaciones/:id', UR_RRHHConversacion_CTS);
@@ -1838,7 +1924,10 @@ router.delete('/rrhh-conversaciones/:id', ER_RRHHConversacion_CTS);
 // MENSAJES Y ACLARACIONES (NOVEDADES)
 // ==========================================
 router.get('/rrhh-mensajes', OBRS_RRHHConversacionMensajes_CTS);
-router.get('/rrhh-mensajes/por-usuario-sede', OBRS_RRHHConversacionMensajesPorUsuarioSede_CTS);
+router.get(
+  '/rrhh-mensajes/por-usuario-sede',
+  OBRS_RRHHConversacionMensajesPorUsuarioSede_CTS
+);
 router.get('/rrhh-mensajes/:id', OBR_RRHHConversacionMensaje_CTS);
 router.post('/rrhh-mensajes', CR_RRHHConversacionMensaje_CTS);
 router.put('/rrhh-mensajes/:id', UR_RRHHConversacionMensaje_CTS);
@@ -1848,6 +1937,325 @@ router.delete('/rrhh-mensajes/:id', ER_RRHHConversacionMensaje_CTS);
  * Sergio Manrique - RRHH
  * Fin de Rutas
  */
+
+// ----------------------------------------------------------------
+// Benjamin Orellana 12-03-2026 NUEVO MÓDULO - Débitos Automáticos
+// ----------------------------------------------------------------
+import {
+  OBRS_DebitosAutomaticosBancos_CTS,
+  OBR_DebitosAutomaticosBancos_CTS,
+  CR_DebitosAutomaticosBancos_CTS,
+  UR_DebitosAutomaticosBancos_CTS,
+  ER_DebitosAutomaticosBancos_CTS
+} from '../Controllers/Debitos_Automaticos/CTS_TB_DebitosAutomaticosBancos.js';
+
+router.get('/debitos-automaticos-bancos', OBRS_DebitosAutomaticosBancos_CTS);
+router.get('/debitos-automaticos-bancos/:id', OBR_DebitosAutomaticosBancos_CTS);
+router.post('/debitos-automaticos-bancos', CR_DebitosAutomaticosBancos_CTS);
+router.put('/debitos-automaticos-bancos/:id', UR_DebitosAutomaticosBancos_CTS);
+router.delete(
+  '/debitos-automaticos-bancos/:id',
+  ER_DebitosAutomaticosBancos_CTS
+);
+
+import {
+  OBRS_DebitosAutomaticosPlanes_CTS,
+  OBR_DebitosAutomaticosPlanes_CTS,
+  CR_DebitosAutomaticosPlanes_CTS,
+  UR_DebitosAutomaticosPlanes_CTS,
+  ER_DebitosAutomaticosPlanes_CTS
+} from '../Controllers/Debitos_Automaticos/CTS_TB_DebitosAutomaticosPlanes.js';
+
+router.get('/debitos-automaticos-planes', OBRS_DebitosAutomaticosPlanes_CTS);
+router.get('/debitos-automaticos-planes/:id', OBR_DebitosAutomaticosPlanes_CTS);
+router.post('/debitos-automaticos-planes', CR_DebitosAutomaticosPlanes_CTS);
+router.put('/debitos-automaticos-planes/:id', UR_DebitosAutomaticosPlanes_CTS);
+router.delete(
+  '/debitos-automaticos-planes/:id',
+  ER_DebitosAutomaticosPlanes_CTS
+);
+
+import {
+  OBRS_DebitosAutomaticosTerminos_CTS,
+  OBR_DebitosAutomaticosTerminos_CTS,
+  CR_DebitosAutomaticosTerminos_CTS,
+  UR_DebitosAutomaticosTerminos_CTS,
+  ER_DebitosAutomaticosTerminos_CTS,
+  OBR_DebitosAutomaticosTerminoActivo_CTS,
+  UR_DebitosAutomaticosTerminoActivar_CTS
+} from '../Controllers/Debitos_Automaticos/CTS_TB_DebitosAutomaticosTerminos.js';
+
+router.get(
+  '/debitos-automaticos-terminos',
+  OBRS_DebitosAutomaticosTerminos_CTS
+);
+router.get(
+  '/debitos-automaticos-terminos/activo',
+  OBR_DebitosAutomaticosTerminoActivo_CTS
+);
+router.get(
+  '/debitos-automaticos-terminos/:id',
+  OBR_DebitosAutomaticosTerminos_CTS
+);
+router.post('/debitos-automaticos-terminos', CR_DebitosAutomaticosTerminos_CTS);
+router.put(
+  '/debitos-automaticos-terminos/:id',
+  UR_DebitosAutomaticosTerminos_CTS
+);
+router.put(
+  '/debitos-automaticos-terminos/:id/activar',
+  UR_DebitosAutomaticosTerminoActivar_CTS
+);
+router.delete(
+  '/debitos-automaticos-terminos/:id',
+  ER_DebitosAutomaticosTerminos_CTS
+);
+
+import {
+  OBR_DebitosAutomaticosSolicitudesCartaPdfPublica_CTS,
+  OBRS_DebitosAutomaticosSolicitudes_CTS,
+  OBRS_DebitosAutomaticosSolicitudesPendientes_CTS,
+  OBR_DebitosAutomaticosSolicitudes_CTS,
+  CR_DebitosAutomaticosSolicitudes_CTS,
+  CR_DebitosAutomaticosSolicitudesPublica_CTS,
+  UR_DebitosAutomaticosSolicitudes_CTS,
+  UR_DebitosAutomaticosSolicitudesAprobar_CTS,
+  UR_DebitosAutomaticosSolicitudesRechazar_CTS,
+  UR_DebitosAutomaticosSolicitudesObservar_CTS,
+  UR_DebitosAutomaticosSolicitudesCancelar_CTS,
+  ER_DebitosAutomaticosSolicitudes_CTS
+} from '../Controllers/Debitos_Automaticos/CTS_TB_DebitosAutomaticosSolicitudes.js';
+
+/* Benjamin Orellana - 2026/04/13 - Endpoint público para servir la carta PDF dinámica de una solicitud de débito automático. */
+router.get(
+  '/debitos-automaticos/solicitudes/:id/carta-pdf',
+  OBR_DebitosAutomaticosSolicitudesCartaPdfPublica_CTS
+);
+
+router.get(
+  '/debitos-automaticos-solicitudes',
+  OBRS_DebitosAutomaticosSolicitudes_CTS
+);
+router.get(
+  '/debitos-automaticos-solicitudes/pendientes',
+  OBRS_DebitosAutomaticosSolicitudesPendientes_CTS
+);
+router.get(
+  '/debitos-automaticos-solicitudes/:id',
+  OBR_DebitosAutomaticosSolicitudes_CTS
+);
+
+router.post(
+  '/debitos-automaticos-solicitudes',
+  CR_DebitosAutomaticosSolicitudes_CTS
+);
+router.post(
+  '/debitos-automaticos-solicitudes/publica',
+  CR_DebitosAutomaticosSolicitudesPublica_CTS
+);
+
+router.put(
+  '/debitos-automaticos-solicitudes/:id',
+  UR_DebitosAutomaticosSolicitudes_CTS
+);
+router.put(
+  '/debitos-automaticos-solicitudes/:id/aprobar',
+  UR_DebitosAutomaticosSolicitudesAprobar_CTS
+);
+router.put(
+  '/debitos-automaticos-solicitudes/:id/rechazar',
+  UR_DebitosAutomaticosSolicitudesRechazar_CTS
+);
+router.put(
+  '/debitos-automaticos-solicitudes/:id/observar',
+  UR_DebitosAutomaticosSolicitudesObservar_CTS
+);
+router.put(
+  '/debitos-automaticos-solicitudes/:id/cancelar',
+  UR_DebitosAutomaticosSolicitudesCancelar_CTS
+);
+
+router.delete(
+  '/debitos-automaticos-solicitudes/:id',
+  ER_DebitosAutomaticosSolicitudes_CTS
+);
+
+import {
+  OBRS_DebitosAutomaticosSolicitudesAdicionales_CTS,
+  OBR_DebitosAutomaticosSolicitudesAdicionales_CTS,
+  CR_DebitosAutomaticosSolicitudesAdicionales_CTS,
+  UR_DebitosAutomaticosSolicitudesAdicionales_CTS,
+  ER_DebitosAutomaticosSolicitudesAdicionales_CTS
+} from '../Controllers/Debitos_Automaticos/CTS_TB_DebitosAutomaticosSolicitudesAdicionales.js';
+
+router.get(
+  '/debitos-automaticos-solicitudes-adicionales',
+  OBRS_DebitosAutomaticosSolicitudesAdicionales_CTS
+);
+router.get(
+  '/debitos-automaticos-solicitudes-adicionales/:id',
+  OBR_DebitosAutomaticosSolicitudesAdicionales_CTS
+);
+router.post(
+  '/debitos-automaticos-solicitudes-adicionales',
+  CR_DebitosAutomaticosSolicitudesAdicionales_CTS
+);
+router.put(
+  '/debitos-automaticos-solicitudes-adicionales/:id',
+  UR_DebitosAutomaticosSolicitudesAdicionales_CTS
+);
+router.delete(
+  '/debitos-automaticos-solicitudes-adicionales/:id',
+  ER_DebitosAutomaticosSolicitudesAdicionales_CTS
+);
+
+import {
+  CR_DebitosAutomaticosClientes_CTS,
+  OBRS_DebitosAutomaticosClientes_CTS,
+  OBR_DebitosAutomaticosClientes_CTS,
+  UR_DebitosAutomaticosClientes_CTS,
+  UR_DebitosAutomaticosClientesEstado_CTS,
+  UR_DebitosAutomaticosClientesDarBaja_CTS,
+  UR_DebitosAutomaticosClientesActivar_CTS
+} from '../Controllers/Debitos_Automaticos/CTS_TB_DebitosAutomaticosClientes.js';
+
+router.post('/debitos-automaticos-clientes', CR_DebitosAutomaticosClientes_CTS);
+
+router.get(
+  '/debitos-automaticos-clientes',
+  OBRS_DebitosAutomaticosClientes_CTS
+);
+
+router.get(
+  '/debitos-automaticos-clientes/:id',
+  OBR_DebitosAutomaticosClientes_CTS
+);
+
+router.put(
+  '/debitos-automaticos-clientes/:id',
+  UR_DebitosAutomaticosClientes_CTS
+);
+
+router.put(
+  '/debitos-automaticos-clientes/:id/estado',
+  UR_DebitosAutomaticosClientesEstado_CTS
+);
+
+router.put(
+  '/debitos-automaticos-clientes/:id/dar-baja',
+  UR_DebitosAutomaticosClientesDarBaja_CTS
+);
+
+router.put(
+  '/debitos-automaticos-clientes/:id/activar',
+  UR_DebitosAutomaticosClientesActivar_CTS
+);
+import {
+  OBRS_DebitosAutomaticosClientesAdicionales_CTS,
+  OBR_DebitosAutomaticosClientesAdicionales_CTS,
+  OBR_DebitosAutomaticosClientesAdicionalPorCliente_CTS,
+  CR_DebitosAutomaticosClientesAdicionales_CTS,
+  UR_DebitosAutomaticosClientesAdicionales_CTS,
+  ER_DebitosAutomaticosClientesAdicionales_CTS
+} from '../Controllers/Debitos_Automaticos/CTS_TB_DebitosAutomaticosClientesAdicionales.js';
+
+router.get(
+  '/debitos-automaticos-clientes-adicionales',
+  OBRS_DebitosAutomaticosClientesAdicionales_CTS
+);
+
+router.get(
+  '/debitos-automaticos-clientes-adicionales/:id',
+  OBR_DebitosAutomaticosClientesAdicionales_CTS
+);
+
+router.get(
+  '/debitos-automaticos-clientes/:cliente_id/adicional',
+  OBR_DebitosAutomaticosClientesAdicionalPorCliente_CTS
+);
+
+router.post(
+  '/debitos-automaticos-clientes-adicionales',
+  CR_DebitosAutomaticosClientesAdicionales_CTS
+);
+
+router.put(
+  '/debitos-automaticos-clientes-adicionales/:id',
+  UR_DebitosAutomaticosClientesAdicionales_CTS
+);
+
+router.delete(
+  '/debitos-automaticos-clientes-adicionales/:id',
+  ER_DebitosAutomaticosClientesAdicionales_CTS
+);
+import {
+  OBRS_DebitosAutomaticosPeriodos_CTS,
+  OBR_DebitosAutomaticosPeriodos_CTS,
+  CR_DebitosAutomaticosPeriodos_CTS,
+  CR_DebitosAutomaticosPeriodosGenerarMes_CTS,
+  UR_DebitosAutomaticosPeriodos_CTS,
+  UR_DebitosAutomaticosPeriodosAprobar_CTS,
+  UR_DebitosAutomaticosPeriodosMarcarBaja_CTS,
+  UR_DebitosAutomaticosPeriodosIntentarCambioTarjeta_CTS,
+  UR_DebitosAutomaticosPeriodosIntentarPagoManual_CTS,
+  UR_DebitosAutomaticosPeriodosReintentar_CTS,
+  ER_DebitosAutomaticosPeriodos_CTS
+} from '../Controllers/Debitos_Automaticos/CTS_TB_DebitosAutomaticosPeriodos.js';
+
+router.get(
+  '/debitos-automaticos-periodos',
+  OBRS_DebitosAutomaticosPeriodos_CTS
+);
+
+router.get(
+  '/debitos-automaticos-periodos/:id',
+  OBR_DebitosAutomaticosPeriodos_CTS
+);
+
+router.post('/debitos-automaticos-periodos', CR_DebitosAutomaticosPeriodos_CTS);
+
+router.post(
+  '/debitos-automaticos-periodos/generar-mes',
+  CR_DebitosAutomaticosPeriodosGenerarMes_CTS
+);
+
+router.put(
+  '/debitos-automaticos-periodos/:id',
+  UR_DebitosAutomaticosPeriodos_CTS
+);
+
+router.put(
+  '/debitos-automaticos-periodos/:id/aprobar',
+  UR_DebitosAutomaticosPeriodosAprobar_CTS
+);
+
+router.put(
+  '/debitos-automaticos-periodos/:id/marcar-baja',
+  UR_DebitosAutomaticosPeriodosMarcarBaja_CTS
+);
+
+router.put(
+  '/debitos-automaticos-periodos/:id/intentar-cambio-tarjeta',
+  UR_DebitosAutomaticosPeriodosIntentarCambioTarjeta_CTS
+);
+
+router.put(
+  '/debitos-automaticos-periodos/:id/intentar-pago-manual',
+  UR_DebitosAutomaticosPeriodosIntentarPagoManual_CTS
+);
+
+router.put(
+  '/debitos-automaticos-periodos/:id/reintentar',
+  UR_DebitosAutomaticosPeriodosReintentar_CTS
+);
+
+router.delete(
+  '/debitos-automaticos-periodos/:id',
+  ER_DebitosAutomaticosPeriodos_CTS
+);
+// ----------------------------------------------------------------
+// Benjamin Orellana 12-03-2026 NUEVO MÓDULO - Débitos Automáticos
+// ----------------------------------------------------------------
 
 // Exporta el enrutador
 export default router;
