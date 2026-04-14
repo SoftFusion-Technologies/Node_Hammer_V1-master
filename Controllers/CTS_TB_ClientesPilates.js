@@ -1415,7 +1415,7 @@ export const CR_ClientePilates_Preventa = async ({
       throw new Error("La duración del plan debe ser SEMESTRAL o ANUAL");
     }
 
-    const fecha_inicio = "2026-05-06";
+    const fecha_inicio = "2026-06-01";
     const fecha_fin =
       duracionNormalizada === "SEMESTRAL"
         ? dayjs(fecha_inicio).add(179, "day").format("YYYY-MM-DD")
