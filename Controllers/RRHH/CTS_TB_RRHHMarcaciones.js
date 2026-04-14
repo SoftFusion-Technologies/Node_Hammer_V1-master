@@ -55,6 +55,43 @@ const ORIGENES_VALIDOS = [
   "automatico",
 ];
 
+// ─── Función auxiliar para validar si existe una marcación en el rango del turno ─────
+const existeMarcacionEnRango = async ({
+  usuarioId,
+  fecha,
+  inicioTurnoDate,
+  finTurnoDate,
+  transaction,
+}) => {
+  const marcacion = await RRHHMarcacionesModel.findOne({
+    where: {
+      usuario_id: usuarioId,
+      fecha,
+      eliminado: 0,
+      hora_entrada: {
+        [Op.ne]: null,
+        [Op.lt]: finTurnoDate,
+      },
+      [Op.or]: [
+        {
+          hora_salida: {
+            [Op.eq]: null,
+          },
+        },
+        {
+          hora_salida: {
+            [Op.gt]: inicioTurnoDate,
+          },
+        },
+      ],
+    },
+    transaction,
+  });
+
+  return !!marcacion;
+};
+
+
 const esFechaValida = (fecha = "") => /^\d{4}-\d{2}-\d{2}$/.test(fecha);
 
 const esFechaHoraValida = (valor) => {
@@ -317,6 +354,8 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
         usuario_id: reg.usuario_id,
         sede_id: reg.sede_id,
         horario_id: reg.horario_id,
+        horario_hora_entrada: reg.horario?.hora_entrada || null,
+        horario_hora_salida: reg.horario?.hora_salida || null,
         estado: reg.estado,
         estado_aprobacion: reg.estado_aprobacion,
         origen: reg.origen,
@@ -1007,6 +1046,7 @@ export const OBRS_UsuariosConMarcacionFacialSinSalida_CTS = async (
       include: [
         { model: UsersModel, as: "usuario", attributes: ["id", "name"] },
         { model: SedeModel, as: "sede", attributes: ["id", "nombre"] },
+        { model: RRHHHorariosModel, as: "horario", attributes: ["id", "hora_entrada", "hora_salida"] },
       ],
     });
 
@@ -1020,6 +1060,8 @@ export const OBRS_UsuariosConMarcacionFacialSinSalida_CTS = async (
       fecha: m.fecha,
       hora_entrada: m.hora_entrada,
       horario_id: m.horario_id || null,
+      horario_hora_entrada: m.horario?.hora_entrada || null,
+      horario_hora_salida: m.horario?.hora_salida || null,
     }));
 
     res.json(resultado);
@@ -1035,13 +1077,23 @@ export const OBRS_UsuariosConMarcacionFacialSinSalida_CTS = async (
 };
 
 export const procesarMarcacionesAutomaticas_CTS = async () => {
-  try {
-    // Usamos la fecha de hoy, no la de ayer, ya que el cron se ejecuta a las 23:59, justo antes de que cambie el día.
-    const hoy = dayjs().tz(TZ);
-    const fechaHoyStr = hoy.format("YYYY-MM-DD");
-    const diaSemanaHoy = hoy.day();
+  const transaction = await db.transaction();
 
-    if (diaSemanaHoy === 0) return;
+  try {
+    const ahoraArgentina = dayjs().tz(TZ);
+    const fechaHoyStr = ahoraArgentina.format("YYYY-MM-DD");
+    const diaSemanaHoy = ahoraArgentina.day();
+
+    console.log(`[CRON] Inicio procesamiento automático de marcaciones - Fecha: ${fechaHoyStr} - Día semana: ${diaSemanaHoy}`);
+
+    // dayjs().day(): domingo=0, lunes=1, ..., sábado=6
+    if (diaSemanaHoy === 0) {
+      console.log(
+        `[CRON] ${fechaHoyStr} - Domingo detectado, no se procesan marcaciones automáticas.`
+      );
+      await transaction.commit();
+      return;
+    }
 
     const horariosPlanificados = await RRHHHorariosModel.findAll({
       where: {
@@ -1053,59 +1105,145 @@ export const procesarMarcacionesAutomaticas_CTS = async () => {
           { fecha_vigencia_hasta: { [Op.gte]: fechaHoyStr } },
         ],
       },
-      include: [{
-        model: UsersModel,
-        as: 'usuario', 
-        attributes: ['id', 'level_admin'],
-        where: {
-          level_admin: { [Op.ne]: 1 }
-        }
-      }]
+      include: [
+        {
+          model: UsersModel,
+          as: "usuario",
+          attributes: ["id", "level_admin", "activada"],
+          where: {
+            level_admin: { [Op.ne]: 1 },
+            activada: 1,
+          },
+          required: true,
+        },
+      ],
+      order: [
+        ["usuario_id", "ASC"],
+        ["hora_entrada", "ASC"],
+      ],
+      transaction,
     });
 
     console.log(
-      `[CRON] Procesando fecha actual: ${fechaHoyStr}. Turnos a revisar: ${horariosPlanificados.length}`,
+      `[CRON] Procesando fecha actual: ${fechaHoyStr}. Turnos a revisar: ${horariosPlanificados.length}`
     );
 
     for (const horario of horariosPlanificados) {
-      const inicioTurno = dayjs(
+      const inicioTurno = dayjs.tz(
         `${fechaHoyStr} ${horario.hora_entrada}`,
-      ).toDate();
-      const finTurno = dayjs(`${fechaHoyStr} ${horario.hora_salida}`).toDate();
+        "YYYY-MM-DD HH:mm:ss",
+        TZ
+      );
 
-      const marcacionExistente = await RRHHMarcacionesModel.findOne({
+      const finTurno = dayjs.tz(
+        `${fechaHoyStr} ${horario.hora_salida}`,
+        "YYYY-MM-DD HH:mm:ss",
+        TZ
+      );
+
+      const inicioTurnoDate = inicioTurno.toDate();
+      const finTurnoDate = finTurno.toDate();
+
+      /**
+       * 1) Primero verificamos si ya existe una marcación activa
+       * exacta para este horario_id + usuario + fecha.
+       * Esto evita recrear la automática del mismo turno.
+       */
+      const marcacionExactaExistente = await RRHHMarcacionesModel.findOne({
         where: {
           usuario_id: horario.usuario_id,
           horario_id: horario.id,
           fecha: fechaHoyStr,
           eliminado: 0,
         },
+        transaction,
       });
 
-      if (!marcacionExistente) {
+      if (marcacionExactaExistente) {
         console.log(
-          `[CRON] Generando falta automática - Usuario: ${horario.usuario_id} | Horario ID: ${horario.id}`,
+          `[CRON] Ya existe marcación para este turno - Usuario: ${horario.usuario_id} | Horario ID: ${horario.id}`
         );
+        continue;
+      }
 
-        await RRHHMarcacionesModel.create({
-          usuario_id: horario.usuario_id,
-          horario_id: horario.id,
-          sede_id: horario.sede_id,
-          fecha: fechaHoyStr,
-          hora_entrada: inicioTurno,
-          hora_salida: finTurno,
-          estado: "normal",
-          estado_aprobacion: "pendiente",
-          origen: "automatico",
-          comentarios: "Asiento automático por falta de marcación",
-          created_at: dayjs().format("YYYY-MM-DD HH:mm:ss"),
-          updated_at: dayjs().format("YYYY-MM-DD HH:mm:ss"),
-          eliminado: 0,
-        });
+      /**
+       * 2) Luego verificamos si hubo cualquier actividad en el rango del turno.
+       * Si hubo aunque sea un minuto trabajado dentro de ese rango,
+       * NO generamos automática.
+       *
+       * Esto cubre bien el caso de doble turno:
+       * - trabajó mañana, no tarde => se genera solo la tarde
+       * - trabajó algo dentro del turno => no se genera automática
+       */
+      const huboActividadEnRango = await existeMarcacionEnRango({
+        usuarioId: horario.usuario_id,
+        fecha: fechaHoyStr,
+        inicioTurnoDate,
+        finTurnoDate,
+        transaction,
+      });
+
+      if (huboActividadEnRango) {
+        console.log(
+          `[CRON] No se genera automática porque hubo actividad en el rango - Usuario: ${horario.usuario_id} | Horario ID: ${horario.id}`
+        );
+        continue;
+      }
+
+      /**
+       * 3) Si no hubo marcación exacta ni actividad dentro del rango,
+       * generamos la automática con el horario_id correspondiente.
+       */
+      console.log(
+        `[CRON] Generando falta automática - Usuario: ${horario.usuario_id} | Horario ID: ${horario.id}`
+      );
+
+      try {
+        await RRHHMarcacionesModel.create(
+          {
+            usuario_id: horario.usuario_id,
+            horario_id: horario.id,
+            sede_id: horario.sede_id,
+            fecha: fechaHoyStr,
+            hora_entrada: inicioTurnoDate,
+            hora_salida: finTurnoDate,
+            estado: "normal",
+            estado_aprobacion: "pendiente",
+            origen: "automatico",
+            comentarios:null,
+            minutos_tarde: 0,
+            minutos_extra_pendientes: 0,
+            minutos_extra_autorizados: 0,
+            minutos_extra_no_autorizados: 0,
+            minutos_descuento: 0,
+            minutos_salida_anticipada: 0,
+            reconocimiento_valido: 0,
+            created_at: ahoraArgentina.format("YYYY-MM-DD HH:mm:ss"),
+            updated_at: ahoraArgentina.format("YYYY-MM-DD HH:mm:ss"),
+            eliminado: 0,
+          },
+          { transaction }
+        );
+      } catch (error) {
+        // Esto ayuda si luego agregás un índice UNIQUE y dos instancias intentan crear al mismo tiempo.
+        if (error?.name === "SequelizeUniqueConstraintError") {
+          console.log(
+            `[CRON] La automática ya fue creada por otra ejecución - Usuario: ${horario.usuario_id} | Horario ID: ${horario.id}`
+          );
+          continue;
+        }
+        throw error;
       }
     }
+
+    await transaction.commit();
+
+    console.log(
+      `[CRON] Fin procesamiento automático de marcaciones para ${fechaHoyStr}`
+    );
   } catch (error) {
-    console.error("[CRON ERROR]:", error);
+    await transaction.rollback();
+    console.error("[CRON ERROR] Error al procesar marcaciones automáticas:", error);
   }
 };
 
@@ -1127,14 +1265,14 @@ export const anularMarcacionesFacialesAbiertas_CTS = async () => {
 
     if (!marcacionesAbiertas.length) {
       console.log(
-        `[CRON] ${fechaHoraActual} - No se encontraron marcaciones faciales abiertas para anular.`,
+        `[CRON] ${fechaHoraActual} - No se encontraron marcaciones faciales abiertas para anular.`
       );
       return;
     }
 
     const idsMarcaciones = marcacionesAbiertas.map((m) => m.id);
 
-    const cantidadActualizada = await RRHHMarcacionesModel.update(
+    await RRHHMarcacionesModel.update(
       {
         eliminado: 1,
         comentarios:
@@ -1145,16 +1283,16 @@ export const anularMarcacionesFacialesAbiertas_CTS = async () => {
         where: {
           id: { [Op.in]: idsMarcaciones },
         },
-      },
+      }
     );
 
     console.log(
-      `[CRON] ${fechaHoraActual} - Marcaciones faciales abiertas anuladas: ${idsMarcaciones.length}`,
+      `[CRON] ${fechaHoraActual} - Marcaciones faciales abiertas anuladas: ${idsMarcaciones.length}`
     );
   } catch (error) {
     console.error(
       "[CRON ERROR] Error al anular marcaciones faciales abiertas:",
-      error,
+      error
     );
   }
 };
@@ -1168,7 +1306,7 @@ cron.schedule(
       // 1) Primero anula las faciales abiertas/incompletas
       await anularMarcacionesFacialesAbiertas_CTS();
 
-      // 2) Luego genera/procesa las automáticas según horario
+      // 2) Luego genera automáticas solo donde realmente no hubo actividad en el turno
       await procesarMarcacionesAutomaticas_CTS();
 
       console.log("[CRON] Fin cierre diario de marcaciones");
@@ -1178,5 +1316,5 @@ cron.schedule(
   },
   {
     timezone: TZ,
-  },
+  }
 );
