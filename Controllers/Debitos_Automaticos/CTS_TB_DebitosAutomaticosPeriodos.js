@@ -421,7 +421,7 @@ const buildWhere = (query = {}) => {
 
   return where;
 };
-
+// Benjamin Orellana - 2026/04/14 - Permite ordenar períodos por campos propios y por datos del cliente relacionado para paginación real en backend.
 const buildOrder = (query = {}) => {
   const orderBy = String(query.order_by || 'created_at').trim();
   const orderDirection =
@@ -431,25 +431,46 @@ const buildOrder = (query = {}) => {
       ? 'ASC'
       : 'DESC';
 
-  const allowedFields = [
-    'id',
-    'periodo_anio',
-    'periodo_mes',
-    'estado_envio',
-    'estado_cobro',
-    'accion_requerida',
-    'fecha_envio',
-    'fecha_resultado',
-    'monto_inicial_cliente_aplicado',
-    'descuento_cliente_pct_aplicado',
-    'monto_bruto',
-    'monto_neto_estimado',
-    'created_at',
-    'updated_at'
-  ];
+  const directFieldMap = {
+    id: 'id',
+    periodo_anio: 'periodo_anio',
+    periodo_mes: 'periodo_mes',
+    estado_envio: 'estado_envio',
+    estado_cobro: 'estado_cobro',
+    accion_requerida: 'accion_requerida',
+    fecha_envio: 'fecha_envio',
+    fecha_resultado: 'fecha_resultado',
+    monto_inicial_cliente_aplicado: 'monto_inicial_cliente_aplicado',
+    descuento_cliente_pct_aplicado: 'descuento_cliente_pct_aplicado',
+    monto_bruto: 'monto_bruto',
+    monto_neto_estimado: 'monto_neto_estimado',
+    monto: 'monto_neto_estimado',
+    created_at: 'created_at',
+    updated_at: 'updated_at'
+  };
+
+  const clienteFieldMap = {
+    titular_nombre: 'titular_nombre',
+    titular_dni: 'titular_dni',
+    alta: 'created_at'
+  };
+
+  if (clienteFieldMap[orderBy]) {
+    return [
+      [
+        { model: DebitosAutomaticosClientesModel, as: 'cliente' },
+        clienteFieldMap[orderBy],
+        orderDirection
+      ],
+      ['id', 'DESC']
+    ];
+  }
+
+  const resolvedField = directFieldMap[orderBy] || 'created_at';
 
   return [
-    [allowedFields.includes(orderBy) ? orderBy : 'created_at', orderDirection]
+    [resolvedField, orderDirection],
+    ['id', 'DESC']
   ];
 };
 
