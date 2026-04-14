@@ -315,6 +315,7 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
         asistenciaDelDia = {
           fecha: reg.fecha,
           horasTotales: 0,
+          horasTotalesSinPendientes: 0,
           turnos: [],
         };
         diccionarioAgrupado[claveAgrupado].asistencias.push(asistenciaDelDia);
@@ -399,6 +400,15 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
       asistenciaDelDia.horasTotales = Number(
         (asistenciaDelDia.horasTotales + sumarAlTotalDia).toFixed(2),
       );
+
+      // Acumulación solo de registros aprobados (excluye pendiente/rechazada)
+      if (reg.estado_aprobacion === "aprobada") {
+        asistenciaDelDia.horasTotalesSinPendientes = Number(
+          (
+            asistenciaDelDia.horasTotalesSinPendientes + sumarAlTotalDia
+          ).toFixed(2),
+        );
+      }
     });
 
     const resultado = Object.values(diccionarioAgrupado).map((grupo) => ({
@@ -407,6 +417,12 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
         ...asistencia,
         horasTotales_decimal: Number(asistencia.horasTotales.toFixed(2)),
         horasTotales: formatearHorasHHMM(asistencia.horasTotales),
+        horasTotalesSinPendientes_decimal: Number(
+          asistencia.horasTotalesSinPendientes.toFixed(2),
+        ),
+        horasTotalesSinPendientes: formatearHorasHHMM(
+          asistencia.horasTotalesSinPendientes,
+        ),
       })),
     }));
 
