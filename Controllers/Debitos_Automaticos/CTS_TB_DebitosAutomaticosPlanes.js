@@ -225,12 +225,14 @@ export const CR_DebitosAutomaticosPlanes_CTS = async (req, res) => {
       });
     }
 
-    // Benjamin Orellana - 08/04/2026 - Se calcula precio final automáticamente al crear el plan    const descuento = payload.descuento ?? 0;
+    // Benjamin Orellana - 14/04/2026 - Se calcula el descuento efectivo y el precio final automáticamente al crear el plan.
+    const descuento = payload.descuento ?? 0;
+
     const precioFinal = calcularPrecioFinalPlan(
       payload.precio_referencia,
       descuento
     );
-
+    
     const creado = await DebitosAutomaticosPlanesModel.create(
       {
         codigo: payload.codigo,
