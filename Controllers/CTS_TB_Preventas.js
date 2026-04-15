@@ -189,6 +189,23 @@ export const CR_Preventa_CTS = async (req, res) => {
       });
     }
 
+    const forzarDuplicado =
+    String(req.body?.confirmar_duplicado || "").trim() === "1";
+
+    const preventaExistente = await PreventaModel.findOne({
+      where: { dni: payload.dni },
+      order: [["created_at", "DESC"]],
+      attributes: ["id", "plan_seleccionado", "created_at"],
+    });
+
+    if (preventaExistente && !forzarDuplicado) {
+      return res.status(409).json({
+        mensajeError: "Ya existe una preventa con ese DNI",
+        requiere_confirmacion: true,
+        preventa_existente: preventaExistente,
+      });
+    }
+
     const nuevaPreventa = await PreventaModel.create(payload);
     const horario_id = req.body?.horario_id
       ? Number(req.body.horario_id)
@@ -286,6 +303,11 @@ export const UR_Preventa_CTS = async (req, res) => {
     }
 
     const body = req.body || {};
+    const archivoComprobante = obtenerArchivoComprobante(req);
+    const comprobanteDesdeArchivo = archivoComprobante
+      ? `${PREVENTAS_UPLOAD_PREFIX}${archivoComprobante.filename}`
+      : null;
+
     const tiene = (campo) => Object.prototype.hasOwnProperty.call(body, campo);
     const cambios = {};
 
@@ -366,6 +388,10 @@ export const UR_Preventa_CTS = async (req, res) => {
 
     if (tiene("estado_contacto")) {
       cambios.estado_contacto = normalizarTexto(body.estado_contacto);
+    }
+
+    if (comprobanteDesdeArchivo) {
+      cambios.comprobante_url = comprobanteDesdeArchivo;
     }
 
     if (Object.keys(cambios).length === 0) {
@@ -471,5 +497,50 @@ export const ER_Preventa_CTS = async (req, res) => {
   } catch (error) {
     console.error("Error al eliminar preventa:", error);
     return res.status(500).json({ mensajeError: error.message });
+  }
+};
+
+// Obtener preventa por DNI (Para verificar si ya existe una preventa registrada con ese DNI)
+export const OBR_PreventaPorDni_CTS = async (req, res) => {
+  try {
+    const dni = normalizarTexto(req.params?.dni);
+
+    if (!dni) {
+      return res.status(400).json({
+        mensajeError: "DNI inválido",
+      });
+    }
+
+    const preventa = await PreventaModel.findOne({
+      where: { dni },
+      order: [["created_at", "DESC"]],
+      attributes: [
+        "id",
+        "nombre_apellido",
+        "dni",
+        "plan_seleccionado",
+        "duracion_plan",
+        "modalidad_pago",
+        "metodo_inscripcion",
+        "created_at",
+      ],
+    });
+
+    if (!preventa) {
+      return res.json({
+        existe: false,
+        preventa: null,
+      });
+    }
+
+    return res.json({
+      existe: true,
+      preventa,
+    });
+  } catch (error) {
+    console.error("Error al verificar DNI de preventa:", error);
+    return res.status(500).json({
+      mensajeError: error.message,
+    });
   }
 };
