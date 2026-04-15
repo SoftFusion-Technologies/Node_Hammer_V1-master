@@ -1959,6 +1959,7 @@ router.delete(
 );
 
 import {
+  OBRS_DebitosAutomaticosPlanesPorSede_CTS,
   OBRS_DebitosAutomaticosPlanes_CTS,
   OBR_DebitosAutomaticosPlanes_CTS,
   CR_DebitosAutomaticosPlanes_CTS,
@@ -1966,6 +1967,10 @@ import {
   ER_DebitosAutomaticosPlanes_CTS
 } from '../Controllers/Debitos_Automaticos/CTS_TB_DebitosAutomaticosPlanes.js';
 
+router.get(
+  '/debitos-automaticos-planes-por-sede',
+  OBRS_DebitosAutomaticosPlanesPorSede_CTS
+);
 router.get('/debitos-automaticos-planes', OBRS_DebitosAutomaticosPlanes_CTS);
 router.get('/debitos-automaticos-planes/:id', OBR_DebitosAutomaticosPlanes_CTS);
 router.post('/debitos-automaticos-planes', CR_DebitosAutomaticosPlanes_CTS);
@@ -1973,6 +1978,35 @@ router.put('/debitos-automaticos-planes/:id', UR_DebitosAutomaticosPlanes_CTS);
 router.delete(
   '/debitos-automaticos-planes/:id',
   ER_DebitosAutomaticosPlanes_CTS
+);
+
+import {
+  OBRS_DebitosAutomaticosPlanesSedes_CTS,
+  OBR_DebitosAutomaticosPlanesSedes_CTS,
+  CR_DebitosAutomaticosPlanesSedes_CTS,
+  UR_DebitosAutomaticosPlanesSedes_CTS,
+  ER_DebitosAutomaticosPlanesSedes_CTS
+} from '../Controllers/Debitos_Automaticos/CTS_TB_DebitosAutomaticosPlanesSedes.js';
+
+router.get(
+  '/debitos-automaticos-planes-sedes',
+  OBRS_DebitosAutomaticosPlanesSedes_CTS
+);
+router.get(
+  '/debitos-automaticos-planes-sedes/:id',
+  OBR_DebitosAutomaticosPlanesSedes_CTS
+);
+router.post(
+  '/debitos-automaticos-planes-sedes',
+  CR_DebitosAutomaticosPlanesSedes_CTS
+);
+router.put(
+  '/debitos-automaticos-planes-sedes/:id',
+  UR_DebitosAutomaticosPlanesSedes_CTS
+);
+router.delete(
+  '/debitos-automaticos-planes-sedes/:id',
+  ER_DebitosAutomaticosPlanesSedes_CTS
 );
 
 import {
@@ -2199,7 +2233,8 @@ import {
   UR_DebitosAutomaticosPeriodosIntentarCambioTarjeta_CTS,
   UR_DebitosAutomaticosPeriodosIntentarPagoManual_CTS,
   UR_DebitosAutomaticosPeriodosReintentar_CTS,
-  ER_DebitosAutomaticosPeriodos_CTS
+  ER_DebitosAutomaticosPeriodos_CTS,
+  UR_DebitosAutomaticosPeriodosDeshacerCobro_CTS
 } from '../Controllers/Debitos_Automaticos/CTS_TB_DebitosAutomaticosPeriodos.js';
 
 router.get(
@@ -2252,6 +2287,11 @@ router.put(
 router.delete(
   '/debitos-automaticos-periodos/:id',
   ER_DebitosAutomaticosPeriodos_CTS
+);
+
+router.put(
+  '/debitos-automaticos-periodos/:id/deshacer-cobro',
+  UR_DebitosAutomaticosPeriodosDeshacerCobro_CTS
 );
 // ----------------------------------------------------------------
 // Benjamin Orellana 12-03-2026 NUEVO MÓDULO - Débitos Automáticos

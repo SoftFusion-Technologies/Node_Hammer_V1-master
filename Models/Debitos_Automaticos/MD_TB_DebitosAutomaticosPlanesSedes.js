@@ -1,13 +1,13 @@
 /*
  * Programador: Benjamin Orellana
- * Fecha Cración: 12 / 03 / 2026
+ * Fecha Cración: 15 / 04 / 2026
  * Versión: 1.0
  *
  * Descripción:
- * Este archivo (MD_TB_DebitosAutomaticosPlanes.js) contiene la definición
- * del modelo Sequelize para la tabla debitos_automaticos_planes.
+ * Este archivo (MD_TB_DebitosAutomaticosPlanesSedes.js) contiene la definición
+ * del modelo Sequelize para la tabla debitos_automaticos_planes_sedes.
  *
- * Tema: Modelos - Débitos Automáticos Planes
+ * Tema: Modelos - Débitos Automáticos Planes por Sede
  *
  * Capa: Backend
  */
@@ -21,9 +21,9 @@ if (process.env.NODE_ENV !== 'production') {
   dotenv.config();
 }
 
-// Define el modelo para la tabla 'debitos_automaticos_planes' en la base de datos
-const DebitosAutomaticosPlanesModel = db.define(
-  'debitos_automaticos_planes',
+// Define el modelo para la tabla 'debitos_automaticos_planes_sedes' en la base de datos
+const DebitosAutomaticosPlanesSedesModel = db.define(
+  'debitos_automaticos_planes_sedes',
   {
     id: {
       type: DataTypes.BIGINT.UNSIGNED,
@@ -31,29 +31,23 @@ const DebitosAutomaticosPlanesModel = db.define(
       autoIncrement: true,
       primaryKey: true
     },
-    codigo: {
-      type: DataTypes.STRING(30),
-      allowNull: false,
-      unique: true
+    plan_id: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: false
     },
-    nombre: {
-      type: DataTypes.STRING(120),
-      allowNull: false,
-      unique: true
+    sede_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false
     },
-    descripcion: {
-      type: DataTypes.STRING(255),
-      allowNull: true
+    precio_base: {
+      type: DataTypes.DECIMAL(18, 2),
+      allowNull: true,
+      defaultValue: null
     },
     activo: {
       type: DataTypes.TINYINT,
       allowNull: false,
       defaultValue: 1
-    },
-    orden_visual: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: 0
     },
     created_at: {
       type: DataTypes.DATE,
@@ -67,10 +61,10 @@ const DebitosAutomaticosPlanesModel = db.define(
     }
   },
   {
-    tableName: 'debitos_automaticos_planes',
+    tableName: 'debitos_automaticos_planes_sedes',
     freezeTableName: true,
     timestamps: false
   }
 );
 
-export default DebitosAutomaticosPlanesModel;
+export default DebitosAutomaticosPlanesSedesModel;

@@ -36,6 +36,7 @@ import { SedeModel } from '../../Models/MD_TB_sedes.js';
 // Benjamin Orellana - 23/03/2026 - Se importa modelo de usuarios para resolver el usuario autenticado cuando req.user no viene poblado
 import UsersModel from '../../Models/MD_TB_Users.js';
 
+import DebitosAutomaticosPlanesSedesModel from '../../Models/Debitos_Automaticos/MD_TB_DebitosAutomaticosPlanesSedes.js';
 // Benjamin Orellana - 30/03/2026 - Service de envío automático de emails para solicitudes de débito automático.
 import { enviarEmailSolicitudDebito } from '../../Services/DebitosAutomaticos/EnviarSolicitudDebitoEmailService.js';
 
@@ -1131,6 +1132,27 @@ const getSolicitudDetalleById = async (
   });
 };
 
+/* Benjamin Orellana - 2026/04/15 - Resuelve el plan comercial efectivo de la solicitud según modalidad para buscar el precio base correcto por sede al momento de aprobar. */
+const resolvePlanIdForSolicitudAprobacion = ({
+  solicitud,
+  adicionalSolicitud
+}) => {
+  if (!solicitud) return null;
+
+  if (
+    solicitud.modalidad_adhesion === 'TITULAR_SOLO' ||
+    solicitud.modalidad_adhesion === 'AMBOS'
+  ) {
+    return toIntOrNull(solicitud.titular_plan_id);
+  }
+
+  if (solicitud.modalidad_adhesion === 'SOLO_ADICIONAL') {
+    return toIntOrNull(adicionalSolicitud?.plan_id);
+  }
+
+  return null;
+};
+
 /* =========================
    OBR - carta PDF pública
 ========================= */
@@ -2199,38 +2221,48 @@ export const UR_DebitosAutomaticosSolicitudesAprobar_CTS = async (req, res) => {
       }
     }
 
-    // Benjamin Orellana - 09/04/2026 - Se resuelve el plan comercial correcto según la modalidad para usarlo como respaldo si frontend no envía todos los valores.
-    let planVigente = null;
+    /* Benjamin Orellana - 2026/04/15 - La aprobación ya no toma valores del plan global: resuelve el precio base desde plan+sede y el descuento desde el snapshot del banco guardado en la solicitud. */
+    const planIdVigente = resolvePlanIdForSolicitudAprobacion({
+      solicitud: current,
+      adicionalSolicitud
+    });
 
-    if (
-      current.modalidad_adhesion === 'TITULAR_SOLO' ||
-      current.modalidad_adhesion === 'AMBOS'
-    ) {
-      if (current.titular_plan_id) {
-        planVigente = await DebitosAutomaticosPlanesModel.findByPk(
-          current.titular_plan_id,
-          { transaction: t }
-        );
-      }
+    if (!planIdVigente) {
+      await t.rollback();
+      return res.status(400).json({
+        mensajeError:
+          'No se pudo resolver el plan vigente de la solicitud para la aprobación.'
+      });
     }
 
-    if (current.modalidad_adhesion === 'SOLO_ADICIONAL') {
-      if (adicionalSolicitud?.plan_id) {
-        planVigente = await DebitosAutomaticosPlanesModel.findByPk(
-          adicionalSolicitud.plan_id,
-          { transaction: t }
-        );
-      }
+    const planSedeVigente = await DebitosAutomaticosPlanesSedesModel.findOne({
+      where: {
+        plan_id: planIdVigente,
+        sede_id,
+        activo: 1,
+        precio_base: {
+          [Op.ne]: null
+        }
+      },
+      transaction: t,
+      lock: t.LOCK.UPDATE
+    });
+
+    if (!planSedeVigente) {
+      await t.rollback();
+      return res.status(409).json({
+        mensajeError:
+          'El plan seleccionado no tiene un precio configurado para la sede de la solicitud. No se puede aprobar.'
+      });
     }
 
-    // Benjamin Orellana - 09/04/2026 - Se calculan los vigentes finales usando primero el body y luego el plan resuelto como fallback.
     const monto_inicial_vigente_plan = toDecimalOrNull(
-      planVigente?.precio_referencia
+      planSedeVigente?.precio_base
     );
 
-    const descuento_vigente_plan = toDecimalOrNull(planVigente?.descuento);
-
-    const monto_base_vigente_plan = toDecimalOrNull(planVigente?.precio_final);
+    const descuento_vigente_snapshot = toDecimalOrNull(
+      current?.beneficio_descuento_off_pct_snapshot
+    );
 
     const monto_inicial_vigente =
       monto_inicial_vigente_body !== null
@@ -2240,15 +2272,13 @@ export const UR_DebitosAutomaticosSolicitudesAprobar_CTS = async (req, res) => {
     const descuento_vigente =
       descuento_vigente_body !== null
         ? descuento_vigente_body
-        : descuento_vigente_plan !== null
-          ? descuento_vigente_plan
+        : descuento_vigente_snapshot !== null
+          ? descuento_vigente_snapshot
           : 0;
 
     let monto_base_vigente =
-      monto_base_vigente_body !== null
-        ? monto_base_vigente_body
-        : monto_base_vigente_plan;
-
+      monto_base_vigente_body !== null ? monto_base_vigente_body : null;
+    
     // Benjamin Orellana - 09/04/2026 - Si no viene monto final explícito pero sí monto inicial y descuento, se calcula automáticamente.
     if (
       monto_base_vigente === null &&
@@ -2478,7 +2508,7 @@ export const UR_DebitosAutomaticosSolicitudesAprobar_CTS = async (req, res) => {
         fecha_aprobacion: clienteCreado.fecha_aprobacion,
         fecha_inicio_cobro: clienteCreado.fecha_inicio_cobro
       },
-      email_resultado
+      email_resultado: null
     });
   } catch (error) {
     await t.rollback();

@@ -1,7 +1,7 @@
 /*
  * Programador: Benjamin Orellana
  * Fecha Creación: 12 / 03 / 2026
- * Versión: 1.0
+ * Versión: 1.1
  *
  * Descripción:
  * Controladores CRUD para la tabla 'debitos_automaticos_planes'.
@@ -21,6 +21,8 @@
 import { Op } from 'sequelize';
 import db from '../../DataBase/db.js';
 import DebitosAutomaticosPlanesModel from '../../Models/Debitos_Automaticos/MD_TB_DebitosAutomaticosPlanes.js';
+import DebitosAutomaticosPlanesSedesModel from '../../Models/Debitos_Automaticos/MD_TB_DebitosAutomaticosPlanesSedes.js';
+import { SedeModel } from '../../Models/MD_TB_sedes.js';
 
 /* =========================
    Helpers
@@ -30,13 +32,6 @@ const toIntOrNull = (v) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return null;
   return Math.trunc(n);
-};
-
-const toDecOrNull = (v) => {
-  if (v === undefined || v === null || v === '') return null;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return Number(n.toFixed(2));
 };
 
 const toFlagOrUndefined = (v) => {
@@ -71,56 +66,111 @@ const cleanStringOrNull = (v, max = null) => {
   return s;
 };
 
-// Benjamin Orellana - 08/04/2026 - Calcula el precio final del plan aplicando descuento porcentual con piso en cero
-const calcularPrecioFinalPlan = (precioReferencia, descuento) => {
-  if (precioReferencia === null || precioReferencia === undefined) return null;
-
-  const precio = Number(precioReferencia || 0);
-  const descPct = Number(descuento || 0);
-
-  if (!Number.isFinite(precio) || !Number.isFinite(descPct)) return null;
-
-  const precioFinal = precio - precio * (descPct / 100);
-
-  return Number(Math.max(precioFinal, 0).toFixed(2));
-};
-
-// Benjamin Orellana - 08/04/2026 - Valida la consistencia del plan entre precio inicial, descuento porcentual y precio final
-const validarMontosPlan = ({ precioReferencia, descuento }) => {
-  if (precioReferencia !== null && precioReferencia < 0) {
-    return 'precio_referencia no puede ser negativo.';
-  }
-
-  if (descuento !== null && descuento < 0) {
-    return 'descuento no puede ser negativo.';
-  }
-
-  if (descuento !== null && descuento > 100) {
-    return 'descuento no puede ser mayor que 100.';
-  }
-
-  if (
-    (precioReferencia === null || precioReferencia === undefined) &&
-    descuento !== null &&
-    descuento > 0
-  ) {
-    return 'No puedes informar descuento si precio_referencia es null.';
-  }
-
-  return null;
-};
-
+/* Benjamin Orellana - 2026/04/15 - Se simplifica el payload de planes eliminando campos de precio y descuento, ya que ahora el precio depende de plan+sede y el beneficio del banco. */
 const pickPlanPayload = (body = {}) => {
   return {
     codigo: cleanStringOrNull(body.codigo, 30),
     nombre: cleanStringOrNull(body.nombre, 120),
     descripcion: cleanStringOrNull(body.descripcion, 255),
     activo: toFlagOrUndefined(body.activo),
-    orden_visual: toIntOrNull(body.orden_visual),
-    precio_referencia: toDecOrNull(body.precio_referencia),
-    descuento: toDecOrNull(body.descuento)
+    orden_visual: toIntOrNull(body.orden_visual)
   };
 };
+
+/* =========================
+   OBRS - listar planes disponibles por sede
+   Filtros:
+   ?sede_id=15
+========================= */
+export const OBRS_DebitosAutomaticosPlanesPorSede_CTS = async (req, res) => {
+  try {
+    const { sede_id, q } = req.query;
+
+    const sedeId = toIntOrNull(sede_id);
+
+    if (!sedeId) {
+      return res.status(400).json({
+        mensajeError: 'La query sede_id es obligatoria y debe ser numérica.'
+      });
+    }
+
+    /* Benjamin Orellana - 2026/04/15 - Se valida la sede antes de exponer el catálogo público filtrado para evitar combinaciones inválidas en el formulario público. */
+    const sede = await SedeModel.findByPk(sedeId);
+
+    if (!sede) {
+      return res.status(404).json({
+        mensajeError: 'La sede indicada no existe.'
+      });
+    }
+
+    const includePlanSede = {
+      model: DebitosAutomaticosPlanesSedesModel,
+      as: 'planes_sedes',
+      required: true,
+      where: {
+        sede_id: sedeId,
+        activo: 1,
+        precio_base: {
+          [Op.ne]: null
+        }
+      },
+      attributes: ['id', 'sede_id', 'precio_base', 'activo', 'created_at', 'updated_at']
+    };
+
+    const where = {
+      activo: 1
+    };
+
+    if (q && String(q).trim()) {
+      const search = String(q).trim();
+
+      where[Op.or] = [
+        { codigo: { [Op.like]: `%${search}%` } },
+        { nombre: { [Op.like]: `%${search}%` } },
+        { descripcion: { [Op.like]: `%${search}%` } }
+      ];
+    }
+
+    /* Benjamin Orellana - 2026/04/15 - Se devuelven únicamente planes activos que tengan configuración activa y precio_base válido en la sede solicitada. */
+    const registros = await DebitosAutomaticosPlanesModel.findAll({
+      where,
+      include: [includePlanSede],
+      order: [
+        ['orden_visual', 'ASC'],
+        ['nombre', 'ASC']
+      ]
+    });
+
+    const respuesta = registros.map((plan) => {
+      const configuracion = Array.isArray(plan?.planes_sedes)
+        ? plan.planes_sedes[0] || null
+        : null;
+
+      return {
+        id: plan.id,
+        codigo: plan.codigo,
+        nombre: plan.nombre,
+        descripcion: plan.descripcion,
+        activo: plan.activo,
+        orden_visual: plan.orden_visual,
+        created_at: plan.created_at,
+        updated_at: plan.updated_at,
+        plan_sede_id: configuracion?.id || null,
+        sede_id: configuracion?.sede_id || sedeId,
+        sede_nombre: sede?.nombre || null,
+        precio_base: configuracion?.precio_base ?? null,
+        precio_configuracion_activa: configuracion?.activo ?? 0
+      };
+    });
+
+    return res.json(respuesta);
+  } catch (error) {
+    return res.status(500).json({
+      mensajeError: error.message
+    });
+  }
+};
+
 /* =========================
    OBRS - listar
    Filtros:
@@ -212,37 +262,13 @@ export const CR_DebitosAutomaticosPlanes_CTS = async (req, res) => {
       return res.status(400).json({ mensajeError: 'nombre es obligatorio.' });
     }
 
-    // Benjamin Orellana - 08/04/2026 - Validación de precio inicial y descuento porcentual del plan antes de crear
-    const errorMontos = validarMontosPlan({
-      precioReferencia: payload.precio_referencia,
-      descuento: payload.descuento ?? 0
-    });
-
-    if (errorMontos) {
-      await t.rollback();
-      return res.status(400).json({
-        mensajeError: errorMontos
-      });
-    }
-
-    // Benjamin Orellana - 14/04/2026 - Se calcula el descuento efectivo y el precio final automáticamente al crear el plan.
-    const descuento = payload.descuento ?? 0;
-
-    const precioFinal = calcularPrecioFinalPlan(
-      payload.precio_referencia,
-      descuento
-    );
-    
     const creado = await DebitosAutomaticosPlanesModel.create(
       {
         codigo: payload.codigo,
         nombre: payload.nombre,
         descripcion: payload.descripcion,
         activo: payload.activo ?? 1,
-        orden_visual: payload.orden_visual ?? 0,
-        precio_referencia: payload.precio_referencia,
-        descuento,
-        precio_final: precioFinal
+        orden_visual: payload.orden_visual ?? 0
       },
       { transaction: t }
     );
@@ -352,83 +378,6 @@ export const UR_DebitosAutomaticosPlanes_CTS = async (req, res) => {
 
       updateBody.orden_visual = ordenVisual;
     }
-
-    if (has('precio_referencia')) {
-      const precioReferencia = toDecOrNull(body.precio_referencia);
-
-      if (
-        body.precio_referencia !== null &&
-        body.precio_referencia !== '' &&
-        precioReferencia === null
-      ) {
-        await t.rollback();
-        return res.status(400).json({
-          mensajeError: 'precio_referencia debe ser numérico.'
-        });
-      }
-
-      if (precioReferencia !== null && precioReferencia < 0) {
-        await t.rollback();
-        return res.status(400).json({
-          mensajeError: 'precio_referencia no puede ser negativo.'
-        });
-      }
-
-      updateBody.precio_referencia = precioReferencia;
-    }
-
-    // Benjamin Orellana - 08/04/2026 - Se permite editar el descuento fijo del plan y recalcular el precio final
-    if (has('descuento')) {
-      const descuento = toDecOrNull(body.descuento);
-
-      if (
-        body.descuento !== null &&
-        body.descuento !== '' &&
-        descuento === null
-      ) {
-        await t.rollback();
-        return res.status(400).json({
-          mensajeError: 'descuento debe ser numérico.'
-        });
-      }
-
-      if (descuento !== null && descuento < 0) {
-        await t.rollback();
-        return res.status(400).json({
-          mensajeError: 'descuento no puede ser negativo.'
-        });
-      }
-
-      updateBody.descuento = descuento ?? 0;
-    }
-
-    // Benjamin Orellana - 08/04/2026 - Se recalcula el precio final usando los valores finales de precio inicial y descuento
-    const precioReferenciaFinal =
-      updateBody.precio_referencia !== undefined
-        ? updateBody.precio_referencia
-        : current.precio_referencia;
-
-    const descuentoFinal =
-      updateBody.descuento !== undefined
-        ? updateBody.descuento
-        : current.descuento;
-
-    const errorMontos = validarMontosPlan({
-      precioReferencia: precioReferenciaFinal,
-      descuento: descuentoFinal ?? 0
-    });
-
-    if (errorMontos) {
-      await t.rollback();
-      return res.status(400).json({
-        mensajeError: errorMontos
-      });
-    }
-
-    updateBody.precio_final = calcularPrecioFinalPlan(
-      precioReferenciaFinal,
-      descuentoFinal ?? 0
-    );
 
     const [numRowsUpdated] = await DebitosAutomaticosPlanesModel.update(
       updateBody,

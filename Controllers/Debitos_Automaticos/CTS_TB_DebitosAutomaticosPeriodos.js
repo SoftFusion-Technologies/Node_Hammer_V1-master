@@ -1727,7 +1727,7 @@ export const UR_DebitosAutomaticosPeriodosIntentarPagoManual_CTS = async (
     }
 
     const payload = {
-      estado_cobro: 'PAGO_MANUAL',
+      estado_cobro: 'PENDIENTE',
       accion_requerida: 'COBRO_MANUAL',
       fecha_resultado:
         req.body.fecha_resultado !== undefined &&
@@ -1923,4 +1923,170 @@ export const ER_DebitosAutomaticosPeriodos_CTS = async (_req, res) => {
     mensajeError:
       'No se permite eliminar períodos de débito automático. Usá los endpoints de negocio para aprobar, baja, cambio de tarjeta, pago manual o reintento.'
   });
+};
+
+export const UR_DebitosAutomaticosPeriodosDeshacerCobro_CTS = async (
+  req,
+  res
+) => {
+  const sequelize = getTransactionProvider();
+  const transaction = await sequelize.transaction();
+
+  try {
+    const id = parsePositiveInt(req.params.id);
+    const motivoDetalle = String(req.body.motivo_detalle || '').trim();
+
+    if (!id) {
+      throw buildHttpError(400, 'El id enviado no es válido.');
+    }
+
+    if (!motivoDetalle) {
+      throw buildHttpError(
+        400,
+        'motivo_detalle es obligatorio para deshacer el cobro.'
+      );
+    }
+
+    const periodo = await DebitosAutomaticosPeriodosModel.findByPk(id, {
+      transaction
+    });
+
+    if (!periodo) {
+      throw buildHttpError(404, 'Período de débito automático no encontrado.');
+    }
+
+    const estadoCobroActual = String(periodo.estado_cobro || '').toUpperCase();
+
+    if (estadoCobroActual !== 'COBRADO') {
+      throw buildHttpError(
+        400,
+        'Solo se puede deshacer un período que actualmente esté COBRADO.'
+      );
+    }
+
+    const cliente = await DebitosAutomaticosClientesModel.findByPk(
+      periodo.cliente_id,
+      {
+        transaction
+      }
+    );
+
+    if (!cliente) {
+      throw buildHttpError(400, 'No existe el cliente asociado al período.');
+    }
+
+    const updatedBy =
+      req.body.updated_by !== undefined
+        ? parsePositiveInt(req.body.updated_by)
+        : null;
+
+    if (req.body.updated_by !== undefined && !updatedBy) {
+      throw buildHttpError(400, 'updated_by debe ser un entero positivo.');
+    }
+
+    const marcarParaReintento = parseBoolean(
+      req.body.marcar_para_reintento,
+      true
+    );
+    const reabrirEnvio = parseBoolean(req.body.reabrir_envio, false);
+    const revertirActivacionCliente = parseBoolean(
+      req.body.revertir_activacion_cliente,
+      true
+    );
+
+    const observacionReversa = appendObservacion(
+      periodo.observaciones,
+      `Se deshizo el cobro. Estado anterior: COBRADO. Motivo: ${motivoDetalle}`,
+      'REVERSA COBRO'
+    );
+
+    const payloadPeriodo = {
+      estado_cobro: 'PENDIENTE',
+      accion_requerida: marcarParaReintento ? 'REINTENTO' : 'NINGUNA',
+      fecha_resultado: null,
+      motivo_codigo: null,
+      motivo_detalle: null,
+      observaciones: observacionReversa
+    };
+
+    if (reabrirEnvio) {
+      payloadPeriodo.estado_envio = 'PENDIENTE';
+    }
+
+    if (req.body.archivo_banco_id !== undefined) {
+      payloadPeriodo.archivo_banco_id = validateArchivoBancoId(
+        req.body.archivo_banco_id
+      );
+    }
+
+    if (
+      req.body.observaciones !== undefined &&
+      req.body.observaciones !== null
+    ) {
+      payloadPeriodo.observaciones = appendObservacion(
+        observacionReversa,
+        String(req.body.observaciones).trim(),
+        'OBS'
+      );
+    }
+
+    if (updatedBy) {
+      payloadPeriodo.updated_by = updatedBy;
+    }
+
+    /* Benjamin Orellana - 15/04/2026 - Reversa administrativa de un cobro aprobado por error, devolviendo el período a pendiente sin eliminar trazabilidad. */
+    await periodo.update(payloadPeriodo, { transaction });
+
+    /* Benjamin Orellana - 15/04/2026 - Si este era el único cobro aprobado del cliente, se puede volver a PENDIENTE_INICIO para reflejar la reversa operativa. */
+    if (
+      revertirActivacionCliente &&
+      String(cliente.estado_general || '').toUpperCase() === 'ACTIVO'
+    ) {
+      const otrosCobrosAprobados = await DebitosAutomaticosPeriodosModel.count({
+        where: {
+          cliente_id: cliente.id,
+          id: { [Op.ne]: periodo.id },
+          estado_cobro: 'COBRADO'
+        },
+        transaction
+      });
+
+      if (!otrosCobrosAprobados) {
+        await cliente.update(
+          {
+            estado_general: 'PENDIENTE_INICIO',
+            updated_by: updatedBy || cliente.updated_by
+          },
+          { transaction }
+        );
+      }
+    }
+
+    await transaction.commit();
+
+    const includeFullCard = hasDebitosFullAccess(req);
+
+    const row = await DebitosAutomaticosPeriodosModel.findByPk(id, {
+      include: buildPeriodoIncludes({
+        includeEncrypted: includeFullCard
+      })
+    });
+
+    return res.status(200).json({
+      ok: true,
+      row: sanitizePeriodo(row, {
+        includeFullCard,
+        req
+      }),
+      mensaje: 'El cobro fue revertido correctamente.'
+    });
+  } catch (error) {
+    await transaction.rollback();
+
+    return res.status(error.statusCode || 500).json({
+      ok: false,
+      mensajeError:
+        error?.message || 'Ocurrió un error al deshacer el cobro del período.'
+    });
+  }
 };

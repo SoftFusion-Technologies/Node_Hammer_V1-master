@@ -25,6 +25,7 @@ import DebitosAutomaticosSolicitudesAdicionalesModel from './MD_TB_DebitosAutoma
 import DebitosAutomaticosClientesModel from './MD_TB_DebitosAutomaticosClientes.js';
 import DebitosAutomaticosClientesAdicionalesModel from './MD_TB_DebitosAutomaticosClientesAdicionales.js';
 import DebitosAutomaticosPeriodosModel from './MD_TB_DebitosAutomaticosPeriodos.js';
+import DebitosAutomaticosPlanesSedesModel from './MD_TB_DebitosAutomaticosPlanesSedes.js';
 
 import UsersModel from '../MD_TB_Users.js';
 
@@ -282,10 +283,47 @@ export default function initDebitosAutomaticosRelaciones() {
     as: 'sede'
   });
 
+  // =========================================================
+  // 14) Plan 1 - n Precios por Sede
+  // =========================================================
+
+  // Benjamin Orellana - 2026/04/15 - Relación entre planes globales y su configuración de precio por sede para resolver precios base según ciudad.
+  DebitosAutomaticosPlanesModel.hasMany(DebitosAutomaticosPlanesSedesModel, {
+    foreignKey: 'plan_id',
+    as: 'planes_sedes',
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE'
+  });
+
+  // Benjamin Orellana - 2026/04/15 - Asociación inversa para que cada registro de precio por sede pueda resolver su plan mediante el alias 'plan'.
+  DebitosAutomaticosPlanesSedesModel.belongsTo(DebitosAutomaticosPlanesModel, {
+    foreignKey: 'plan_id',
+    as: 'plan'
+  });
+
+  // =========================================================
+  // 15) Sede 1 - n Precios de Planes
+  // =========================================================
+
+  // Benjamin Orellana - 2026/04/15 - Relación entre sedes y precios de planes por sede para resolver el precio base vigente de cada plan en cada ciudad.
+  SedeModel.hasMany(DebitosAutomaticosPlanesSedesModel, {
+    foreignKey: 'sede_id',
+    as: 'planes_debitos_automaticos',
+    onDelete: 'RESTRICT',
+    onUpdate: 'CASCADE'
+  });
+
+  // Benjamin Orellana - 2026/04/15 - Asociación inversa para que cada precio por sede pueda resolver la sede mediante el alias 'sede'.
+  DebitosAutomaticosPlanesSedesModel.belongsTo(SedeModel, {
+    foreignKey: 'sede_id',
+    as: 'sede'
+  });
+
   return {
     SedeModel,
     DebitosAutomaticosBancosModel,
     DebitosAutomaticosPlanesModel,
+    DebitosAutomaticosPlanesSedesModel,
     DebitosAutomaticosTerminosModel,
     DebitosAutomaticosSolicitudesModel,
     DebitosAutomaticosSolicitudesAdicionalesModel,
