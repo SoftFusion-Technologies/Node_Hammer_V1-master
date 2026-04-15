@@ -496,11 +496,11 @@ import {
 import {
   CR_Preventa_CTS,
   OBRS_Preventas_CTS,
+  OBR_PreventaPorDni_CTS,
   UR_Preventa_CTS,
   UR_Preventa_Contacto_CTS,
   ER_Preventa_CTS
 } from '../Controllers/CTS_TB_Preventas.js';
-
 import {
   CR_PilatesCuposConDescuentos_CTS,
   UR_PilatesCuposConDescuentos_CTS,
@@ -1780,8 +1780,16 @@ router.post(
   ]),
   CR_Preventa_CTS
 );
+router.get('/preventas/verificar-dni/:dni', OBR_PreventaPorDni_CTS);
 router.get('/preventas', OBRS_Preventas_CTS);
-router.put('/preventas/:id', UR_Preventa_CTS);
+router.put(
+  '/preventas/:id',
+  uploadPreventaTransferencia.fields([
+    { name: 'comprobante', maxCount: 1 },
+    { name: 'file', maxCount: 1 }
+  ]),
+  UR_Preventa_CTS
+);
 router.put('/preventas/contacto/:id', UR_Preventa_Contacto_CTS);
 router.delete('/preventas/:id', ER_Preventa_CTS);
 /* Sergio Manrique 20-02-2026 */
