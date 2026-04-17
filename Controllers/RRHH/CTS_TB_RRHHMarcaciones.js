@@ -26,6 +26,7 @@ import UsersModel from "../../Models/MD_TB_Users.js";
 import Sedes from "../../Models/MD_TB_sedes.js";
 import cron from "node-cron";
 import RRHHHorariosModel from "../../Models/RRHH/MD_TB_RRHHHorarios.js";
+import RRHHConversacionMensajesModel from "../../Models/RRHH/MD_TB_RRHHConversacionMensajes.js";
 import { Op } from "sequelize";
 import db from "../../DataBase/db.js";
 
@@ -283,6 +284,11 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
         { model: UsersModel, as: "aprobador", attributes: ["id", "name"] },
         { model: SedeModel, as: "sede" },
         { model: RRHHHorariosModel, as: "horario" },
+        {
+          model: RRHHConversacionMensajesModel,
+          as: "mensajes_aclaracion",
+          required: false,
+        },
       ],
       order: [
         ["fecha", "ASC"],
@@ -378,6 +384,10 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
         created_at: reg.created_at,
         updated_at: reg.updated_at,
         eliminado: reg.eliminado,
+        mensajes_aclaracion:
+          reg.mensajes_aclaracion?.length > 0
+            ? reg.mensajes_aclaracion
+            : null,
       });
 
       // Lógica solicitada para el total diario:
@@ -1263,11 +1273,16 @@ export const procesarMarcacionesAutomaticas_CTS = async () => {
   }
 };
 
-export const anularMarcacionesFacialesAbiertas_CTS = async () => {
+export const cerrarMarcacionesFacialesAbiertas_CTS = async () => {
   try {
     const ahoraArgentina = dayjs().tz(TZ);
     const fechaHoy = ahoraArgentina.format("YYYY-MM-DD");
     const fechaHoraActual = ahoraArgentina.format("YYYY-MM-DD HH:mm:ss");
+
+    // 🔹 Hora de cierre: 23:59:00 del mismo día
+    const horaCierre = dayjs
+      .tz(`${fechaHoy} 23:59:00`, "YYYY-MM-DD HH:mm:ss", TZ)
+      .format("YYYY-MM-DD HH:mm:ss");
 
     const marcacionesAbiertas = await RRHHMarcacionesModel.findAll({
       where: {
@@ -1281,7 +1296,7 @@ export const anularMarcacionesFacialesAbiertas_CTS = async () => {
 
     if (!marcacionesAbiertas.length) {
       console.log(
-        `[CRON] ${fechaHoraActual} - No se encontraron marcaciones faciales abiertas para anular.`
+        `[CRON] ${fechaHoraActual} - No se encontraron marcaciones faciales abiertas para cerrar.`
       );
       return;
     }
@@ -1290,9 +1305,9 @@ export const anularMarcacionesFacialesAbiertas_CTS = async () => {
 
     await RRHHMarcacionesModel.update(
       {
-        eliminado: 1,
+        hora_salida: horaCierre,
         comentarios:
-          "Marcación anulada automáticamente por quedar abierta sin hora de salida al cierre del día",
+          "El usuario no registró salida y se cerró automáticamente",
         updated_at: fechaHoraActual,
       },
       {
@@ -1303,11 +1318,11 @@ export const anularMarcacionesFacialesAbiertas_CTS = async () => {
     );
 
     console.log(
-      `[CRON] ${fechaHoraActual} - Marcaciones faciales abiertas anuladas: ${idsMarcaciones.length}`
+      `[CRON] ${fechaHoraActual} - Marcaciones faciales cerradas automáticamente: ${idsMarcaciones.length}`
     );
   } catch (error) {
     console.error(
-      "[CRON ERROR] Error al anular marcaciones faciales abiertas:",
+      "[CRON ERROR] Error al cerrar marcaciones faciales abiertas:",
       error
     );
   }
@@ -1320,7 +1335,7 @@ cron.schedule(
       console.log("[CRON] Inicio cierre diario de marcaciones");
 
       // 1) Primero anula las faciales abiertas/incompletas
-      await anularMarcacionesFacialesAbiertas_CTS();
+      await cerrarMarcacionesFacialesAbiertas_CTS();
 
       // 2) Luego genera automáticas solo donde realmente no hubo actividad en el turno
       await procesarMarcacionesAutomaticas_CTS();

@@ -464,6 +464,11 @@ const setupAssociations = () => {
     as: "sede",
   });
 
+  RRHHConversacionesModel.belongsTo(UsersModel, {
+  foreignKey: "cerrado_por",
+  as: "cerrador",
+});
+
   UsersModel.hasOne(RRHHConversacionesModel, {
     foreignKey: "usuario_id",
     as: "rrhh_conversacion",

@@ -1,13 +1,14 @@
 /*
  * Programador: Sergio Gustavo Manrique
  * Fecha Creación: 08 / 04 / 2026
- * Versión: 1.0
+ * Versión: 1.1
  *
  * Descripción:
  * * Cabecera de los hilos de comunicación entre empleados y el departamento de RRHH.
- * * Controla los estados de lectura y la última actividad del canal de comunicación.
+ * * Controla los estados de lectura, la última actividad del canal de comunicación
+ * * y la trazabilidad del cierre de la conversación.
  * Tema: Modelos - RRHH Conversaciones
- * * Capa: Backend 
+ * * Capa: Backend
  */
 
 import db from "../../DataBase/db.js";
@@ -28,6 +29,14 @@ const RRHHConversacionesModel = db.define(
       type: DataTypes.ENUM("abierta", "cerrada"),
       defaultValue: "abierta",
       allowNull: false,
+    },
+    cerrado_por: {
+      type: DataTypes.BIGINT.UNSIGNED,
+      allowNull: true,
+    },
+    cerrado_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
     ultima_fecha_mensaje: {
       type: DataTypes.DATE,

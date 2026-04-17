@@ -1,16 +1,16 @@
 /*
  * Programador: Sergio Gustavo Manrique
  * Fecha Creación: 08 / 04 / 2026
- * Versión: 1.0
+ * Versión: 1.1
  *
  * Descripción:
  * * Detalle de mensajes, aclaraciones y respuestas dentro de una conversación.
- * * Gestiona la trazabilidad de resolución de incidencias (resuelto por, fecha y observación).
+ * * Permite marcar mensajes editados y eliminados dentro del chat sin quitarlos del historial.
  * Tema: Modelos - RRHH Conversacion Mensajes
- * * Capa: Backend 
+ * * Capa: Backend
  */
 
-import db from '../../DataBase/db.js';
+import db from "../../DataBase/db.js";
 import { DataTypes } from "sequelize";
 
 const RRHHConversacionMensajesModel = db.define(
@@ -45,6 +45,24 @@ const RRHHConversacionMensajesModel = db.define(
     mensaje: {
       type: DataTypes.TEXT,
       allowNull: false,
+    },
+    editado: {
+      type: DataTypes.TINYINT,
+      defaultValue: 0,
+      allowNull: false,
+    },
+    editado_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    mensaje_eliminado: {
+      type: DataTypes.TINYINT,
+      defaultValue: 0,
+      allowNull: false,
+    },
+    mensaje_eliminado_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
     fecha_referencia: {
       type: DataTypes.DATEONLY,

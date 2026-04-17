@@ -1,32 +1,36 @@
 /*
  * Programador: Benjamin Orellana / Sergio Gustavo Manrique
  * Fecha Creación: 30 / 04 / 2025
- * Versión: 1.1
+ * Versión: 1.3
  *
  * Descripción:
  * * Gestiona las cabeceras de los hilos de comunicación entre empleados y RRHH.
- * * Calcula dinámicamente el conteo de mensajes sin resolver y notificaciones pendientes por hilo.
+ * * Maneja apertura/cierre del asunto y trazabilidad del cierre.
+ * * Soporta paginación liviana para evitar sobrecarga.
  * Tema: Controladores - RRHH Conversaciones
- * * Capa: Backend 
- *
- * Nomenclatura: 
- * * OBRS_ obtenerRegistros (con conteo de pendientes)
- * * OBRS_ CantidadNoLeidas (Contador global para badges)
- * * OBR_ obtenerRegistro
- * * CR_ crearRegistro
- * * UR_ actualizarRegistro
- * * ER_ eliminarRegistro
+ * * Capa: Backend
  */
+
 import RRHHConversacionesModel from "../../Models/RRHH/MD_TB_RRHHConversaciones.js";
 import UsersModel from "../../Models/MD_TB_Users.js";
 import { SedeModel } from "../../Models/MD_TB_sedes.js";
 import RRHH_UsuarioSede from "../../Models/RRHH/MD_TB_RRHHUsuarioSede.js";
 import RRHHConversacionMensajesModel from "../../Models/RRHH/MD_TB_RRHHConversacionMensajes.js";
-import { Op } from "sequelize";
+
+const formatearFechaSistema = (fecha) => {
+  try {
+    return new Date(fecha).toLocaleString("es-AR");
+  } catch {
+    return "";
+  }
+};
 
 export const OBRS_RRHHConversaciones_CTS = async (req, res) => {
   try {
-    const registros = await RRHHConversacionesModel.findAll({
+    const limit = Math.max(1, Math.min(Number(req.query.limit) || 20, 50));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+
+    const { count, rows } = await RRHHConversacionesModel.findAndCountAll({
       where: { eliminado: 0 },
       include: [
         {
@@ -53,49 +57,26 @@ export const OBRS_RRHHConversaciones_CTS = async (req, res) => {
             },
           ],
         },
+        {
+          model: UsersModel,
+          as: "cerrador",
+          attributes: ["id", "name"],
+          required: false,
+        },
       ],
+      order: [["ultima_fecha_mensaje", "DESC"]],
+      limit,
+      offset,
+      distinct: true,
     });
 
-    const conversacionesIds = registros.map((registro) => registro.id);
-
-    if (!conversacionesIds.length) {
-      return res.json(registros);
-    }
-
-    const conteosSinResolver = await RRHHConversacionMensajesModel.findAll({
-      attributes: [
-        "conversacion_id",
-        [
-          RRHHConversacionMensajesModel.sequelize.fn(
-            "COUNT",
-            RRHHConversacionMensajesModel.sequelize.col("id"),
-          ),
-          "notificaciones_sin_resolver",
-        ],
-      ],
-      where: {
-        conversacion_id: { [Op.in]: conversacionesIds },
-        eliminado: 0,
-        resuelto: 0,
-        destinatario_tipo: "rrhh",
-      },
-      group: ["conversacion_id"],
-      raw: true,
+    return res.json({
+      registros: rows,
+      total: count,
+      limit,
+      offset,
+      hay_mas: offset + rows.length < count,
     });
-
-    const mapaConteos = new Map(
-      conteosSinResolver.map((item) => [
-        Number(item.conversacion_id),
-        Number(item.notificaciones_sin_resolver) || 0,
-      ]),
-    );
-
-    const registrosConConteo = registros.map((registro) => ({
-      ...registro.toJSON(),
-      notificaciones_sin_resolver: mapaConteos.get(registro.id) || 0,
-    }));
-
-    return res.json(registrosConConteo);
   } catch (error) {
     console.error("OBRS_RRHHConversaciones_CTS:", error);
     return res.status(500).json({ mensajeError: error.message });
@@ -144,27 +125,22 @@ export const OBR_RRHHConversacion_CTS = async (req, res) => {
           as: "usuario",
           attributes: ["id", "name", "email"],
         },
+        {
+          model: UsersModel,
+          as: "cerrador",
+          attributes: ["id", "name"],
+          required: false,
+        },
       ],
     });
 
-    if (!registro)
+    if (!registro) {
       return res
         .status(404)
         .json({ mensajeError: "Conversación no encontrada." });
+    }
 
-    const notificacionesSinResolver = await RRHHConversacionMensajesModel.count({
-      where: {
-        conversacion_id: registro.id,
-        eliminado: 0,
-        resuelto: 0,
-        destinatario_tipo: "rrhh",
-      },
-    });
-
-    return res.json({
-      ...registro.toJSON(),
-      notificaciones_sin_resolver: notificacionesSinResolver,
-    });
+    return res.json(registro);
   } catch (error) {
     console.error("OBR_RRHHConversacion_CTS:", error);
     return res.status(500).json({ mensajeError: error.message });
@@ -173,52 +149,131 @@ export const OBR_RRHHConversacion_CTS = async (req, res) => {
 
 export const CR_RRHHConversacion_CTS = async (req, res) => {
   try {
-    
     const nuevaConversacion = await RRHHConversacionesModel.create(req.body);
-    res.json({ mensaje: "Conversación creada con éxito", nuevaConversacion });
+    return res.json({
+      mensaje: "Conversación creada con éxito",
+      nuevaConversacion,
+    });
   } catch (error) {
     console.error("CR_RRHHConversacion_CTS:", error);
-    res.status(500).json({ mensajeError: error.message });
+    return res.status(500).json({ mensajeError: error.message });
   }
 };
 
 export const UR_RRHHConversacion_CTS = async (req, res) => {
   try {
     const { id } = req.params;
-    const [filasActualizadas] = await RRHHConversacionesModel.update(req.body, {
+
+    const conversacion = await RRHHConversacionesModel.findOne({
       where: { id, eliminado: 0 },
+      include: [
+        {
+          model: UsersModel,
+          as: "cerrador",
+          attributes: ["id", "name"],
+          required: false,
+        },
+      ],
     });
 
-    if (filasActualizadas === 1) {
-      const registroActualizado = await RRHHConversacionesModel.findByPk(id);
-      res.json({
-        mensaje: "Conversación actualizada correctamente",
-        registroActualizado,
-      });
-    } else {
-      res.status(404).json({ mensajeError: "Conversación no encontrada" });
+    if (!conversacion) {
+      return res.status(404).json({ mensajeError: "Conversación no encontrada" });
     }
+
+    const estadoAnterior = conversacion.estado;
+    const nuevoEstado = req.body?.estado;
+    const payloadActualizacion = { ...req.body };
+
+    if (nuevoEstado === "abierta") {
+      payloadActualizacion.cerrado_por = null;
+      payloadActualizacion.cerrado_at = null;
+    }
+
+    await conversacion.update(payloadActualizacion);
+
+    if (nuevoEstado === "cerrada" && estadoAnterior !== "cerrada") {
+      const nombreCerrador = conversacion.cerrador?.name || "RRHH";
+      const fechaTexto = formatearFechaSistema(
+        payloadActualizacion.cerrado_at || new Date(),
+      );
+
+      await RRHHConversacionMensajesModel.create({
+        conversacion_id: conversacion.id,
+        emisor_user_id: payloadActualizacion.cerrado_por || conversacion.usuario_id,
+        destinatario_tipo: "usuario",
+        tipo_mensaje: "sistema",
+        mensaje: `Conversación cerrada el ${fechaTexto} por ${nombreCerrador}.`,
+      });
+
+      await conversacion.update({
+        ultimo_mensaje: `Conversación cerrada el ${fechaTexto} por ${nombreCerrador}.`,
+        ultima_fecha_mensaje: new Date(),
+      });
+    }
+
+    if (nuevoEstado === "abierta" && estadoAnterior === "cerrada") {
+      await RRHHConversacionMensajesModel.create({
+        conversacion_id: conversacion.id,
+        emisor_user_id: conversacion.usuario_id,
+        destinatario_tipo: "rrhh",
+        tipo_mensaje: "sistema",
+        mensaje: "Conversación reabierta.",
+      });
+
+      await conversacion.update({
+        ultimo_mensaje: "Conversación reabierta.",
+        ultima_fecha_mensaje: new Date(),
+      });
+    }
+
+    const registroActualizado = await RRHHConversacionesModel.findOne({
+      where: { id, eliminado: 0 },
+      include: [
+        {
+          model: SedeModel,
+          as: "sede",
+          attributes: ["id", "nombre"],
+        },
+        {
+          model: UsersModel,
+          as: "usuario",
+          attributes: ["id", "name", "email"],
+        },
+        {
+          model: UsersModel,
+          as: "cerrador",
+          attributes: ["id", "name"],
+          required: false,
+        },
+      ],
+    });
+
+    return res.json({
+      mensaje: "Conversación actualizada correctamente",
+      registroActualizado,
+    });
   } catch (error) {
     console.error("UR_RRHHConversacion_CTS:", error);
-    res.status(500).json({ mensajeError: error.message });
+    return res.status(500).json({ mensajeError: error.message });
   }
 };
 
 export const ER_RRHHConversacion_CTS = async (req, res) => {
   try {
     const { id } = req.params;
+
     const [filasActualizadas] = await RRHHConversacionesModel.update(
       { eliminado: 1 },
       { where: { id } },
     );
 
     if (filasActualizadas === 1) {
-      res.json({ mensaje: "Conversación eliminada correctamente" });
-    } else {
-      res.status(404).json({ mensajeError: "Conversación no encontrada" });
+      return res.json({ mensaje: "Conversación eliminada correctamente" });
     }
+
+    return res.status(404).json({ mensajeError: "Conversación no encontrada" });
   } catch (error) {
     console.error("ER_RRHHConversacion_CTS:", error);
-    res.status(500).json({ mensajeError: error.message });
+    return res.status(500).json({ mensajeError: error.message });
   }
 };
