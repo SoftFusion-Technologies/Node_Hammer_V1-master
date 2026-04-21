@@ -26,7 +26,7 @@ export const VentasProspectosModel = db.define(
   {
     usuario_id: {
       type: DataTypes.BIGINT.UNSIGNED,
-      allowNull: false
+      allowNull: true
     },
     nombre: {
       type: DataTypes.STRING(100),
@@ -45,7 +45,7 @@ export const VentasProspectosModel = db.define(
         'Whatsapp',
         'Instagram',
         'Facebook',
-        'Pagina web',
+        'Link Web',
         'Campaña',
         'Comentarios/Stickers',
         'Desde pilates'
@@ -55,6 +55,12 @@ export const VentasProspectosModel = db.define(
     contacto: {
       type: DataTypes.STRING(50)
     },
+    // Benjamin Orellana - 2026/04/21 - Se adiciona el email del prospecto para permitir confirmaciones por correo desde el flujo público.
+    email: {
+      type: DataTypes.STRING(150),
+      allowNull: true
+    },
+    
     actividad: {
       type: DataTypes.ENUM(
         'No especifica',
@@ -65,13 +71,31 @@ export const VentasProspectosModel = db.define(
       ),
       allowNull: false
     },
+
+    // Benjamin Orellana - 2026/04/17 - Se agrega sede_id para enlazar prospectos con sedes y permitir la asignación automática de profesor por horario.
+    sede_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'sedes',
+        key: 'id'
+      }
+    },
+
+    // Benjamin Orellana - 2026/04/17 - Se registra si el prospecto requiere profesor para disparar la lógica.
+    necesita_profe: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+
     sede: {
       type: DataTypes.ENUM(
         'monteros',
         'concepcion',
         'barrio sur',
         'barrio norte',
-        'yerba buena - aconquija'
+        'yerba buena - aconquija 2044'
       ),
       allowNull: false
     },
@@ -188,7 +212,9 @@ export const VentasProspectosModel = db.define(
     createdAt: 'created_at',
     updatedAt: 'updated_at',
     indexes: [
-      { fields: ['comision_estado'] } // hace match con idx_vp_comision_estado en SQL
+      { fields: ['comision_estado'] },
+      { fields: ['sede_id'] },
+      { fields: ['necesita_profe'] }
     ]
   }
 );

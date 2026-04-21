@@ -69,7 +69,7 @@ const VentasRemarketingModel = db.define(
         "Google",
         "Llamada",
         "Otro",
-        "Pagina web",      
+        "Link Web",      
         "Campaña",       
         "Comentarios/Stickers",
         "Baja Pilates"

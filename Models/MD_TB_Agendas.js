@@ -63,6 +63,11 @@ export const AgendasModel = db.define(
       allowNull: true, // Si quieres que sea opcional inicialmente
       defaultValue: DataTypes.NOW,
       comment: 'Fecha en la que se creó la agenda'
+    },
+    alerta_generada: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
     }
   },
   {

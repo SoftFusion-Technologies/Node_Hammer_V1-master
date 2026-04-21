@@ -177,7 +177,7 @@ export const MOVER_A_VENTAS_CTS = async (req, res) => {
       nombre: `${testClass.name} ${testClass.last_name}`,
       dni: testClass.dni,
       tipo_prospecto: 'Nuevo',
-      canal_contacto: 'Pagina Web',
+      canal_contacto: 'Link Web',
       contacto: testClass.celular,
       actividad: 'No especifica',
       sede: normalizarSede(testClass.sede),

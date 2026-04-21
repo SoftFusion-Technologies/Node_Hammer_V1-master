@@ -1060,7 +1060,7 @@ const ejecutarCopiaDeRemarketing = async () => {
         'Whatsapp': 'Whatsapp',
         'Instagram': 'Instagram',
         'Facebook': 'Facebook',
-        'Pagina web': 'Pagina web',
+        'Link Web': 'Link Web',
         'Campaña': 'Campaña',
         'Comentarios/Stickers': 'Comentarios/Stickers'
       };
@@ -1347,7 +1347,7 @@ export const copiarVentasProspectosARemarketing = async () => {
 
       const canalesPermitidos = [
         "Mostrador", "Whatsapp", "Instagram", "Facebook", "Google",
-        "Llamada", "Otro", "Pagina web", "Campaña",
+        "Llamada", "Otro", "Link Web", "Campaña",
         "Comentarios/Stickers", "Baja Pilates"
       ];
 

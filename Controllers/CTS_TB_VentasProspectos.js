@@ -22,6 +22,131 @@ import { Op, fn, col } from 'sequelize';
 import { VentasComisionesModel } from '../Models/MD_TB_ventas_comisiones.js';
 import db from '../DataBase/db.js';
 
+// Benjamin Orellana - 2026/04/17 - Imports para el registro público de visitas y clases de prueba.
+import { QueryTypes } from 'sequelize';
+import { AlumnosModel } from '../Models/MD_TB_Alumnos.js';
+import { AgendasModel } from '../Models/MD_TB_Agendas.js';
+
+// Benjamin Orellana - 2026/04/20 - Imports para la rama especial de Pilates dentro del registro público.
+import ClientesPilatesModel from '../Models/MD_TB_ClientesPilates.js';
+
+import MD_TB_HorariosPilates from '../Models/MD_TB_HorariosPilates.js';
+const { HorariosPilatesModel } = MD_TB_HorariosPilates;
+
+import InscripcionesPilatesModel from '../Models/MD_TB_InscripcionesPilates.js';
+
+// Benjamin Orellana - 2026/04/21 - Se importa el servicio aislado de mails de prospectos para enviar confirmaciones sin afectar Débitos Automáticos.
+import { enviarConfirmacionProspectoEmail } from '../Services/VentasProspectos/EnviarConfirmacionProspectoEmailService.js';
+
+// Benjamin Orellana - 2026/04/17 - Catálogos válidos para el registro público de prospectos.
+const TIPOS_LINK_VALIDOS = ['Visita programada', 'Clase de prueba'];
+const ACTIVIDADES_VALIDAS = [
+  'No especifica',
+  'Musculacion',
+  'Pilates',
+  'Clases grupales',
+  'Pase full'
+];
+const SEDES_VALIDAS = [
+  'monteros',
+  'concepcion',
+  'barrio sur',
+  'barrio norte',
+  'yerba buena - aconquija 2044'
+];
+
+// Benjamin Orellana - 2026/04/17 - Normaliza textos simples recibidos desde el formulario público.
+const normalizarTexto = (valor) => {
+  if (valor === undefined || valor === null) return '';
+  return String(valor).trim();
+};
+
+// Benjamin Orellana - 2026/04/20 - Normaliza texto simple para comparar días de Pilates sin depender de mayúsculas o acentos.
+const normalizarTextoComparacion = (valor) =>
+  String(valor || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+// Benjamin Orellana - 2026/04/17 - Interpreta booleanos desde distintos formatos del frontend.
+const normalizarBoolean = (valor) => {
+  if (valor === true || valor === 1 || valor === '1') return true;
+  if (typeof valor === 'string') {
+    const v = valor.trim().toLowerCase();
+    return v === 'true' || v === 'si' || v === 'sí';
+  }
+  return false;
+};
+
+// Benjamin Orellana - 2026/04/17 - Arma un DATETIME MySQL seguro a partir de fecha y hora.
+const construirFechaHoraMySQL = (fecha, hora) => {
+  const fechaNormalizada = normalizarTexto(fecha);
+  let horaNormalizada = normalizarTexto(hora);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaNormalizada)) {
+    return null;
+  }
+
+  if (/^\d{2}:\d{2}$/.test(horaNormalizada)) {
+    horaNormalizada = `${horaNormalizada}:00`;
+  }
+
+  if (!/^\d{2}:\d{2}:\d{2}$/.test(horaNormalizada)) {
+    return null;
+  }
+
+  return `${fechaNormalizada} ${horaNormalizada}`;
+};
+
+// Benjamin Orellana - 2026/04/17 - Convierte una fecha YYYY-MM-DD al esquema 1=Lunes, 7=Domingo usado por rrhh_horarios.
+const obtenerDiaSemanaRRHH = (fecha) => {
+  const d = new Date(`${fecha}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+
+  const day = d.getDay(); // 0=Domingo, 1=Lunes, ..., 6=Sábado
+  return day === 0 ? 7 : day;
+};
+
+// Benjamin Orellana - 2026/04/17 - Extrae mes y año operativos desde la fecha elegida por el prospecto.
+const obtenerMesAnio = (fecha) => {
+  const partes = normalizarTexto(fecha).split('-');
+  if (partes.length !== 3) return { mes: null, anio: null };
+
+  const anio = Number(partes[0]);
+  const mes = Number(partes[1]);
+
+  if (!anio || !mes) return { mes: null, anio: null };
+  return { mes, anio };
+};
+
+// Benjamin Orellana - 2026/04/20 - Convierte la fecha seleccionada al enum de día usado por horarios_pilates.
+const obtenerDiaSemanaPilates = (fecha) => {
+  const d = new Date(`${fecha}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+
+  const dias = [
+    'Domingo',
+    'Lunes',
+    'Martes',
+    'Miercoles',
+    'Jueves',
+    'Viernes',
+    'Sabado'
+  ];
+
+  return dias[d.getDay()] || null;
+};
+
+// Benjamin Orellana - 2026/04/20 - Suma días a una fecha YYYY-MM-DD para construir fecha_fin de la prueba en Pilates.
+const sumarDiasFechaISO = (fecha, dias) => {
+  const base = new Date(`${fecha}T12:00:00`);
+  if (Number.isNaN(base.getTime())) return null;
+
+  base.setDate(base.getDate() + dias);
+  return base.toISOString().split('T')[0];
+};
+
 // Obtener todos los registros (puede filtrar por usuario_id o sede)
 export const OBRS_VentasProspectos_CTS = async (req, res) => {
   const { usuario_id, sede } = req.query;
@@ -53,13 +178,15 @@ export const OBRS_VentasProspectos_CTS = async (req, res) => {
   }
 };
 
-
 // =======================================================
 //  HECHO POR SERGIO MANRIQUE, FECHA: 12/01/2026
 //  INICIO DE MODULO
 // =======================================================
-// Obtener prospectos no convertidos de la última semana del mes anterior 
-export const OBRS_VentasProspectosUltimaSemanaMesAnterior_CTS = async (_req, res) => {
+// Obtener prospectos no convertidos de la última semana del mes anterior
+export const OBRS_VentasProspectosUltimaSemanaMesAnterior_CTS = async (
+  _req,
+  res
+) => {
   try {
     const hoy = new Date();
 
@@ -73,8 +200,24 @@ export const OBRS_VentasProspectosUltimaSemanaMesAnterior_CTS = async (_req, res
 
     // Último día del mes anterior
     const lastDay = new Date(targetYear, targetMonthIndex + 1, 0).getDate();
-    const startDate = new Date(targetYear, targetMonthIndex, Math.max(1, lastDay - 6), 0, 0, 0, 0);
-    const endDate = new Date(targetYear, targetMonthIndex, lastDay, 23, 59, 59, 999);
+    const startDate = new Date(
+      targetYear,
+      targetMonthIndex,
+      Math.max(1, lastDay - 6),
+      0,
+      0,
+      0,
+      0
+    );
+    const endDate = new Date(
+      targetYear,
+      targetMonthIndex,
+      lastDay,
+      23,
+      59,
+      59,
+      999
+    );
 
     const registros = await VentasProspectosModel.findAll({
       where: {
@@ -93,12 +236,15 @@ export const OBRS_VentasProspectosUltimaSemanaMesAnterior_CTS = async (_req, res
           }
         ]
       },
-      order: [["fecha", "ASC"]]
+      order: [['fecha', 'ASC']]
     });
 
     res.json(registros);
   } catch (error) {
-    console.error("Error en OBRS_VentasProspectosUltimaSemanaMesAnterior_CTS:", error);
+    console.error(
+      'Error en OBRS_VentasProspectosUltimaSemanaMesAnterior_CTS:',
+      error
+    );
     res.status(500).json({ mensajeError: error.message });
   }
 };
@@ -200,7 +346,9 @@ export const UR_VentasProspecto_CTS = async (req, res) => {
       return res.status(400).json({ mensajeError: 'ID inválido' });
     }
 
-    const prospecto = await VentasProspectosModel.findByPk(id, { transaction: t });
+    const prospecto = await VentasProspectosModel.findByPk(id, {
+      transaction: t
+    });
     if (!prospecto) {
       await t.rollback();
       return res.status(404).json({ mensajeError: 'Prospecto no encontrado' });
@@ -251,7 +399,12 @@ export const UR_VentasProspecto_CTS = async (req, res) => {
       } else if (['convertido', 'comision'].includes(k)) {
         campos[k] = !!v;
       } else if (
-        ['fecha', 'clase_prueba_1_fecha', 'clase_prueba_2_fecha', 'clase_prueba_3_fecha'].includes(k)
+        [
+          'fecha',
+          'clase_prueba_1_fecha',
+          'clase_prueba_2_fecha',
+          'clase_prueba_3_fecha'
+        ].includes(k)
       ) {
         campos[k] = v ? new Date(v) : null;
       } else if (k === 'sede' && typeof v === 'string') {
@@ -271,12 +424,17 @@ export const UR_VentasProspecto_CTS = async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(campos, 'canal_contacto')) {
       const canal = campos.canal_contacto;
       if (canal === 'Campaña') {
-        const origen = Object.prototype.hasOwnProperty.call(body, 'campania_origen')
+        const origen = Object.prototype.hasOwnProperty.call(
+          body,
+          'campania_origen'
+        )
           ? String(body.campania_origen ?? '').trim()
           : String(prospecto.campania_origen ?? '').trim();
         if (!origen) {
           await t.rollback();
-          return res.status(400).json({ mensajeError: 'Debe especificar el origen de la campaña' });
+          return res
+            .status(400)
+            .json({ mensajeError: 'Debe especificar el origen de la campaña' });
         }
         campos.campania_origen = origen;
       } else {
@@ -285,16 +443,21 @@ export const UR_VentasProspecto_CTS = async (req, res) => {
     }
 
     // 2) Bloquear intento de activar comisión desde UR
-    if (Object.prototype.hasOwnProperty.call(body, 'comision') && body.comision === true) {
+    if (
+      Object.prototype.hasOwnProperty.call(body, 'comision') &&
+      body.comision === true
+    ) {
       await t.rollback();
       return res.status(400).json({
-        mensajeError: 'Use el endpoint de conversión para registrar una comisión.'
+        mensajeError:
+          'Use el endpoint de conversión para registrar una comisión.'
       });
     }
 
     // 3) Si desmarcan "convertido"
     const revierteConversion =
-      Object.prototype.hasOwnProperty.call(body, 'convertido') && body.convertido === false;
+      Object.prototype.hasOwnProperty.call(body, 'convertido') &&
+      body.convertido === false;
 
     if (revierteConversion) {
       // limpiar metadata en el prospecto
@@ -306,7 +469,10 @@ export const UR_VentasProspecto_CTS = async (req, res) => {
 
       // regla nueva: si tenía comisión y está RECHAZADA, ELIMINARLA (para que no aparezca en "Ver comisiones")
       if (prospecto.comision_id) {
-        const com = await VentasComisionesModel.findByPk(prospecto.comision_id, { transaction: t });
+        const com = await VentasComisionesModel.findByPk(
+          prospecto.comision_id,
+          { transaction: t }
+        );
 
         if (com) {
           if (com.estado === 'rechazado') {
@@ -321,7 +487,8 @@ export const UR_VentasProspecto_CTS = async (req, res) => {
                 estado: 'rechazado',
                 rechazado_por: req.user?.id ?? null,
                 rechazado_at: new Date(),
-                motivo_rechazo: 'Conversión revertida desde edición del prospecto.'
+                motivo_rechazo:
+                  'Conversión revertida desde edición del prospecto.'
               },
               { where: { id: com.id }, transaction: t }
             );
@@ -343,10 +510,15 @@ export const UR_VentasProspecto_CTS = async (req, res) => {
     // Nada para actualizar
     if (Object.keys(campos).length === 0) {
       await t.rollback();
-      return res.status(400).json({ mensajeError: 'Sin campos válidos para actualizar' });
+      return res
+        .status(400)
+        .json({ mensajeError: 'Sin campos válidos para actualizar' });
     }
 
-    const [n] = await VentasProspectosModel.update(campos, { where: { id }, transaction: t });
+    const [n] = await VentasProspectosModel.update(campos, {
+      where: { id },
+      transaction: t
+    });
     if (!n) {
       await t.rollback();
       return res.status(404).json({ mensajeError: 'Prospecto no encontrado' });
@@ -356,7 +528,9 @@ export const UR_VentasProspecto_CTS = async (req, res) => {
     await t.commit();
     return res.json(data);
   } catch (err) {
-    try { await t.rollback(); } catch {}
+    try {
+      await t.rollback();
+    } catch {}
     return res.status(500).json({ mensajeError: err.message });
   }
 };
@@ -403,7 +577,7 @@ export const OBRS_ColaboradoresConVentasProspectos = async (req, res) => {
 };
 
 // Crear prospecto con horario para pilates a ventas
-//Controlador hecho por Sergio Manrique 
+//Controlador hecho por Sergio Manrique
 //Fecha: 27/11/2025
 export const CR_VentasProspectoConHorario_CTS = async (req, res) => {
   const t = await db.transaction();
@@ -412,8 +586,8 @@ export const CR_VentasProspectoConHorario_CTS = async (req, res) => {
     const {
       usuario_id,
       nombre,
-      dni = "Sin DNI",
-      tipo_prospecto = "Nuevo",
+      dni = 'Sin DNI',
+      tipo_prospecto = 'Nuevo',
       contacto,
       canal_contacto,
       actividad,
@@ -429,7 +603,14 @@ export const CR_VentasProspectoConHorario_CTS = async (req, res) => {
     } = req.body;
 
     // ✅ Validaciones básicas
-    if (!usuario_id || !nombre || !contacto || !canal_contacto || !actividad || !sede) {
+    if (
+      !usuario_id ||
+      !nombre ||
+      !contacto ||
+      !canal_contacto ||
+      !actividad ||
+      !sede
+    ) {
       await t.rollback();
       return res.status(400).json({
         mensajeError: 'Faltan datos obligatorios del prospecto'
@@ -465,7 +646,9 @@ export const CR_VentasProspectoConHorario_CTS = async (req, res) => {
         asesor_nombre: asesor_nombre || usuario.name,
         n_contacto_1: 1,
         clase_prueba_1_obs: observacion,
-        clase_prueba_1_fecha: clase_prueba_1_fecha ? new Date(clase_prueba_1_fecha) : null,
+        clase_prueba_1_fecha: clase_prueba_1_fecha
+          ? new Date(clase_prueba_1_fecha)
+          : null,
         clase_prueba_1_tipo: clase_prueba_1_tipo || 'Clase de prueba'
       },
       { transaction: t }
@@ -496,7 +679,6 @@ export const CR_VentasProspectoConHorario_CTS = async (req, res) => {
         horario: nuevoHorario
       }
     });
-
   } catch (error) {
     try {
       await t.rollback();
@@ -511,6 +693,865 @@ export const CR_VentasProspectoConHorario_CTS = async (req, res) => {
   }
 };
 
+// Benjamin Orellana - 2026/04/17 - Normaliza horas al formato HH:mm:ss para comparaciones consistentes.
+const normalizarHoraHHMMSS = (hora) => {
+  const valor = normalizarTexto(hora);
+
+  if (/^\d{2}:\d{2}:\d{2}$/.test(valor)) return valor;
+  if (/^\d{2}:\d{2}$/.test(valor)) return `${valor}:00`;
+
+  return null;
+};
+
+// Benjamin Orellana - 2026/04/17 - Calcula la diferencia en minutos entre dos horas del mismo día.
+const diferenciaMinutosEntreHoras = (horaDesde, horaHasta) => {
+  const desde = normalizarHoraHHMMSS(horaDesde);
+  const hasta = normalizarHoraHHMMSS(horaHasta);
+
+  if (!desde || !hasta) return null;
+
+  const [h1, m1, s1] = desde.split(':').map(Number);
+  const [h2, m2, s2] = hasta.split(':').map(Number);
+
+  const segundosDesde = h1 * 3600 + m1 * 60 + s1;
+  const segundosHasta = h2 * 3600 + m2 * 60 + s2;
+
+  return Math.floor((segundosHasta - segundosDesde) / 60);
+};
+
+// Benjamin Orellana - 2026/04/17 - Suma minutos a una hora HH:mm:ss para definir la ventana de relevo.
+const sumarMinutosAHora = (hora, minutosASumar) => {
+  const base = normalizarHoraHHMMSS(hora);
+  if (!base) return null;
+
+  const [h, m, s] = base.split(':').map(Number);
+  let totalSegundos = h * 3600 + m * 60 + s + minutosASumar * 60;
+
+  if (totalSegundos < 0) totalSegundos = 0;
+  if (totalSegundos > 86399) totalSegundos = 86399;
+
+  const hh = String(Math.floor(totalSegundos / 3600)).padStart(2, '0');
+  const mm = String(Math.floor((totalSegundos % 3600) / 60)).padStart(2, '0');
+  const ss = String(totalSegundos % 60).padStart(2, '0');
+
+  return `${hh}:${mm}:${ss}`;
+};
+
+// Benjamin Orellana - 2026/04/21 - Capitaliza la primera letra para mejorar la presentación de textos públicos.
+const capitalizarPrimeraLetra = (valor = '') => {
+  const texto = String(valor || '').trim();
+  if (!texto) return '';
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+};
+
+// Benjamin Orellana - 2026/04/21 - Formatea la fecha elegida por el prospecto a un formato legible para el mensaje público de éxito.
+const formatearFechaVisitaPublica = (fechaISO) => {
+  if (!fechaISO) return '';
+
+  const fecha = new Date(`${fechaISO}T12:00:00`);
+
+  if (Number.isNaN(fecha.getTime())) {
+    return String(fechaISO);
+  }
+
+  return capitalizarPrimeraLetra(
+    new Intl.DateTimeFormat('es-AR', {
+      weekday: 'long',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }).format(fecha)
+  );
+};
+
+// Benjamin Orellana - 2026/04/21 - Normaliza la hora al formato HH:MM para reutilizarla en los mensajes públicos.
+const formatearHoraVisitaPublica = (hora) => {
+  return String(hora || '')
+    .trim()
+    .slice(0, 5);
+};
+
+// Benjamin Orellana - 2026/04/21 - Construye el mensaje de éxito del formulario público usando profesor, fecha y hora cuando existan.
+const construirMensajeExitoRegistroPublico = ({
+  profesorNombre = '',
+  fechaISO = '',
+  horaHHMM = ''
+}) => {
+  const fechaTexto = formatearFechaVisitaPublica(fechaISO);
+  const horaTexto = formatearHoraVisitaPublica(horaHHMM);
+
+  const tramoFechaHora = [
+    fechaTexto ? `el ${fechaTexto}` : '',
+    horaTexto ? `a las ${horaTexto}` : ''
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  if (profesorNombre) {
+    return `Recibimos tu solicitud correctamente. Tu profesor se llama ${profesorNombre}. Te esperamos ${tramoFechaHora}. Revisá tu mail.`;
+  }
+
+  return `Recibimos tu solicitud correctamente. Te esperamos ${tramoFechaHora}. Revisá tu mail.`;
+};
+
+// Benjamin Orellana - 2026/04/21 - Valida el formato básico del email del prospecto para poder enviar confirmaciones posteriormente.
+const esEmailProspectoValido = (email = '') => {
+  const valor = String(email || '')
+    .trim()
+    .toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor);
+};
+
+// Benjamin Orellana - 2026/04/21 - Capitaliza cada palabra para mejorar textos visibles en correo y mensajes públicos.
+const capitalizarPalabrasRegistroPublico = (valor = '') =>
+  String(valor || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((parte) => capitalizarPrimeraLetra(parte))
+    .join(' ');
+
+// Benjamin Orellana - 2026/04/21 - Formatea la sede legada a una etiqueta amigable para el correo de confirmación.
+const formatearSedeConfirmacionRegistroPublico = (sede = '') => {
+  const clave = normalizarTextoComparacion(sede);
+
+  const mapa = {
+    monteros: 'Monteros',
+    concepcion: 'Concepción',
+    'barrio sur': 'Barrio Sur',
+    'barrio norte': 'Barrio Norte',
+    'yerba buena - aconquija 2044': 'Yerba Buena - Aconquija 2044'
+  };
+
+  return mapa[clave] || capitalizarPalabrasRegistroPublico(sede);
+};
+
+// Benjamin Orellana - 2026/04/21 - Formatea la actividad para mostrarla correctamente en el correo de confirmación.
+const formatearActividadConfirmacionRegistroPublico = (actividad = '') => {
+  const clave = normalizarTextoComparacion(actividad);
+
+  const mapa = {
+    musculacion: 'Musculación',
+    pilates: 'Pilates',
+    'clases grupales': 'Clases grupales',
+    'pase full': 'Pase full',
+    'no especifica': 'No especifica'
+  };
+
+  return mapa[clave] || capitalizarPalabrasRegistroPublico(actividad);
+};
+
+// Benjamin Orellana - 2026/04/21 - Unifica advertencias de distintos pasos del flujo sin pisar mensajes existentes.
+const unirMensajesAdvertenciaRegistroPublico = (...mensajes) => {
+  const mensajesValidos = mensajes
+    .map((msg) => String(msg || '').trim())
+    .filter(Boolean);
+
+  return mensajesValidos.length ? mensajesValidos.join(' ') : null;
+};
+
+// Benjamin Orellana - 2026/04/21 - Intenta enviar el mail de confirmación sin romper el alta principal si el correo falla.
+const enviarConfirmacionRegistroPublicoSafe = async ({
+  email,
+  nombreCompleto,
+  tipoLink,
+  actividad,
+  sede,
+  fechaISO,
+  horaHHMM,
+  profesorNombre = ''
+}) => {
+  try {
+    const resultado = await enviarConfirmacionProspectoEmail({
+      to: email,
+      nombreCompleto,
+      tipoLink,
+      actividad,
+      sede,
+      fechaTexto: formatearFechaVisitaPublica(fechaISO),
+      horaTexto: formatearHoraVisitaPublica(horaHHMM),
+      profesorNombre
+    });
+
+    if (resultado?.skipped) {
+      return null;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error enviando confirmación de prospecto por email:', error);
+
+    return 'Tu solicitud fue registrada, pero no pudimos enviarte el mail de confirmación.';
+  }
+};
+
+// Benjamin Orellana - 2026/04/17 - Registra prospectos desde el formulario web y, si corresponde, genera alumno y agenda inicial.
+export const CR_RegistroPublicoProspectoClaseVisita_CTS = async (req, res) => {
+  try {
+    const {
+      usuario_id,
+      asesor_nombre,
+      nombre,
+      apellido,
+      dni,
+      telefono,
+      contacto,
+      email,
+      actividad,
+      sede,
+      sede_id,
+      fecha_clase,
+      hora_clase,
+      necesita_profe,
+      tipo_link,
+      observacion,
+      pilates_horario_id,
+      pilates_hhmm,
+      pilates_grp,
+      pilates_clase_num
+    } = req.body;
+
+    const nombreBase = normalizarTexto(nombre);
+    const apellidoBase = normalizarTexto(apellido);
+    const nombreCompleto = [nombreBase, apellidoBase]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    const telefonoFinal =
+      normalizarTexto(contacto) || normalizarTexto(telefono);
+    const emailFinal = normalizarTexto(email).toLowerCase();
+    const actividadFinal = normalizarTexto(actividad);
+    const sedeFinal = normalizarTexto(sede).toLowerCase();
+    const tipoLinkFinal = normalizarTexto(tipo_link);
+    const requiereProfe = normalizarBoolean(necesita_profe);
+    const fechaHoraClase = construirFechaHoraMySQL(fecha_clase, hora_clase);
+    const diaSemana = obtenerDiaSemanaRRHH(fecha_clase);
+    const { mes, anio } = obtenerMesAnio(fecha_clase);
+
+    // Benjamin Orellana - 2026/04/21 - Se centralizan los datos base del mail de confirmación para reutilizarlos en todos los retornos exitosos del flujo.
+    const datosBaseMailConfirmacion = {
+      email: emailFinal,
+      nombreCompleto,
+      tipoLink: tipo_link || tipoLinkFinal,
+      actividad: formatearActividadConfirmacionRegistroPublico(
+        actividad || actividadFinal
+      ),
+      sede: formatearSedeConfirmacionRegistroPublico(sede || sedeFinal),
+      fechaISO: fecha_clase
+    };
+
+    // Benjamin Orellana - 2026/04/21 - Se dispara el correo en segundo plano para no demorar la respuesta HTTP del registro público.
+    const dispararConfirmacionRegistroPublicoEnSegundoPlano = (payload) => {
+      setImmediate(async () => {
+        try {
+          const advertenciaMail = await enviarConfirmacionRegistroPublicoSafe(
+            payload
+          );
+
+          if (advertenciaMail) {
+            console.warn(
+              'Advertencia enviando confirmación de prospecto por email:',
+              advertenciaMail
+            );
+          }
+        } catch (errorMailBackground) {
+          console.error(
+            'Error en envío asíncrono de confirmación de prospecto:',
+            errorMailBackground
+          );
+        }
+      });
+    };
+
+    // Benjamin Orellana - 2026/04/17 - Validaciones mínimas del formulario público.
+
+    if (!nombreCompleto) {
+      return res.status(400).json({
+        mensajeError: 'El nombre es obligatorio.'
+      });
+    }
+
+    if (!actividadFinal || !ACTIVIDADES_VALIDAS.includes(actividadFinal)) {
+      return res.status(400).json({
+        mensajeError: 'La actividad enviada no es válida.'
+      });
+    }
+
+    if (!sede_id) {
+      return res.status(400).json({
+        mensajeError: 'La sede es obligatoria.'
+      });
+    }
+
+    if (!sedeFinal || !SEDES_VALIDAS.includes(sedeFinal)) {
+      return res.status(400).json({
+        mensajeError: 'La sede legada enviada no es válida.'
+      });
+    }
+
+    if (!tipoLinkFinal || !TIPOS_LINK_VALIDOS.includes(tipoLinkFinal)) {
+      return res.status(400).json({
+        mensajeError:
+          'El tipo de link debe ser "Visita programada" o "Clase de prueba".'
+      });
+    }
+
+    if (!fechaHoraClase || !diaSemana || !mes || !anio) {
+      return res.status(400).json({
+        mensajeError: 'La fecha u hora seleccionada no es válida.'
+      });
+    }
+
+    if (!emailFinal) {
+      return res.status(400).json({
+        mensajeError: 'El email es obligatorio.'
+      });
+    }
+
+    if (!esEmailProspectoValido(emailFinal)) {
+      return res.status(400).json({
+        mensajeError: 'El email enviado no es válido.'
+      });
+    }
+
+    // Benjamin Orellana - 2026/04/20 - Si la actividad es Pilates, se exige la selección de un horario específico.
+    if (actividadFinal === 'Pilates') {
+      if (!pilates_horario_id || !pilates_hhmm || !pilates_grp) {
+        return res.status(400).json({
+          mensajeError: 'Para Pilates debés seleccionar un horario disponible.'
+        });
+      }
+
+      const diaPilates = obtenerDiaSemanaPilates(fecha_clase);
+
+      if (!diaPilates || diaPilates === 'Domingo') {
+        return res.status(400).json({
+          mensajeError:
+            'Pilates no dispone turnos válidos para la fecha seleccionada.'
+        });
+      }
+    }
+
+    // Benjamin Orellana - 2026/04/17 - Primero se registra siempre el prospecto comercial en ventas.
+    const prospectoCreado = await VentasProspectosModel.create({
+      usuario_id,
+      nombre: nombreCompleto,
+      dni: normalizarTexto(dni) || null,
+      tipo_prospecto: 'Nuevo',
+      canal_contacto: 'Link Web',
+      contacto: telefonoFinal || null,
+      email: emailFinal || null,
+      actividad: actividadFinal,
+      sede: sedeFinal,
+      sede_id,
+      asesor_nombre: normalizarTexto(asesor_nombre) || null,
+      n_contacto_1: 1,
+      n_contacto_2: 0,
+      n_contacto_3: 0,
+      clase_prueba_1_fecha: fechaHoraClase,
+      clase_prueba_1_obs: normalizarTexto(observacion) || null,
+      clase_prueba_1_tipo: tipoLinkFinal,
+      necesita_profe: requiereProfe,
+      observacion: normalizarTexto(observacion) || null
+    });
+
+    // Benjamin Orellana - 2026/04/20 - Si la actividad es Pilates, se deriva a su flujo propio sin pasar por alumnos/agendas generales.
+    if (actividadFinal === 'Pilates') {
+      const transactionPilates = await db.transaction();
+
+      try {
+        const diaPilates = obtenerDiaSemanaPilates(fecha_clase);
+        const fechaFinPilates = sumarDiasFechaISO(fecha_clase, 1);
+
+        // Benjamin Orellana - 2026/04/20 - Se valida el horario de Pilates por id e id_sede, y luego se comprueba en código que corresponda al día elegido.
+        const horarioPilates = await HorariosPilatesModel.findOne({
+          where: {
+            id: pilates_horario_id,
+            id_sede: sede_id
+          },
+          transaction: transactionPilates
+        });
+
+        if (!horarioPilates) {
+          await transactionPilates.rollback();
+
+          // Benjamin Orellana - 2026/04/21 - Se intenta enviar el mail aunque el alta de Pilates no haya podido completar su validación específica.
+          dispararConfirmacionRegistroPublicoEnSegundoPlano({
+            ...datosBaseMailConfirmacion,
+            horaHHMM: pilates_hhmm || hora_clase
+          });
+
+          return res.status(201).json({
+            mensaje: construirMensajeExitoRegistroPublico({
+              fechaISO: fecha_clase,
+              horaHHMM: pilates_hhmm || hora_clase
+            }),
+            mensajeAdvertencia:
+              'No se pudo validar el horario seleccionado de Pilates.',
+            prospecto: prospectoCreado,
+            pilates_registrado: false,
+            alumno_generado: false
+          });
+        }
+
+        const diaPilatesEsperado = normalizarTextoComparacion(diaPilates);
+        const diaPilatesHorario = normalizarTextoComparacion(
+          horarioPilates.dia_semana
+        );
+
+        if (diaPilatesHorario !== diaPilatesEsperado) {
+          await transactionPilates.rollback();
+
+          // Benjamin Orellana - 2026/04/21 - Se intenta enviar el mail de confirmación aunque exista una inconsistencia puntual en el horario de Pilates.
+          dispararConfirmacionRegistroPublicoEnSegundoPlano({
+            ...datosBaseMailConfirmacion,
+            horaHHMM: pilates_hhmm || hora_clase
+          });
+
+          return res.status(201).json({
+            mensaje: construirMensajeExitoRegistroPublico({
+              fechaISO: fecha_clase,
+              horaHHMM: pilates_hhmm || hora_clase
+            }),
+            mensajeAdvertencia:
+              'El horario seleccionado de Pilates no corresponde al día elegido.',
+            prospecto: prospectoCreado,
+            pilates_registrado: false,
+            alumno_generado: false
+          });
+        }
+
+        // Benjamin Orellana - 2026/04/20 - Se replica la lógica previa de ventas: si ya existe una prueba previa muy similar, se limpia antes de recrearla.
+        const whereClientePilatesExistente = {
+          nombre: nombreCompleto,
+          estado: {
+            [Op.in]: ['Clase de prueba', 'Renovacion programada']
+          }
+        };
+
+        if (telefonoFinal) {
+          whereClientePilatesExistente.telefono = telefonoFinal;
+        }
+
+        const clientePilatesExistente = await ClientesPilatesModel.findOne({
+          where: whereClientePilatesExistente,
+          transaction: transactionPilates
+        });
+
+        if (clientePilatesExistente) {
+          await InscripcionesPilatesModel.destroy({
+            where: { id_cliente: clientePilatesExistente.id },
+            transaction: transactionPilates
+          });
+
+          await ClientesPilatesModel.destroy({
+            where: { id: clientePilatesExistente.id },
+            transaction: transactionPilates
+          });
+        }
+
+        // Benjamin Orellana - 2026/04/20 - Se resuelve de forma robusta si el flujo de Pilates corresponde a clase de prueba o visita programada.
+        const tipoLinkNormalizadoPilates = normalizarTextoComparacion(
+          tipo_link ||
+            tipoLinkFinal ||
+            prospectoCreado?.clase_prueba_1_tipo ||
+            ''
+        );
+
+        const esClaseDePruebaPilates =
+          tipoLinkNormalizadoPilates === 'clase de prueba' ||
+          tipoLinkNormalizadoPilates.includes('clase de prueba');
+
+        const estadoPilates = esClaseDePruebaPilates
+          ? 'Clase de prueba'
+          : 'Renovacion programada';
+
+        // Benjamin Orellana - 2026/04/20 - Se crea el cliente de Pilates asociado comercialmente al prospecto registrado.
+        const clientePilatesCreado = await ClientesPilatesModel.create(
+          {
+            nombre: nombreCompleto,
+            telefono: telefonoFinal || null,
+            estado: estadoPilates,
+            fecha_inicio: fecha_clase,
+            fecha_fin: fechaFinPilates,
+            observaciones: normalizarTexto(observacion) || null
+          },
+          { transaction: transactionPilates }
+        );
+
+        // Benjamin Orellana - 2026/04/20 - Se crea la inscripción de Pilates con el horario puntual ya resuelto desde el frontend.
+        const inscripcionPilatesCreada = await InscripcionesPilatesModel.create(
+          {
+            id_cliente: clientePilatesCreado.id,
+            id_horario: horarioPilates.id,
+            fecha_inscripcion: fecha_clase
+          },
+          { transaction: transactionPilates }
+        );
+
+        // Benjamin Orellana - 2026/04/20 - Se registra el horario elegido también en ventas para mantener la trazabilidad comercial.
+        const horarioProspectoCreado =
+          await VentasProspectosHorariosModel.create(
+            {
+              prospecto_id: prospectoCreado.id,
+              hhmm: pilates_hhmm,
+              grp: pilates_grp,
+              clase_num: Number(pilates_clase_num || 1)
+            },
+            { transaction: transactionPilates }
+          );
+
+        let alumnoCreado = null;
+        let instructorPilates = null;
+        let userInternoInstructor = null;
+        let mensajeAdvertenciaPilates = null;
+
+        // Benjamin Orellana - 2026/04/20 - Si el prospecto pidió profesor, se intenta asociar el instructor de Pilates a un usuario interno y crear el alumno prospecto.
+        if (requiereProfe) {
+          const instructoresPilates = await db.query(
+            `
+            SELECT
+              up.id,
+              up.nombre,
+              up.apellido,
+              up.email
+            FROM usuarios_pilates up
+            WHERE up.id = :idInstructor
+            LIMIT 1
+            `,
+            {
+              replacements: {
+                idInstructor: horarioPilates.id_instructor
+              },
+              type: QueryTypes.SELECT,
+              transaction: transactionPilates
+            }
+          );
+
+          instructorPilates = instructoresPilates?.[0] || null;
+
+          if (instructorPilates?.email) {
+            userInternoInstructor = await UserModel.findOne({
+              where: {
+                email: instructorPilates.email
+              },
+              transaction: transactionPilates
+            });
+          }
+
+          if (userInternoInstructor) {
+            // Benjamin Orellana - 2026/04/20 - Se crea el alumno prospecto asociado al instructor real de Pilates encontrado.
+            alumnoCreado = await AlumnosModel.create(
+              {
+                nombre: nombreCompleto,
+                prospecto: 'prospecto',
+                c: '',
+                socio_origen: null,
+                socio_origen_mes: null,
+                socio_origen_anio: null,
+                email: instructorPilates?.email || null,
+                celular: telefonoFinal || null,
+                punto_d: null,
+                motivo: null,
+                user_id: userInternoInstructor.id,
+                fecha_creacion: new Date(),
+                mes,
+                anio
+              },
+              { transaction: transactionPilates }
+            );
+          } else {
+            mensajeAdvertenciaPilates =
+              'Se registró Pilates correctamente, pero no se pudo asociar el instructor a un usuario interno para crear el alumno.';
+          }
+        }
+
+        // Benjamin Orellana - 2026/04/21 - Se arma el nombre visible del instructor de Pilates para el mensaje de confirmación al prospecto.
+        const nombreProfesorPilates = [
+          instructorPilates?.nombre,
+          instructorPilates?.apellido
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+
+        await transactionPilates.commit();
+
+        // Benjamin Orellana - 2026/04/21 - Luego de confirmar el flujo de Pilates se envía el correo de confirmación al prospecto.
+        dispararConfirmacionRegistroPublicoEnSegundoPlano({
+          ...datosBaseMailConfirmacion,
+          horaHHMM: pilates_hhmm || hora_clase,
+          profesorNombre: nombreProfesorPilates
+        });
+
+        return res.status(201).json({
+          mensaje: construirMensajeExitoRegistroPublico({
+            profesorNombre: nombreProfesorPilates,
+            fechaISO: fecha_clase,
+            horaHHMM: pilates_hhmm || hora_clase
+          }),
+          mensajeAdvertencia: mensajeAdvertenciaPilates,
+          prospecto: prospectoCreado,
+          pilates_registrado: true,
+          cliente_pilates: clientePilatesCreado,
+          inscripcion_pilates: inscripcionPilatesCreada,
+          horario_ventas: horarioProspectoCreado,
+          instructor_pilates: instructorPilates
+            ? {
+                id: instructorPilates.id,
+                nombre: instructorPilates.nombre,
+                apellido: instructorPilates.apellido,
+                nombre_completo: nombreProfesorPilates,
+                email: instructorPilates.email
+              }
+            : null,
+          user_interno_instructor: userInternoInstructor
+            ? {
+                id: userInternoInstructor.id,
+                name: userInternoInstructor.name,
+                email: userInternoInstructor.email
+              }
+            : null,
+          alumno: alumnoCreado,
+          alumno_generado: !!alumnoCreado
+        });
+      } catch (errorPilates) {
+        await transactionPilates.rollback();
+
+        // Benjamin Orellana - 2026/04/21 - Aunque falle la inscripción interna de Pilates, se intenta enviar la confirmación del registro principal.
+        dispararConfirmacionRegistroPublicoEnSegundoPlano({
+          ...datosBaseMailConfirmacion,
+          horaHHMM: pilates_hhmm || hora_clase
+        });
+
+        return res.status(201).json({
+          mensaje: construirMensajeExitoRegistroPublico({
+            fechaISO: fecha_clase,
+            horaHHMM: pilates_hhmm || hora_clase
+          }),
+          mensajeAdvertencia:
+            'No se pudo completar la inscripción inicial de Pilates.',
+          detallePilates: errorPilates.message,
+          prospecto: prospectoCreado,
+          pilates_registrado: false,
+          alumno_generado: false
+        });
+      }
+    }
+
+    // Benjamin Orellana - 2026/04/17 - Si no necesita profesor o si es una visita, el flujo termina en ventas_prospectos.
+    if (!requiereProfe || tipoLinkFinal !== 'Clase de prueba') {
+      // Benjamin Orellana - 2026/04/21 - Se envía el mail de confirmación cuando el flujo termina únicamente con el alta comercial del prospecto.
+      dispararConfirmacionRegistroPublicoEnSegundoPlano({
+        ...datosBaseMailConfirmacion,
+        horaHHMM: hora_clase
+      });
+
+      return res.status(201).json({
+        mensaje: construirMensajeExitoRegistroPublico({
+          fechaISO: fecha_clase,
+          horaHHMM: hora_clase
+        }),
+        prospecto: prospectoCreado,
+        profesor_asignado: false,
+        alumno_generado: false,
+        agenda_generada: false
+      });
+    }
+
+    // Benjamin Orellana - 2026/04/17 - Se busca primero el instructor que cubre exactamente la hora elegida.
+    const horaClaseNormalizada = normalizarHoraHHMMSS(hora_clase);
+
+    const profesoresDisponibles = await db.query(
+      `
+      SELECT
+        rh.id,
+        rh.usuario_id,
+        u.email,
+        u.name,
+        u.level,
+        rh.hora_entrada,
+        rh.hora_salida
+      FROM rrhh_horarios rh
+      INNER JOIN users u
+        ON u.id = rh.usuario_id
+      WHERE rh.sede_id = :sedeId
+        AND rh.dia_semana = :diaSemana
+        AND rh.eliminado = 0
+        AND u.level = 'instructor'
+        AND rh.fecha_vigencia_desde <= :fechaClase
+        AND (rh.fecha_vigencia_hasta IS NULL OR rh.fecha_vigencia_hasta >= :fechaClase)
+        AND rh.hora_entrada <= :horaClase
+        AND rh.hora_salida > :horaClase
+      ORDER BY rh.hora_salida DESC, rh.hora_entrada ASC, rh.id ASC
+      LIMIT 1
+      `,
+      {
+        replacements: {
+          sedeId: sede_id,
+          diaSemana,
+          fechaClase: fecha_clase,
+          horaClase: horaClaseNormalizada
+        },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    let profesorAsignado = profesoresDisponibles?.[0] || null;
+
+    // Benjamin Orellana - 2026/04/17 - Si al instructor actual le quedan 30 minutos o menos y hay relevo dentro de esa ventana, se asigna el siguiente.
+    if (profesorAsignado) {
+      const minutosRestantes = diferenciaMinutosEntreHoras(
+        horaClaseNormalizada,
+        profesorAsignado.hora_salida
+      );
+
+      if (minutosRestantes !== null && minutosRestantes <= 30) {
+        const horaLimiteRelevo = sumarMinutosAHora(horaClaseNormalizada, 30);
+
+        const proximosProfesores = await db.query(
+          `
+          SELECT
+            rh.id,
+            rh.usuario_id,
+            u.email,
+            u.name,
+            u.level,
+            rh.hora_entrada,
+            rh.hora_salida
+          FROM rrhh_horarios rh
+          INNER JOIN users u
+            ON u.id = rh.usuario_id
+          WHERE rh.sede_id = :sedeId
+            AND rh.dia_semana = :diaSemana
+            AND rh.eliminado = 0
+            AND u.level = 'instructor'
+            AND rh.fecha_vigencia_desde <= :fechaClase
+            AND (rh.fecha_vigencia_hasta IS NULL OR rh.fecha_vigencia_hasta >= :fechaClase)
+            AND rh.hora_entrada > :horaClase
+            AND rh.hora_entrada <= :horaLimiteRelevo
+          ORDER BY rh.hora_entrada ASC, rh.hora_salida DESC, rh.id ASC
+          LIMIT 1
+          `,
+          {
+            replacements: {
+              sedeId: sede_id,
+              diaSemana,
+              fechaClase: fecha_clase,
+              horaClase: horaClaseNormalizada,
+              horaLimiteRelevo
+            },
+            type: QueryTypes.SELECT
+          }
+        );
+
+        if (proximosProfesores?.[0]) {
+          profesorAsignado = proximosProfesores[0];
+        }
+      }
+    }
+
+    // Benjamin Orellana - 2026/04/17 - Si no hay profesor disponible no se inventa una asignación; se conserva el prospecto y se informa advertencia.
+    if (!profesorAsignado) {
+      // Benjamin Orellana - 2026/04/21 - Se envía la confirmación al prospecto incluso si el profesor queda pendiente de asignación.
+      dispararConfirmacionRegistroPublicoEnSegundoPlano({
+        ...datosBaseMailConfirmacion,
+        horaHHMM: hora_clase
+      });
+
+      return res.status(201).json({
+        mensaje: construirMensajeExitoRegistroPublico({
+          fechaISO: fecha_clase,
+          horaHHMM: hora_clase
+        }),
+        mensajeAdvertencia:
+          // 'No se encontró un profesor disponible para la sede, día y horario seleccionados.',
+          '',
+        prospecto: prospectoCreado,
+        profesor_asignado: false,
+        alumno_generado: false,
+        agenda_generada: false
+      });
+    }
+
+    const transaction = await db.transaction();
+
+    try {
+      // Benjamin Orellana - 2026/04/17 - Se crea el alumno prospecto vinculado al profesor encontrado.
+      const alumnoCreado = await AlumnosModel.create(
+        {
+          nombre: nombreCompleto,
+          prospecto: 'prospecto',
+          c: '',
+          socio_origen: null,
+          socio_origen_mes: null,
+          socio_origen_anio: null,
+          email: profesorAsignado.email || null,
+          celular: telefonoFinal || null,
+          punto_d: null,
+          motivo: null,
+          user_id: profesorAsignado.usuario_id,
+          fecha_creacion: new Date(),
+          mes,
+          anio
+        },
+        { transaction }
+      );
+
+      // Benjamin Orellana - 2026/04/17 - Se crea la agenda número 1 para dejar trazada la clase de prueba inicial.
+      const agendaCreada = await AgendasModel.create(
+        {
+          alumno_id: alumnoCreado.id,
+          agenda_num: 1,
+          contenido: `PENDIENTE`,
+          fecha_creacion: new Date(),
+          alerta_generada: false,
+          mes,
+          anio
+        },
+        { transaction }
+      );
+
+      await transaction.commit();
+
+      // Benjamin Orellana - 2026/04/21 - Una vez confirmada la asignación del profesor se envía el mail con todos los datos de la visita o clase.
+      dispararConfirmacionRegistroPublicoEnSegundoPlano({
+        ...datosBaseMailConfirmacion,
+        horaHHMM: hora_clase,
+        profesorNombre: profesorAsignado?.name || ''
+      });
+
+      return res.status(201).json({
+        mensaje: construirMensajeExitoRegistroPublico({
+          profesorNombre: profesorAsignado?.name || '',
+          fechaISO: fecha_clase,
+          horaHHMM: hora_clase
+        }),
+        prospecto: prospectoCreado,
+        profesor_asignado: true,
+        profesor: {
+          usuario_id: profesorAsignado.usuario_id,
+          nombre: profesorAsignado.name,
+          email: profesorAsignado.email
+        },
+        alumno: alumnoCreado,
+        agenda: agendaCreada,
+        alumno_generado: true,
+        agenda_generada: true
+      });
+    } catch (errorInterno) {
+      await transaction.rollback();
+      throw errorInterno;
+    }
+  } catch (error) {
+    console.error('Error en CR_RegistroPublicoClasePrueba_CTS:', error);
+
+    return res.status(500).json({
+      mensajeError: 'Ocurrió un error al registrar el prospecto público.',
+      error: error.message
+    });
+  }
+};
 
 VentasProspectosModel.hasMany(VentasProspectosHorariosModel, {
   foreignKey: 'prospecto_id',

@@ -40,6 +40,12 @@ const RRHHHorariosModel = db.define(
       type: DataTypes.TIME,
       allowNull: false
     },
+    // Benjamin Orellana - 2026/04/17 - Se incorpora tolerancia_minutos para dejar el modelo alineado con la tabla de RRHH.
+    tolerancia_minutos: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 10
+    },
     fecha_vigencia_desde: {
       type: DataTypes.DATEONLY,
       allowNull: false
