@@ -585,6 +585,20 @@ import {
   ER_RRHHConversacionMensaje_CTS
 } from '../Controllers/RRHH/CTS_TB_RRHHConversacionMensajes.js';
 
+import {
+  OBRS_RRHHFeriadosProgramados_CTS,
+  CR_RRHHFeriadosProgramados_CTS,
+  UR_RRHHFeriadosProgramados_CTS,
+  ER_RRHHFeriadosProgramados_CTS
+} from "../Controllers/RRHH/CTS_TB_RRHHFeriadosProgramados.js"
+
+import {
+  OBRS_RRHHVacacionesProgramadas_CTS,
+  CR_RRHHVacacionesProgramadas_CTS,
+  UR_RRHHVacacionesProgramadas_CTS,
+  ER_RRHHVacacionesProgramadas_CTS,
+} from "../controllers/RRHH/CTS_TB_RRHH_VacacionesProgramadas.js";
+
 // Crea un enrutador de Express
 const router = express.Router();
 
@@ -1945,8 +1959,24 @@ router.post('/rrhh-mensajes', CR_RRHHConversacionMensaje_CTS);
 router.put('/rrhh-mensajes/:id', UR_RRHHConversacionMensaje_CTS);
 router.delete('/rrhh-mensajes/:id', ER_RRHHConversacionMensaje_CTS);
 
+// ==========================================
+// FERIADOS PROGRAMADOS
+// ==========================================
+router.get('/rrhh/feriados-programados', OBRS_RRHHFeriadosProgramados_CTS);
+router.post('/rrhh/feriados-programados', CR_RRHHFeriadosProgramados_CTS);
+router.put('/rrhh/feriados-programados/:id', UR_RRHHFeriadosProgramados_CTS);
+router.delete('/rrhh/feriados-programados/:id', ER_RRHHFeriadosProgramados_CTS);
+
+
+// ==========================================
+router.get('/rrhh/vacaciones-programadas', OBRS_RRHHVacacionesProgramadas_CTS);
+router.post('/rrhh/vacaciones-programadas', CR_RRHHVacacionesProgramadas_CTS);
+router.put('/rrhh/vacaciones-programadas/:id', UR_RRHHVacacionesProgramadas_CTS);
+router.delete('/rrhh/vacaciones-programadas/:id', ER_RRHHVacacionesProgramadas_CTS);
 /*
- * Sergio Manrique - RRHH
+
+/*
+ * Sergio Manrique - RRHH - UPDATE: 21-04-2026
  * Fin de Rutas
  */
 

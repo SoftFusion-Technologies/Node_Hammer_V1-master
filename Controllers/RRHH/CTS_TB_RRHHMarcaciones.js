@@ -27,6 +27,7 @@ import Sedes from "../../Models/MD_TB_sedes.js";
 import cron from "node-cron";
 import RRHHHorariosModel from "../../Models/RRHH/MD_TB_RRHHHorarios.js";
 import RRHHConversacionMensajesModel from "../../Models/RRHH/MD_TB_RRHHConversacionMensajes.js";
+import RRHH_FeriadosProgramados from "../../Models/RRHH/MD_RB_RRHH_FeriadosProgramados.js";
 import { Op } from "sequelize";
 import db from "../../DataBase/db.js";
 
@@ -262,11 +263,9 @@ const validarMarcacion = (body, esActualizacion = false) => {
 // Mostrar todos los registros de marcaciones
 export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
   try {
-    // Captura de parámetros opcionales para filtrar la búsqueda
     const { usuario_id, sede_id } = req.query;
     const filtros = {};
 
-    // Filtro para traer solo registros no eliminados
     filtros.eliminado = 0;
 
     if (usuario_id) {
@@ -276,7 +275,6 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
       filtros.sede_id = sede_id;
     }
 
-    // Consulta con inclusión de modelos relacionados y ordenamiento por fecha/hora
     const registros = await RRHHMarcacionesModel.findAll({
       where: filtros,
       include: [
@@ -296,11 +294,9 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
       ],
     });
 
-    // Lógica de transformación para agrupar por sede, empleado y fecha calculando horas totales
     const diccionarioAgrupado = {};
 
     registros.forEach((reg) => {
-      // Clave para agrupar por sede y usuario
       const claveAgrupado = `${reg.sede_id}-${reg.usuario_id}`;
 
       if (!diccionarioAgrupado[claveAgrupado]) {
@@ -312,7 +308,6 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
         };
       }
 
-      // Verificación de si la fecha ya existe en las asistencias del empleado
       let asistenciaDelDia = diccionarioAgrupado[
         claveAgrupado
       ].asistencias.find((a) => a.fecha === reg.fecha);
@@ -322,12 +317,12 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
           fecha: reg.fecha,
           horasTotales: 0,
           horasTotalesSinPendientes: 0,
+          horasTotalesPendientes: 0, // 👈 NUEVO
           turnos: [],
         };
         diccionarioAgrupado[claveAgrupado].asistencias.push(asistenciaDelDia);
       }
 
-      // Función para formatear la hora a HH:mm
       const formatearHora = (fechaIso) => {
         if (!fechaIso) return null;
         const d = new Date(fechaIso);
@@ -336,7 +331,6 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
         return `${horas}:${minutos}`;
       };
 
-      // Cálculo de la duración del turno en horas
       let calculoHoras = 0;
       if (reg.horario) {
         const partesEntrada = reg.horario.hora_entrada.split(":");
@@ -351,7 +345,6 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
         calculoHoras = ms / (1000 * 60 * 60);
       }
 
-      // Inserción del turno con sus metadatos
       asistenciaDelDia.turnos.push({
         id: reg.id,
         entrada: formatearHora(reg.hora_entrada),
@@ -390,7 +383,6 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
             : null,
       });
 
-      // Lógica solicitada para el total diario:
       const horasExtrasAutorizadas =
         Number(reg.minutos_extra_autorizados || 0) / 60;
       const horasDescuento = Number(reg.minutos_descuento || 0) / 60;
@@ -406,12 +398,10 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
 
       sumarAlTotalDia = Math.max(0, sumarAlTotalDia);
 
-      // Acumulación de horas totales del día
       asistenciaDelDia.horasTotales = Number(
         (asistenciaDelDia.horasTotales + sumarAlTotalDia).toFixed(2),
       );
 
-      // Acumulación solo de registros aprobados (excluye pendiente/rechazada)
       if (reg.estado_aprobacion === "aprobada") {
         asistenciaDelDia.horasTotalesSinPendientes = Number(
           (
@@ -419,6 +409,30 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
           ).toFixed(2),
         );
       }
+
+      // =========================
+      // 👇 NUEVA LÓGICA PENDIENTES
+      // =========================
+      let horasPendientes = 0;
+
+      if (reg.estado_aprobacion === "pendiente") {
+        const horasExtrasPendientes =
+          Number(reg.minutos_extra_pendientes || 0) / 60;
+
+        if (reg.horario) {
+          horasPendientes = calculoHoras + horasExtrasPendientes;
+        } else {
+          horasPendientes = horasExtrasPendientes;
+        }
+
+        horasPendientes = Math.max(0, horasPendientes);
+      }
+
+      asistenciaDelDia.horasTotalesPendientes = Number(
+        (
+          asistenciaDelDia.horasTotalesPendientes + horasPendientes
+        ).toFixed(2)
+      );
     });
 
     const resultado = Object.values(diccionarioAgrupado).map((grupo) => ({
@@ -433,10 +447,17 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
         horasTotalesSinPendientes: formatearHorasHHMM(
           asistencia.horasTotalesSinPendientes,
         ),
+
+        // 👇 NUEVO
+        horasTotalesPendientes_decimal: Number(
+          asistencia.horasTotalesPendientes.toFixed(2)
+        ),
+        horasTotalesPendientes: formatearHorasHHMM(
+          asistencia.horasTotalesPendientes
+        ),
       })),
     }));
 
-    // Envío de la respuesta con los datos agrupados
     res.json(resultado);
   } catch (error) {
     console.error("Error al obtener marcaciones:", error);
@@ -613,9 +634,12 @@ export const CR_RRHHMarcacion_CTS = async (req, res) => {
       }
     }
 
-    const ahoraArg = dayjs().tz(TZ);
-    const fechaActual = ahoraArg.format("YYYY-MM-DD");
-    const fechaHoraActual = ahoraArg.format("YYYY-MM-DD HH:mm:ss");
+    const ahoraArg = body.hora_entrada
+  ? dayjs(body.hora_entrada).tz(TZ)
+  : dayjs().tz(TZ);
+
+const fechaActual = ahoraArg.format("YYYY-MM-DD");
+const fechaHoraActual = ahoraArg.format("YYYY-MM-DD HH:mm:ss");
 
     // --- LÓGICA DE NEGOCIO PARA EXTRAS MANUALES ---
     let minutosExtraPendientes = Number(body.minutos_extra_pendientes || 0);
@@ -928,8 +952,7 @@ export const UR_RRHHMarcacionSalida_CTS = async (req, res) => {
           estadoAprobacionFinal = "pendiente";
 
           if (!comentariosFinal) {
-            comentariosFinal =
-              "Marcación sin horario asociado enviada para revisión";
+            comentariosFinal = null;
           }
         }
       }
@@ -1108,6 +1131,23 @@ export const procesarMarcacionesAutomaticas_CTS = async () => {
   try {
     const ahoraArgentina = dayjs().tz(TZ);
     const fechaHoyStr = ahoraArgentina.format("YYYY-MM-DD");
+
+    // Verificar si hoy es feriado programado para evitar generar marcaciones automáticas
+    const feriadoHoy = await RRHH_FeriadosProgramados.findOne({
+      where: {
+        fecha: fechaHoyStr,
+      },
+      transaction,
+    });
+
+    if (feriadoHoy) {
+    console.log(
+      `[CRON] ${fechaHoyStr} - Feriado detectado, no se generan marcaciones automáticas.`
+    );
+    await transaction.commit();
+    return;
+  }
+
     const diaSemanaHoy = ahoraArgentina.day();
 
     console.log(`[CRON] Inicio procesamiento automático de marcaciones - Fecha: ${fechaHoyStr} - Día semana: ${diaSemanaHoy}`);
@@ -1307,7 +1347,7 @@ export const cerrarMarcacionesFacialesAbiertas_CTS = async () => {
       {
         hora_salida: horaCierre,
         comentarios:
-          "El usuario no registró salida y se cerró automáticamente",
+          null,
         updated_at: fechaHoraActual,
       },
       {
@@ -1327,6 +1367,8 @@ export const cerrarMarcacionesFacialesAbiertas_CTS = async () => {
     );
   }
 };
+
+
 
 cron.schedule(
   "59 23 * * *",

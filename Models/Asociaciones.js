@@ -35,6 +35,9 @@ import RRHHCredencialesFacialesModel from "./RRHH/MD_TB_RRHH_CredencialesFaciale
 import RRHHConversacionesModel from "./RRHH/MD_TB_RRHHConversaciones.js";
 import RRHHConversacionMensajesModel from "./RRHH/MD_TB_RRHHConversacionMensajes.js";
 import RRHH_UsuarioSede from "./RRHH/MD_TB_RRHHUsuarioSede.js";
+import RRHH_FeriadosProgramados from "./RRHH/MD_RB_RRHH_FeriadosProgramados.js";
+import RRHH_VacacionesProgramadas from "./RRHH/MD_RB_RRHH_VacacionesProgramaciones.js";
+
 
 // 2. Creamos una función para configurar las asociaciones
 const setupAssociations = () => {
@@ -512,6 +515,49 @@ const setupAssociations = () => {
     as: "mensajes_aclaracion",
   });
 
+  RRHH_FeriadosProgramados.belongsTo(UsersModel, {
+  foreignKey: "usuario_id",
+  as: "usuario",
+});
+
+// ===============================
+// Relaciones de RRHH Vacaciones Programadas
+// ===============================
+
+// Vacación pertenece al empleado
+RRHH_VacacionesProgramadas.belongsTo(UsersModel, {
+  foreignKey: "usuario_emp_id",
+  as: "empleado",
+});
+
+// Vacación pertenece al admin que la creó
+RRHH_VacacionesProgramadas.belongsTo(UsersModel, {
+  foreignKey: "usuario_adm_id",
+  as: "admin",
+});
+
+// Vacación pertenece a una sede
+RRHH_VacacionesProgramadas.belongsTo(SedeModel, {
+  foreignKey: "sede_id",
+  as: "sede",
+});
+
+// (Opcional pero recomendable) relaciones inversas
+
+UsersModel.hasMany(RRHH_VacacionesProgramadas, {
+  foreignKey: "usuario_emp_id",
+  as: "vacaciones",
+});
+
+UsersModel.hasMany(RRHH_VacacionesProgramadas, {
+  foreignKey: "usuario_adm_id",
+  as: "vacaciones_creadas",
+});
+
+SedeModel.hasMany(RRHH_VacacionesProgramadas, {
+  foreignKey: "sede_id",
+  as: "vacaciones",
+});
 
 
 
