@@ -597,7 +597,7 @@ import {
   CR_RRHHVacacionesProgramadas_CTS,
   UR_RRHHVacacionesProgramadas_CTS,
   ER_RRHHVacacionesProgramadas_CTS,
-} from "../controllers/RRHH/CTS_TB_RRHH_VacacionesProgramadas.js";
+} from "../Controllers/RRHH/CTS_TB_RRHH_VacacionesProgramadas.js";
 
 // Crea un enrutador de Express
 const router = express.Router();
