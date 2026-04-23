@@ -22,12 +22,20 @@ import { SedeModel } from "../../Models/MD_TB_sedes.js";
 // Obtener todos los registros
 export const OBRS_RRHHUsuarioSede_CTS = async (req, res) => {
   try {
+    // Capturamos el parámetro de la URL (ej: /ruta?todos=true)
+    const { todos } = req.query;
+
+    // Definimos el filtro del usuario dinámicamente
+    // Si 'todos' es true, el objeto queda vacío; si no, filtra por activada: 1
+    const filtroUsuario = todos === "true" ? {} : { activada: 1 };
+
     const data = await RRHH_UsuarioSede.findAll({
       where: { eliminado: 0 },
       include: [
         {
           model: UsersModel,
           as: "usuario",
+          where: filtroUsuario, // Aplicamos el filtro dinámico
           attributes: ["name", "email", "level_admin"],
         },
         {
@@ -37,8 +45,10 @@ export const OBRS_RRHHUsuarioSede_CTS = async (req, res) => {
         },
       ],
     });
+
     res.json(data);
   } catch (error) {
+    console.error("Error en OBRS_RRHHUsuarioSede_CTS:", error);
     res.status(500).json({ error: error.message });
   }
 };

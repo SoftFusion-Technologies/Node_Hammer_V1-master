@@ -69,6 +69,12 @@ const RRHHMarcacionesModel = db.define(
       defaultValue: "pendiente",
     },
 
+    estado_justificacion: {
+      type: DataTypes.ENUM("justificado", "injustificado"),
+      allowNull: false,
+      defaultValue: "injustificado",
+    },
+
     origen: {
       type: DataTypes.ENUM(
         "app",

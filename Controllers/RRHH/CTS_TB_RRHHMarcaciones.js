@@ -26,6 +26,7 @@ import UsersModel from "../../Models/MD_TB_Users.js";
 import Sedes from "../../Models/MD_TB_sedes.js";
 import cron from "node-cron";
 import RRHHHorariosModel from "../../Models/RRHH/MD_TB_RRHHHorarios.js";
+import RRHH_VacacionesProgramadas from "../../Models/RRHH/MD_RB_RRHH_VacacionesProgramaciones.js";
 import RRHHConversacionMensajesModel from "../../Models/RRHH/MD_TB_RRHHConversacionMensajes.js";
 import RRHH_FeriadosProgramados from "../../Models/RRHH/MD_RB_RRHH_FeriadosProgramados.js";
 import { Op } from "sequelize";
@@ -358,6 +359,7 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
         horario_hora_salida: reg.horario?.hora_salida || null,
         estado: reg.estado,
         estado_aprobacion: reg.estado_aprobacion,
+        estado_justificacion: reg.estado_justificacion,
         origen: reg.origen,
         minutos_tarde: reg.minutos_tarde,
         minutos_extra_pendientes: reg.minutos_extra_pendientes,
@@ -792,6 +794,10 @@ export const UR_RRHHMarcacion_CTS = async (req, res) => {
       hora_entrada: horaEntradaNueva,
       hora_salida: horaSalidaNueva,
       estado: body.estado !== undefined ? body.estado : marcacion.estado,
+      estado_justificacion: 
+    body.estado_justificacion !== undefined 
+      ? body.estado_justificacion 
+      : marcacion.estado_justificacion,
       estado_aprobacion:
         body.estado_aprobacion !== undefined
           ? body.estado_aprobacion
@@ -1210,6 +1216,22 @@ export const procesarMarcacionesAutomaticas_CTS = async () => {
       const inicioTurnoDate = inicioTurno.toDate();
       const finTurnoDate = finTurno.toDate();
 
+
+      const vacacionesHoy = await RRHH_VacacionesProgramadas.findOne({
+        where: {
+          usuario_emp_id: horario.usuario_id,
+          fecha_desde: { [Op.lte]: fechaHoyStr },
+          fecha_hasta: { [Op.gte]: fechaHoyStr },
+        },
+        transaction,
+      });
+
+      if (vacacionesHoy) {
+        console.log(
+          `[CRON] Usuario en vacaciones, se omite automática - Usuario: ${horario.usuario_id}`
+        );
+        continue;
+      }
       /**
        * 1) Primero verificamos si ya existe una marcación activa
        * exacta para este horario_id + usuario + fecha.
@@ -1367,7 +1389,6 @@ export const cerrarMarcacionesFacialesAbiertas_CTS = async () => {
     );
   }
 };
-
 
 
 cron.schedule(
