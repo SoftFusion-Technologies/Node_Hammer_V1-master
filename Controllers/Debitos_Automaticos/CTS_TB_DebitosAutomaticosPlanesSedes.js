@@ -22,6 +22,9 @@ import { Op } from 'sequelize';
 import db from '../../DataBase/db.js';
 import DebitosAutomaticosPlanesSedesModel from '../../Models/Debitos_Automaticos/MD_TB_DebitosAutomaticosPlanesSedes.js';
 import DebitosAutomaticosPlanesModel from '../../Models/Debitos_Automaticos/MD_TB_DebitosAutomaticosPlanes.js';
+import DebitosAutomaticosClientesModel from '../../Models/Debitos_Automaticos/MD_TB_DebitosAutomaticosClientes.js';
+import DebitosAutomaticosPeriodosModel from '../../Models/Debitos_Automaticos/MD_TB_DebitosAutomaticosPeriodos.js';
+
 import { SedeModel } from '../../Models/MD_TB_sedes.js';
 
 /* =========================
@@ -95,6 +98,77 @@ const buildInclude = () => [
     attributes: ['id', 'nombre', 'estado', 'es_ciudad']
   }
 ];
+
+/* Benjamin Orellana - 2026/04/23 - Helpers para previsualizar y aplicar actualización masiva de precio por plan+sede sobre clientes seleccionados y períodos futuros. */
+const ESTADOS_CLIENTE_ACTUALIZABLES = ['ACTIVO', 'PENDIENTE_INICIO', 'PAUSADO'];
+const ESTADOS_COBRO_CERRADOS = ['COBRADO', 'BAJA', 'PAGO_MANUAL'];
+
+const toDecimalOrNull = (v) => {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return n;
+};
+
+const cleanStringOrNull = (v, max = null) => {
+  if (v === undefined || v === null) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  if (max && s.length > max) return s.slice(0, max);
+  return s;
+};
+
+const roundMoney = (value) => {
+  const n = Number(value || 0);
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+};
+
+const getActorUserId = (req) => {
+  return (
+    req?.user?.id ||
+    req?.auth?.id ||
+    toIntOrNull(req?.body?.updated_by) ||
+    toIntOrNull(req?.body?.usuario_id) ||
+    null
+  );
+};
+
+const buildPeriodoDesdeWhere = (anio, mes) => ({
+  [Op.or]: [
+    { periodo_anio: { [Op.gt]: anio } },
+    {
+      [Op.and]: [{ periodo_anio: anio }, { periodo_mes: { [Op.gte]: mes } }]
+    }
+  ]
+});
+
+const sanitizeIds = (values = []) => {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values.map((item) => toIntOrNull(item)).filter(Boolean))];
+};
+
+const calcularMontoBruto = (montoInicial, descuentoClientePct) => {
+  const inicial = Number(montoInicial || 0);
+  const descuento = Number(descuentoClientePct || 0);
+
+  return roundMoney(inicial - (inicial * descuento) / 100);
+};
+
+/* Benjamin Orellana - 2026/04/23 - El neto estimado mantiene la lógica actual del período: sobre monto_bruto aplica descuento_off y luego reintegro. */
+const calcularMontoNetoEstimado = (
+  montoBruto,
+  descuentoOffPct,
+  reintegroPct
+) => {
+  const bruto = Number(montoBruto || 0);
+  const descuentoOff = Number(descuentoOffPct || 0);
+  const reintegro = Number(reintegroPct || 0);
+
+  const conDescuentoOff = bruto - (bruto * descuentoOff) / 100;
+  const neto = conDescuentoOff - (conDescuentoOff * reintegro) / 100;
+
+  return roundMoney(neto);
+};
 
 /* =========================
    OBRS - listar
@@ -505,3 +579,355 @@ export const ER_DebitosAutomaticosPlanesSedes_CTS = async (req, res) => {
     return res.status(500).json({ mensajeError: error.message });
   }
 };
+
+/* Benjamin Orellana - 2026/04/23 - Previsualiza el impacto de una actualización de precio por plan+sede, filtrando clientes elegibles y contando períodos futuros alcanzados. */
+export const OBRS_DebitosAutomaticosPlanesSedesPreviewActualizacionPrecio_CTS =
+  async (req, res) => {
+    try {
+      const id = toIntOrNull(req.params.id);
+      const nuevoPrecioBase = toDecimalOrNull(req.body?.nuevo_precio_base);
+      const aplicarDesdeAnio = toIntOrNull(req.body?.aplicar_desde_anio);
+      const aplicarDesdeMes = toIntOrNull(req.body?.aplicar_desde_mes);
+      const q = cleanStringOrNull(req.body?.q, 150);
+
+      if (!id) {
+        return res.status(400).json({ mensajeError: 'ID inválido.' });
+      }
+
+      if (nuevoPrecioBase === null || nuevoPrecioBase < 0) {
+        return res.status(400).json({
+          mensajeError: 'nuevo_precio_base es obligatorio y debe ser >= 0.'
+        });
+      }
+
+      if (!aplicarDesdeAnio || aplicarDesdeAnio < 2000) {
+        return res.status(400).json({
+          mensajeError: 'aplicar_desde_anio es obligatorio y debe ser válido.'
+        });
+      }
+
+      if (!aplicarDesdeMes || aplicarDesdeMes < 1 || aplicarDesdeMes > 12) {
+        return res.status(400).json({
+          mensajeError: 'aplicar_desde_mes es obligatorio y debe estar entre 1 y 12.'
+        });
+      }
+
+      const planSede = await DebitosAutomaticosPlanesSedesModel.findByPk(id);
+
+      if (!planSede) {
+        return res.status(404).json({
+          mensajeError: 'Configuración plan+sede no encontrada.'
+        });
+      }
+
+      const [plan, sede] = await Promise.all([
+        DebitosAutomaticosPlanesModel.findByPk(planSede.plan_id),
+        SedeModel.findByPk(planSede.sede_id)
+      ]);
+
+      const whereClientes = {
+        titular_plan_id: planSede.plan_id,
+        sede_id: planSede.sede_id,
+        estado_general: {
+          [Op.in]: ESTADOS_CLIENTE_ACTUALIZABLES
+        }
+      };
+
+      if (q) {
+        whereClientes[Op.or] = [
+          { titular_nombre: { [Op.like]: `%${q}%` } },
+          { titular_dni: { [Op.like]: `%${q}%` } }
+        ];
+      }
+
+      const clientes = await DebitosAutomaticosClientesModel.findAll({
+        where: whereClientes,
+        attributes: [
+          'id',
+          'titular_nombre',
+          'titular_dni',
+          'estado_general',
+          'fecha_inicio_cobro',
+          'monto_inicial_vigente',
+          'descuento_vigente',
+          'monto_base_vigente',
+          'sede_id',
+          'titular_plan_id'
+        ],
+        order: [['titular_nombre', 'ASC']]
+      });
+
+      const clientesIds = clientes.map((item) => item.id);
+
+      let periodosPorClienteMap = {};
+
+      if (clientesIds.length > 0) {
+        const periodosAgrupados = await DebitosAutomaticosPeriodosModel.findAll({
+          where: {
+            cliente_id: { [Op.in]: clientesIds },
+            ...buildPeriodoDesdeWhere(aplicarDesdeAnio, aplicarDesdeMes),
+            estado_cobro: {
+              [Op.notIn]: ESTADOS_COBRO_CERRADOS
+            }
+          },
+          attributes: [
+            'cliente_id',
+            [db.fn('COUNT', db.col('id')), 'total_periodos']
+          ],
+          group: ['cliente_id'],
+          raw: true
+        });
+
+        periodosPorClienteMap = periodosAgrupados.reduce((acc, row) => {
+          acc[row.cliente_id] = Number(row.total_periodos || 0);
+          return acc;
+        }, {});
+      }
+
+      const clientesPreview = clientes.map((cliente) => {
+        const montoActual = Number(cliente.monto_inicial_vigente || 0);
+        const descuentoClientePct = Number(cliente.descuento_vigente || 0);
+        const nuevoMontoBruto = calcularMontoBruto(
+          nuevoPrecioBase,
+          descuentoClientePct
+        );
+
+        return {
+          id: cliente.id,
+          titular_nombre: cliente.titular_nombre,
+          titular_dni: cliente.titular_dni,
+          estado_general: cliente.estado_general,
+          fecha_inicio_cobro: cliente.fecha_inicio_cobro,
+          monto_actual: roundMoney(montoActual),
+          monto_nuevo: roundMoney(nuevoPrecioBase),
+          descuento_vigente: roundMoney(descuentoClientePct),
+          monto_base_actual: roundMoney(cliente.monto_base_vigente || 0),
+          monto_base_nuevo: nuevoMontoBruto,
+          diferencia_monto_inicial: roundMoney(
+            Number(nuevoPrecioBase) - montoActual
+          ),
+          periodos_impactados: periodosPorClienteMap[cliente.id] || 0
+        };
+      });
+
+      return res.json({
+        plan_sede_id: planSede.id,
+        plan_id: planSede.plan_id,
+        plan_nombre: plan?.nombre || null,
+        sede_id: planSede.sede_id,
+        sede_nombre: sede?.nombre || null,
+        precio_base_actual: roundMoney(planSede.precio_base || 0),
+        nuevo_precio_base: roundMoney(nuevoPrecioBase),
+        aplicar_desde_anio: aplicarDesdeAnio,
+        aplicar_desde_mes: aplicarDesdeMes,
+        total_clientes_alcanzados: clientesPreview.length,
+        total_periodos_alcanzados: clientesPreview.reduce(
+          (acc, item) => acc + Number(item.periodos_impactados || 0),
+          0
+        ),
+        clientes: clientesPreview
+      });
+    } catch (error) {
+      return res.status(500).json({
+        mensajeError: error.message
+      });
+    }
+  };
+
+  /* Benjamin Orellana - 2026/04/23 - Aplica una actualización masiva de precio por plan+sede solo a los clientes seleccionados y recalcula períodos futuros no cerrados. */
+export const UR_DebitosAutomaticosPlanesSedesAplicarActualizacionPrecio_CTS =
+  async (req, res) => {
+    const t = await db.transaction();
+
+    try {
+      const id = toIntOrNull(req.params.id);
+      const nuevoPrecioBase = toDecimalOrNull(req.body?.nuevo_precio_base);
+      const aplicarDesdeAnio = toIntOrNull(req.body?.aplicar_desde_anio);
+      const aplicarDesdeMes = toIntOrNull(req.body?.aplicar_desde_mes);
+      const clientesIds = sanitizeIds(req.body?.clientes_ids);
+      const actorUserId = getActorUserId(req);
+
+      if (!id) {
+        await t.rollback();
+        return res.status(400).json({ mensajeError: 'ID inválido.' });
+      }
+
+      if (nuevoPrecioBase === null || nuevoPrecioBase < 0) {
+        await t.rollback();
+        return res.status(400).json({
+          mensajeError: 'nuevo_precio_base es obligatorio y debe ser >= 0.'
+        });
+      }
+
+      if (!aplicarDesdeAnio || aplicarDesdeAnio < 2000) {
+        await t.rollback();
+        return res.status(400).json({
+          mensajeError: 'aplicar_desde_anio es obligatorio y debe ser válido.'
+        });
+      }
+
+      if (!aplicarDesdeMes || aplicarDesdeMes < 1 || aplicarDesdeMes > 12) {
+        await t.rollback();
+        return res.status(400).json({
+          mensajeError: 'aplicar_desde_mes es obligatorio y debe estar entre 1 y 12.'
+        });
+      }
+
+      const planSede = await DebitosAutomaticosPlanesSedesModel.findByPk(id, {
+        transaction: t,
+        lock: t.LOCK.UPDATE
+      });
+
+      if (!planSede) {
+        await t.rollback();
+        return res.status(404).json({
+          mensajeError: 'Configuración plan+sede no encontrada.'
+        });
+      }
+
+      await DebitosAutomaticosPlanesSedesModel.update(
+        {
+          precio_base: roundMoney(nuevoPrecioBase)
+        },
+        {
+          where: { id: planSede.id },
+          transaction: t
+        }
+      );
+
+      if (clientesIds.length === 0) {
+        await t.commit();
+
+        return res.json({
+          message:
+            'Precio plan+sede actualizado correctamente. No se seleccionaron clientes para recalcular.',
+          resumen: {
+            plan_sede_id: planSede.id,
+            plan_id: planSede.plan_id,
+            sede_id: planSede.sede_id,
+            clientes_actualizados: 0,
+            periodos_actualizados: 0
+          }
+        });
+      }
+
+      const clientes = await DebitosAutomaticosClientesModel.findAll({
+        where: {
+          id: { [Op.in]: clientesIds },
+          titular_plan_id: planSede.plan_id,
+          sede_id: planSede.sede_id,
+          estado_general: {
+            [Op.in]: ESTADOS_CLIENTE_ACTUALIZABLES
+          }
+        },
+        transaction: t,
+        lock: t.LOCK.UPDATE
+      });
+
+      const clientesMap = new Map();
+      let clientesActualizados = 0;
+
+      for (const cliente of clientes) {
+        const descuentoClientePct = Number(cliente.descuento_vigente || 0);
+        const nuevoMontoBase = calcularMontoBruto(
+          nuevoPrecioBase,
+          descuentoClientePct
+        );
+
+        await DebitosAutomaticosClientesModel.update(
+          {
+            monto_inicial_vigente: roundMoney(nuevoPrecioBase),
+            monto_base_vigente: nuevoMontoBase,
+            updated_by: actorUserId
+          },
+          {
+            where: { id: cliente.id },
+            transaction: t
+          }
+        );
+
+        clientesMap.set(cliente.id, {
+          descuento_vigente: descuentoClientePct
+        });
+
+        clientesActualizados += 1;
+      }
+
+      const clientesIdsActualizados = Array.from(clientesMap.keys());
+
+      let periodosActualizados = 0;
+
+      if (clientesIdsActualizados.length > 0) {
+        const periodos = await DebitosAutomaticosPeriodosModel.findAll({
+          where: {
+            cliente_id: { [Op.in]: clientesIdsActualizados },
+            ...buildPeriodoDesdeWhere(aplicarDesdeAnio, aplicarDesdeMes),
+            estado_cobro: {
+              [Op.notIn]: ESTADOS_COBRO_CERRADOS
+            }
+          },
+          transaction: t,
+          lock: t.LOCK.UPDATE
+        });
+
+        for (const periodo of periodos) {
+          const clienteSnapshot = clientesMap.get(periodo.cliente_id);
+
+          if (!clienteSnapshot) continue;
+
+          const descuentoClientePct = Number(
+            clienteSnapshot.descuento_vigente || 0
+          );
+
+          const nuevoMontoBruto = calcularMontoBruto(
+            nuevoPrecioBase,
+            descuentoClientePct
+          );
+
+          const nuevoMontoNetoEstimado = calcularMontoNetoEstimado(
+            nuevoMontoBruto,
+            periodo.descuento_off_pct_aplicado,
+            periodo.reintegro_pct_aplicado
+          );
+
+          await DebitosAutomaticosPeriodosModel.update(
+            {
+              monto_inicial_cliente_aplicado: roundMoney(nuevoPrecioBase),
+              descuento_cliente_pct_aplicado: roundMoney(descuentoClientePct),
+              monto_bruto: nuevoMontoBruto,
+              monto_neto_estimado: nuevoMontoNetoEstimado,
+              updated_by: actorUserId
+            },
+            {
+              where: { id: periodo.id },
+              transaction: t
+            }
+          );
+
+          periodosActualizados += 1;
+        }
+      }
+
+      await t.commit();
+
+      return res.json({
+        message:
+          'Actualización de precio aplicada correctamente sobre clientes seleccionados y períodos futuros.',
+        resumen: {
+          plan_sede_id: planSede.id,
+          plan_id: planSede.plan_id,
+          sede_id: planSede.sede_id,
+          aplicar_desde_anio: aplicarDesdeAnio,
+          aplicar_desde_mes: aplicarDesdeMes,
+          clientes_seleccionados: clientesIds.length,
+          clientes_actualizados: clientesActualizados,
+          periodos_actualizados: periodosActualizados
+        }
+      });
+    } catch (error) {
+      await t.rollback();
+      return res.status(500).json({
+        mensajeError: error.message
+      });
+    }
+  };

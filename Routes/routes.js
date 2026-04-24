@@ -2027,7 +2027,9 @@ import {
   OBR_DebitosAutomaticosPlanesSedes_CTS,
   CR_DebitosAutomaticosPlanesSedes_CTS,
   UR_DebitosAutomaticosPlanesSedes_CTS,
-  ER_DebitosAutomaticosPlanesSedes_CTS
+  ER_DebitosAutomaticosPlanesSedes_CTS,
+  OBRS_DebitosAutomaticosPlanesSedesPreviewActualizacionPrecio_CTS,
+  UR_DebitosAutomaticosPlanesSedesAplicarActualizacionPrecio_CTS
 } from '../Controllers/Debitos_Automaticos/CTS_TB_DebitosAutomaticosPlanesSedes.js';
 
 router.get(
@@ -2050,7 +2052,15 @@ router.delete(
   '/debitos-automaticos-planes-sedes/:id',
   ER_DebitosAutomaticosPlanesSedes_CTS
 );
+router.post(
+  '/debitos-automaticos-planes-sedes/:id/preview-actualizacion-precio',
+  OBRS_DebitosAutomaticosPlanesSedesPreviewActualizacionPrecio_CTS
+);
 
+router.put(
+  '/debitos-automaticos-planes-sedes/:id/aplicar-actualizacion-precio',
+  UR_DebitosAutomaticosPlanesSedesAplicarActualizacionPrecio_CTS
+);
 import {
   OBRS_DebitosAutomaticosTerminos_CTS,
   OBR_DebitosAutomaticosTerminos_CTS,
