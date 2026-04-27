@@ -340,7 +340,9 @@ import {
   UR_VentasProspecto_CTS,
   OBRS_ColaboradoresConVentasProspectos,
   CR_VentasProspectoConHorario_CTS,
-  CR_RegistroPublicoProspectoClaseVisita_CTS
+  CR_RegistroPublicoProspectoClaseVisita_CTS,
+  SYNC_VentasProspectoClaseInterna_CTS,
+  CAMBIAR_ActividadVentasProspecto_CTS
 } from '../Controllers/CTS_TB_VentasProspectos.js';
 
 import {
@@ -1311,6 +1313,14 @@ router.post(
 // Benjamin Orellana - 2026/04/17 - Ruta pública para registrar visitas o clases de prueba desde la web.
 router.post('/ventas-prospectos/registro-publico', CR_RegistroPublicoProspectoClaseVisita_CTS);
 
+router.post(
+  '/ventas-prospectos/sync-clase-interna',
+  SYNC_VentasProspectoClaseInterna_CTS
+);
+router.post(
+  '/ventas-prospectos/:id/cambiar-actividad',
+  CAMBIAR_ActividadVentasProspecto_CTS
+);
 import {
   OBRS_PreguntasIA_CTS,
   OBR_PreguntaIA_CTS,

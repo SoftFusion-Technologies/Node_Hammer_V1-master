@@ -1553,6 +1553,775 @@ export const CR_RegistroPublicoProspectoClaseVisita_CTS = async (req, res) => {
   }
 };
 
+// Benjamin Orellana - 2026/04/27 - Resuelve dinámicamente los campos clase_prueba_X del prospecto según el número de clase seleccionado desde ventas.
+const resolverCamposClaseInternaVentas = (numeroClase) => {
+  const numero = Number(numeroClase);
+
+  if (![1, 2, 3].includes(numero)) {
+    return null;
+  }
+
+  return {
+    numero,
+    fechaKey: `clase_prueba_${numero}_fecha`,
+    obsKey: `clase_prueba_${numero}_obs`,
+    tipoKey: `clase_prueba_${numero}_tipo`
+  };
+};
+
+// Benjamin Orellana - 2026/04/27 - Crea o actualiza el horario asociado a una clase del prospecto para no duplicar registros por prospecto y número de clase.
+const upsertHorarioProspectoInterno = async ({
+  prospecto_id,
+  clase_num,
+  hhmm,
+  grp,
+  transaction
+}) => {
+  const horaFinal = normalizarTexto(hhmm);
+  const grupoFinal = normalizarTexto(grp);
+
+  if (!prospecto_id || !clase_num || !horaFinal || !grupoFinal) {
+    return null;
+  }
+
+  const horarioExistente = await VentasProspectosHorariosModel.findOne({
+    where: {
+      prospecto_id,
+      clase_num: Number(clase_num)
+    },
+    transaction
+  });
+
+  if (horarioExistente) {
+    await horarioExistente.update(
+      {
+        hhmm: horaFinal,
+        grp: grupoFinal
+      },
+      { transaction }
+    );
+
+    return horarioExistente;
+  }
+
+  return await VentasProspectosHorariosModel.create(
+    {
+      prospecto_id,
+      hhmm: horaFinal,
+      grp: grupoFinal,
+      clase_num: Number(clase_num)
+    },
+    { transaction }
+  );
+};
+
+// Benjamin Orellana - 2026/04/27 - Resuelve el sede_id efectivo desde el prospecto, el payload o el nombre legado de sede para soportar registros viejos sin sede_id.
+const resolverSedeIdEfectivoVentas = async ({ prospecto, sede_id, transaction }) => {
+  const sedeIdDirecto = Number(prospecto?.sede_id || sede_id || 0) || null;
+  if (sedeIdDirecto) return sedeIdDirecto;
+
+  const sedeTexto = normalizarTextoComparacion(prospecto?.sede);
+  if (!sedeTexto) return null;
+
+  const sedes = await db.query(
+    `
+    SELECT id, nombre
+    FROM sedes
+    `,
+    {
+      type: QueryTypes.SELECT,
+      transaction
+    }
+  );
+
+  const normalizarNombreSede = (valor) =>
+    normalizarTextoComparacion(valor)
+      .replace('yerbabuenaaaconquija2044', 'yerbabuenaaconquija2044')
+      .replace('yerbabuena-aconquija2044', 'yerbabuenaaconquija2044');
+
+  const sedeEncontrada = sedes.find((s) => {
+    const nombreBD = normalizarNombreSede(s.nombre);
+    const nombreProspecto = normalizarNombreSede(sedeTexto);
+
+    if (nombreBD === nombreProspecto) return true;
+
+    if (nombreProspecto === 'smt' && nombreBD === 'barriosur') return true;
+    if (nombreProspecto === 'sanmiguelbn' && nombreBD === 'barrionorte') return true;
+
+    return false;
+  });
+
+  return sedeEncontrada?.id || null;
+};
+
+// Benjamin Orellana - 2026/04/27 - Sincroniza desde ventas internas una visita o clase de prueba, impactando prospecto y, cuando aplica, asignación de profesor, alumno y agenda.
+export const SYNC_VentasProspectoClaseInterna_CTS = async (req, res) => {
+  const t = await db.transaction();
+
+  try {
+    const {
+      prospecto_id,
+      numeroClase,
+      fecha,
+      hora_clase,
+      tipo,
+      observacion,
+      necesita_profe,
+      hhmm,
+      grp,
+      sede_id
+    } = req.body;
+
+    const camposClase = resolverCamposClaseInternaVentas(numeroClase);
+    const tipoFinal = normalizarTexto(tipo);
+    const requiereProfe = normalizarBoolean(necesita_profe);
+
+    if (!prospecto_id) {
+      await t.rollback();
+      return res.status(400).json({
+        mensajeError: 'El prospecto es obligatorio.'
+      });
+    }
+
+    if (!camposClase) {
+      await t.rollback();
+      return res.status(400).json({
+        mensajeError: 'El número de clase debe ser 1, 2 o 3.'
+      });
+    }
+
+    if (!fecha) {
+      await t.rollback();
+      return res.status(400).json({
+        mensajeError: 'La fecha es obligatoria.'
+      });
+    }
+
+    if (!tipoFinal) {
+      await t.rollback();
+      return res.status(400).json({
+        mensajeError: 'El tipo es obligatorio.'
+      });
+    }
+
+    const TIPOS_VALIDOS_INTERNOS = [
+      'Agenda',
+      'Visita programada',
+      'Clase de prueba'
+    ];
+
+    if (!TIPOS_VALIDOS_INTERNOS.includes(tipoFinal)) {
+      await t.rollback();
+      return res.status(400).json({
+        mensajeError:
+          'El tipo debe ser Agenda, Visita programada o Clase de prueba.'
+      });
+    }
+
+    const prospecto = await VentasProspectosModel.findByPk(prospecto_id, {
+      transaction: t
+    });
+ 
+    // Benjamin Orellana - 2026/04/27 - Se resuelve sede_id efectivo para no buscar instructores con NULL cuando el prospecto es viejo o no trae sede_id persistido.
+    const sedeIdEfectivo = await resolverSedeIdEfectivoVentas({
+      prospecto,
+      sede_id,
+      transaction: t
+    });
+
+    if (!prospecto) {
+      await t.rollback();
+      return res.status(404).json({
+        mensajeError: 'Prospecto no encontrado.'
+      });
+    }
+
+    const actividadProspecto = normalizarTexto(prospecto.actividad);
+    const esPilates = actividadProspecto === 'Pilates';
+
+    // Benjamin Orellana - 2026/04/27 - Para Pilates se toma la hora desde el horario seleccionado; para el resto se usa hora_clase.
+    const horaFinalClase = esPilates
+      ? normalizarTexto(hhmm) || normalizarTexto(hora_clase)
+      : normalizarTexto(hora_clase);
+
+    if (!horaFinalClase) {
+      await t.rollback();
+      return res.status(400).json({
+        mensajeError: 'La hora es obligatoria.'
+      });
+    }
+
+    const fechaHoraClase = construirFechaHoraMySQL(fecha, horaFinalClase);
+    const diaSemana = obtenerDiaSemanaRRHH(fecha);
+    const { mes, anio } = obtenerMesAnio(fecha);
+    const horaClaseNormalizada = normalizarHoraHHMMSS(horaFinalClase);
+
+    if (
+      !fechaHoraClase ||
+      !diaSemana ||
+      !mes ||
+      !anio ||
+      !horaClaseNormalizada
+    ) {
+      await t.rollback();
+      return res.status(400).json({
+        mensajeError: 'La fecha u hora enviada no es válida.'
+      });
+    }
+
+    const datosActualizacionProspecto = {
+      [camposClase.fechaKey]: fechaHoraClase,
+      [camposClase.obsKey]: normalizarTexto(observacion) || null,
+      [camposClase.tipoKey]: tipoFinal,
+      necesita_profe: esPilates ? false : requiereProfe
+    };
+
+    let profesorAsignado = null;
+    let alumnoCreadoOActualizado = null;
+    let agendaCreadaOActualizada = null;
+    let mensajeAdvertencia = null;
+    let horarioProspectoSincronizado = null;
+
+    const tipoGeneraPlanillaYAgenda = [
+      'Visita programada',
+      'Clase de prueba'
+    ].includes(tipoFinal);
+
+    // Benjamin Orellana - 2026/04/27 - Si el prospecto es Pilates, se conserva su flujo específico actual y solo se sincronizan datos de clase y horario sin cortar con error.
+    if (esPilates) {
+      if (normalizarTexto(hhmm) && normalizarTexto(grp)) {
+        horarioProspectoSincronizado = await upsertHorarioProspectoInterno({
+          prospecto_id: prospecto.id,
+          clase_num: camposClase.numero,
+          hhmm,
+          grp,
+          transaction: t
+        });
+      }
+
+      await prospecto.update(datosActualizacionProspecto, { transaction: t });
+
+      await t.commit();
+
+      return res.status(200).json({
+        message:
+          'Clase interna sincronizada correctamente. Pilates mantiene su flujo específico actual.',
+        prospecto_id: prospecto.id,
+        numero_clase: camposClase.numero,
+        pilates_flujo_existente: true,
+        horario: horarioProspectoSincronizado,
+        profesor_asignado: false,
+        alumno_generado: false,
+        agenda_generada: false,
+        mensajeAdvertencia: null
+      });
+    }
+
+    if (requiereProfe && tipoGeneraPlanillaYAgenda && !sedeIdEfectivo) {
+      await t.rollback();
+      return res.status(400).json({
+        mensajeError:
+          'No se pudo resolver la sede del prospecto para asignar profesor.'
+      });
+    }
+
+    // Benjamin Orellana - 2026/04/27 - Si desde ventas se marca que necesita profesor y el tipo corresponde, se asigna instructor con la misma lógica del flujo público general.
+    if (requiereProfe && tipoGeneraPlanillaYAgenda) {
+      const profesoresDisponibles = await db.query(
+        `
+        SELECT
+          rh.id,
+          rh.usuario_id,
+          u.email,
+          u.name,
+          u.level,
+          rh.hora_entrada,
+          rh.hora_salida
+        FROM rrhh_horarios rh
+        INNER JOIN users u
+          ON u.id = rh.usuario_id
+        WHERE rh.sede_id = :sedeId
+          AND rh.dia_semana = :diaSemana
+          AND rh.eliminado = 0
+          AND u.level = 'instructor'
+          AND rh.fecha_vigencia_desde <= :fechaClase
+          AND (rh.fecha_vigencia_hasta IS NULL OR rh.fecha_vigencia_hasta >= :fechaClase)
+          AND rh.hora_entrada <= :horaClase
+          AND rh.hora_salida > :horaClase
+        ORDER BY rh.hora_salida DESC, rh.hora_entrada ASC, rh.id ASC
+        LIMIT 1
+        `,
+        {
+          replacements: {
+            sedeId: sedeIdEfectivo,
+            diaSemana,
+            fechaClase: fecha,
+            horaClase: horaClaseNormalizada
+          },
+          type: QueryTypes.SELECT,
+          transaction: t
+        }
+      );
+
+      profesorAsignado = profesoresDisponibles?.[0] || null;
+
+      // Benjamin Orellana - 2026/04/27 - Si al instructor actual le quedan 30 minutos o menos y existe relevo cercano, se asigna el siguiente.
+      if (profesorAsignado) {
+        const minutosRestantes = diferenciaMinutosEntreHoras(
+          horaClaseNormalizada,
+          profesorAsignado.hora_salida
+        );
+
+        if (minutosRestantes !== null && minutosRestantes <= 30) {
+          const horaLimiteRelevo = sumarMinutosAHora(horaClaseNormalizada, 30);
+
+          const proximosProfesores = await db.query(
+            `
+            SELECT
+              rh.id,
+              rh.usuario_id,
+              u.email,
+              u.name,
+              u.level,
+              rh.hora_entrada,
+              rh.hora_salida
+            FROM rrhh_horarios rh
+            INNER JOIN users u
+              ON u.id = rh.usuario_id
+            WHERE rh.sede_id = :sedeId
+              AND rh.dia_semana = :diaSemana
+              AND rh.eliminado = 0
+              AND u.level = 'instructor'
+              AND rh.fecha_vigencia_desde <= :fechaClase
+              AND (rh.fecha_vigencia_hasta IS NULL OR rh.fecha_vigencia_hasta >= :fechaClase)
+              AND rh.hora_entrada > :horaClase
+              AND rh.hora_entrada <= :horaLimiteRelevo
+            ORDER BY rh.hora_entrada ASC, rh.hora_salida DESC, rh.id ASC
+            LIMIT 1
+            `,
+            {
+              replacements: {
+                sedeId: sedeIdEfectivo,
+                diaSemana,
+                fechaClase: fecha,
+                horaClase: horaClaseNormalizada,
+                horaLimiteRelevo
+              },
+              type: QueryTypes.SELECT,
+              transaction: t
+            }
+          );
+
+          if (proximosProfesores?.[0]) {
+            profesorAsignado = proximosProfesores[0];
+          }
+        }
+      }
+
+      if (profesorAsignado) {
+        // Benjamin Orellana - 2026/04/27 - Se utiliza un marcador técnico en motivo para reutilizar el mismo alumno prospecto interno en reprogramaciones futuras.
+        const marcadorAlumno = `VENTAS_PROSPECTO_INTERNO:${prospecto.id}`;
+
+        const alumnoExistente = await AlumnosModel.findOne({
+          where: {
+            prospecto: 'prospecto',
+            motivo: marcadorAlumno
+          },
+          order: [['id', 'DESC']],
+          transaction: t
+        });
+
+        const datosAlumno = {
+          nombre: prospecto.nombre,
+          prospecto: 'prospecto',
+          c: '',
+          socio_origen: null,
+          socio_origen_mes: null,
+          socio_origen_anio: null,
+          email: profesorAsignado.email || null,
+          celular: prospecto.contacto || null,
+          punto_d: null,
+          motivo: marcadorAlumno,
+          user_id: profesorAsignado.usuario_id,
+          fecha_creacion: new Date(),
+          mes,
+          anio
+        };
+
+        if (alumnoExistente) {
+          await alumnoExistente.update(datosAlumno, { transaction: t });
+          alumnoCreadoOActualizado = alumnoExistente;
+        } else {
+          alumnoCreadoOActualizado = await AlumnosModel.create(datosAlumno, {
+            transaction: t
+          });
+        }
+
+        const contenidoAgenda = `PENDIENTE`;
+
+        const agendaExistente = await AgendasModel.findOne({
+          where: {
+            alumno_id: alumnoCreadoOActualizado.id,
+            agenda_num: Number(camposClase.numero),
+            mes,
+            anio
+          },
+          transaction: t
+        });
+
+        if (agendaExistente) {
+          await agendaExistente.update(
+            {
+              contenido: contenidoAgenda,
+              fecha_creacion: new Date()
+            },
+            { transaction: t }
+          );
+
+          agendaCreadaOActualizada = agendaExistente;
+        } else {
+          agendaCreadaOActualizada = await AgendasModel.create(
+            {
+              alumno_id: alumnoCreadoOActualizado.id,
+              agenda_num: Number(camposClase.numero),
+              contenido: contenidoAgenda,
+              fecha_creacion: new Date(),
+              mes,
+              anio
+            },
+            { transaction: t }
+          );
+        }
+      } else {
+        mensajeAdvertencia =
+          'No se encontró un profesor disponible para la sede, día y horario seleccionados.';
+      }
+    }
+
+    await prospecto.update(datosActualizacionProspecto, { transaction: t });
+
+    await t.commit();
+
+    return res.status(200).json({
+      message: 'Clase interna sincronizada correctamente.',
+      prospecto_id: prospecto.id,
+      numero_clase: camposClase.numero,
+      pilates_flujo_existente: false,
+      profesor_asignado: !!profesorAsignado,
+      profesor: profesorAsignado
+        ? {
+            usuario_id: profesorAsignado.usuario_id,
+            nombre: profesorAsignado.name,
+            email: profesorAsignado.email
+          }
+        : null,
+      alumno_generado: !!alumnoCreadoOActualizado,
+      alumno: alumnoCreadoOActualizado,
+      agenda_generada: !!agendaCreadaOActualizada,
+      agenda: agendaCreadaOActualizada,
+      horario: horarioProspectoSincronizado,
+      mensajeAdvertencia
+    });
+  } catch (error) {
+    try {
+      await t.rollback();
+    } catch {}
+
+    console.error('Error en SYNC_VentasProspectoClaseInterna_CTS:', error);
+
+    return res.status(500).json({
+      mensajeError:
+        'Ocurrió un error al sincronizar la clase interna desde ventas.',
+      detalle: error.message
+    });
+  }
+};
+
+// Benjamin Orellana - 2026/04/27 - Determina si una actividad pertenece al flujo especial de Pilates.
+const esActividadPilates = (actividad) =>
+  normalizarTextoComparacion(actividad) === 'pilates';
+
+// Benjamin Orellana - 2026/04/27 - Limpia las columnas de clases del prospecto para obligar a reagendar al cambiar de actividad.
+const buildPayloadLimpiezaClasesProspecto = () => ({
+  clase_prueba_1_fecha: null,
+  clase_prueba_1_obs: null,
+  clase_prueba_1_tipo: null,
+  clase_prueba_2_fecha: null,
+  clase_prueba_2_obs: null,
+  clase_prueba_2_tipo: null,
+  clase_prueba_3_fecha: null,
+  clase_prueba_3_obs: null,
+  clase_prueba_3_tipo: null,
+  necesita_profe: false
+});
+
+// Benjamin Orellana - 2026/04/27 - Limpia el flujo general no-Pilates asociado al prospecto interno de ventas.
+const limpiarFlujoGeneralNoPilatesPorProspecto = async (
+  prospectoId,
+  transaction
+) => {
+  const marcadorAlumno = `VENTAS_PROSPECTO_INTERNO:${prospectoId}`;
+
+  const alumnos = await AlumnosModel.findAll({
+    where: {
+      prospecto: 'prospecto',
+      motivo: marcadorAlumno
+    },
+    transaction
+  });
+
+  const alumnoIds = alumnos.map((a) => a.id).filter(Boolean);
+
+  let agendasEliminadas = 0;
+  let alumnosEliminados = 0;
+
+  if (alumnoIds.length > 0) {
+    agendasEliminadas = await AgendasModel.destroy({
+      where: {
+        alumno_id: {
+          [Op.in]: alumnoIds
+        }
+      },
+      transaction
+    });
+
+    alumnosEliminados = await AlumnosModel.destroy({
+      where: {
+        id: {
+          [Op.in]: alumnoIds
+        }
+      },
+      transaction
+    });
+  }
+
+  return {
+    alumnosEliminados,
+    agendasEliminadas
+  };
+};
+
+// Benjamin Orellana - 2026/04/27 - Limpia el flujo especial de Pilates asociado al prospecto.
+const limpiarFlujoPilatesPorProspecto = async (prospecto, transaction) => {
+  let horariosVentasEliminados = 0;
+  let clientesPilatesEliminados = 0;
+  let inscripcionesPilatesEliminadas = 0;
+  let asistenciasPilatesEliminadas = 0;
+
+  horariosVentasEliminados = await VentasProspectosHorariosModel.destroy({
+    where: {
+      prospecto_id: prospecto.id
+    },
+    transaction
+  });
+
+  const clientesPilates = await ClientesPilatesModel.findAll({
+    where: {
+      [Op.or]: [
+        { id: prospecto.id },
+        {
+          nombre: prospecto.nombre,
+          telefono: prospecto.contacto || null,
+          estado: {
+            [Op.in]: ['Clase de prueba', 'Renovacion programada']
+          }
+        }
+      ]
+    },
+    transaction
+  });
+
+  const clienteIds = [...new Set(clientesPilates.map((c) => c.id).filter(Boolean))];
+
+  if (clienteIds.length > 0) {
+    const inscripciones = await InscripcionesPilatesModel.findAll({
+      attributes: ['id'],
+      where: {
+        id_cliente: {
+          [Op.in]: clienteIds
+        }
+      },
+      transaction
+    });
+
+    const inscripcionIds = inscripciones.map((i) => i.id).filter(Boolean);
+
+    if (inscripcionIds.length > 0) {
+      try {
+        const [resultadoDeleteAsistencias] = await db.query(
+          `
+          DELETE FROM asistencias_pilates
+          WHERE id_inscripcion IN (:inscripcionIds)
+          `,
+          {
+            replacements: { inscripcionIds },
+            transaction
+          }
+        );
+
+        asistenciasPilatesEliminadas =
+          resultadoDeleteAsistencias?.affectedRows ||
+          resultadoDeleteAsistencias?.rowCount ||
+          0;
+      } catch (error) {
+        console.warn(
+          'No se pudieron eliminar asistencias_pilates durante el cambio de actividad:',
+          error.message
+        );
+      }
+    }
+
+    inscripcionesPilatesEliminadas = await InscripcionesPilatesModel.destroy({
+      where: {
+        id_cliente: {
+          [Op.in]: clienteIds
+        }
+      },
+      transaction
+    });
+
+    clientesPilatesEliminados = await ClientesPilatesModel.destroy({
+      where: {
+        id: {
+          [Op.in]: clienteIds
+        }
+      },
+      transaction
+    });
+  }
+
+  return {
+    horariosVentasEliminados,
+    clientesPilatesEliminados,
+    inscripcionesPilatesEliminadas,
+    asistenciasPilatesEliminadas
+  };
+};
+
+// Benjamin Orellana - 2026/04/27 - Cambia la actividad del prospecto limpiando dependencias cuando cruza entre el flujo general y el flujo especial de Pilates.
+export const CAMBIAR_ActividadVentasProspecto_CTS = async (req, res) => {
+  const t = await db.transaction();
+
+  try {
+    const { id } = req.params;
+    const { actividad_nueva } = req.body;
+
+    const ACTIVIDADES_VALIDAS_CAMBIO = [
+      'No especifica',
+      'Musculacion',
+      'Pilates',
+      'Clases grupales',
+      'Pase full'
+    ];
+
+    if (!id || Number.isNaN(Number(id))) {
+      await t.rollback();
+      return res.status(400).json({
+        mensajeError: 'El id del prospecto es inválido.'
+      });
+    }
+
+    if (
+      !actividad_nueva ||
+      !ACTIVIDADES_VALIDAS_CAMBIO.includes(actividad_nueva)
+    ) {
+      await t.rollback();
+      return res.status(400).json({
+        mensajeError: 'La nueva actividad no es válida.'
+      });
+    }
+
+    const prospecto = await VentasProspectosModel.findByPk(id, {
+      transaction: t
+    });
+
+    if (!prospecto) {
+      await t.rollback();
+      return res.status(404).json({
+        mensajeError: 'Prospecto no encontrado.'
+      });
+    }
+
+    const actividadAnterior = prospecto.actividad;
+    const actividadNueva = actividad_nueva;
+
+    if (actividadAnterior === actividadNueva) {
+      await t.rollback();
+      return res.status(200).json({
+        message: 'La actividad no cambió.',
+        actividad_anterior: actividadAnterior,
+        actividad_nueva: actividadNueva,
+        limpieza_realizada: false
+      });
+    }
+
+    const veniaDePilates = esActividadPilates(actividadAnterior);
+    const vaAPilates = esActividadPilates(actividadNueva);
+
+    let resumenLimpieza = {
+      flujoGeneral: {
+        alumnosEliminados: 0,
+        agendasEliminadas: 0
+      },
+      flujoPilates: {
+        horariosVentasEliminados: 0,
+        clientesPilatesEliminados: 0,
+        inscripcionesPilatesEliminadas: 0,
+        asistenciasPilatesEliminadas: 0
+      }
+    };
+
+    let limpiezaRealizada = false;
+
+    // Benjamin Orellana - 2026/04/27 - Solo se limpia profundo si cambia entre la familia Pilates y la familia no-Pilates.
+    if (veniaDePilates !== vaAPilates) {
+      if (veniaDePilates) {
+        resumenLimpieza.flujoPilates = await limpiarFlujoPilatesPorProspecto(
+          prospecto,
+          t
+        );
+      } else {
+        resumenLimpieza.flujoGeneral =
+          await limpiarFlujoGeneralNoPilatesPorProspecto(prospecto.id, t);
+      }
+
+      limpiezaRealizada = true;
+    }
+
+    const payloadUpdate = {
+      actividad: actividadNueva,
+      ...buildPayloadLimpiezaClasesProspecto()
+    };
+
+    await prospecto.update(payloadUpdate, { transaction: t });
+
+    await t.commit();
+
+    return res.status(200).json({
+      message: limpiezaRealizada
+        ? 'Actividad cambiada y dependencias limpiadas correctamente.'
+        : 'Actividad cambiada correctamente.',
+      prospecto_id: prospecto.id,
+      actividad_anterior: actividadAnterior,
+      actividad_nueva: actividadNueva,
+      limpieza_realizada: limpiezaRealizada,
+      resumen_limpieza: resumenLimpieza
+    });
+  } catch (error) {
+    try {
+      await t.rollback();
+    } catch {}
+
+    console.error('Error en CAMBIAR_ActividadVentasProspecto_CTS:', error);
+
+    return res.status(500).json({
+      mensajeError: 'No se pudo cambiar la actividad del prospecto.',
+      detalle: error.message
+    });
+  }
+};
+
+
 VentasProspectosModel.hasMany(VentasProspectosHorariosModel, {
   foreignKey: 'prospecto_id',
   as: 'horarios'
