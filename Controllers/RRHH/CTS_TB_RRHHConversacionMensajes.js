@@ -20,9 +20,24 @@ import RRHHConversacionesModel from "../../Models/RRHH/MD_TB_RRHHConversaciones.
 import RRHHMarcacionesModel from "../../Models/RRHH/MD_TB_RRHHMarcaciones.js";
 import UsersModel from "../../Models/MD_TB_Users.js";
 import Sedes from "../../Models/MD_TB_sedes.js";
-
+const RRHH_UPLOAD_PREFIX = "uploads/ticket_consultas_rrhh/";
+import { eliminarArchivoRRHH } from "../../utils/uploadTicketConsultaRRHHConfig.js";
 const { SedeModel } = Sedes;
 const HORAS_MAXIMAS_EDICION = 5;
+
+const obtenerArchivoAdjunto = (req) => {
+  if (req.file) return req.file;
+  if (req.files?.archivo_adjunto?.[0]) return req.files.archivo_adjunto[0];
+  return null;
+};
+
+const construirUrlPublica = (nombreArchivo) => {
+  if (!nombreArchivo) return null;
+  const limpia = String(nombreArchivo).trim();
+  if (/^https?:\/\//i.test(limpia)) return limpia;
+  const normalizada = limpia.replace(/\\/g, "/").replace(/^\/+/, "");
+  return `/${normalizada}`;
+};
 
 const obtenerMensajeVisible = (mensaje) => {
   if (!mensaje) return "";
@@ -64,15 +79,22 @@ const actualizarCabeceraConversacion = async (conversacion_id) => {
   );
 };
 
-const mapearMensajePlano = (data) => ({
-  ...data,
-  resulto_por_id: data.resuelto_por,
-  resuelto_por: data.resolutor?.name || null,
-  emisor_nombre: data.emisor?.name || null,
-  emisor_email: data.emisor?.email || null,
-  resolutor: undefined,
-  emisor: undefined,
-});
+const mapearMensajePlano = (data) => {
+  const archivo_adjunto_url_publica = construirUrlPublica(data.archivo_adjunto_url);
+  const es_imagen = /\.(jpg|jpeg|png|webp|heic)$/i.test(data.archivo_adjunto_url || "");
+
+  return {
+    ...data,
+    archivo_adjunto_url_publica, // URL lista para el src del front
+    es_imagen,                  // Para saber si mostrar miniatura
+    resulto_por_id: data.resuelto_por,
+    resuelto_por: data.resolutor?.name || null,
+    emisor_nombre: data.emisor?.name || null,
+    emisor_email: data.emisor?.email || null,
+    resolutor: undefined,
+    emisor: undefined,
+  };
+};
 
 const mapearMensaje = (registro) => mapearMensajePlano(registro.toJSON());
 
@@ -278,47 +300,69 @@ export const OBR_RRHHConversacionMensaje_CTS = async (req, res) => {
 export const CR_RRHHConversacionMensaje_CTS = async (req, res) => {
   try {
     const {
+      conversacion_id, // 👈 Recibimos el ID si es una respuesta a un ticket existente
       usuario_id,
       mensaje,
       destinatario_tipo,
       sede_id,
       emisor_user_id,
+      marcacion_id,
+      tipo_mensaje, // 👈 Usamos esto para guardar el asunto si el ticket es nuevo
     } = req.body;
+    
+    const archivo_adjunto_url = req.file 
+    ? `uploads/ticket_consultas_rrhh/${req.file.filename}` 
+    : null;
 
-    const [conversacion] = await RRHHConversacionesModel.findOrCreate({
-      where: {
+    let conversacion;
+
+    // 1. Verificamos si es una respuesta a un ticket existente
+    if (conversacion_id) {
+      conversacion = await RRHHConversacionesModel.findOne({
+        where: { id: conversacion_id, eliminado: 0 }
+      });
+
+      if (!conversacion) {
+        return res.status(404).json({ mensajeError: "Conversación no encontrada." });
+      }
+
+      // Si el ticket estaba cerrado, lo reabrimos automáticamente
+      if (conversacion.estado === "cerrada") {
+        await conversacion.update({
+          estado: "abierta",
+          cerrado_por: null,
+          cerrado_at: null,
+        });
+
+        await RRHHConversacionMensajesModel.create({
+          conversacion_id: conversacion.id,
+          emisor_user_id,
+          destinatario_tipo: destinatario_tipo === "rrhh" ? "usuario" : "rrhh",
+          tipo_mensaje: "sistema",
+          mensaje: "Ticket reabierto por un nuevo mensaje.",
+          marcacion_id: marcacion_id || null,
+        });
+      }
+    } else {
+      // 2. Si NO hay conversacion_id, creamos un TICKET NUEVO
+      conversacion = await RRHHConversacionesModel.create({
         usuario_id,
         sede_id,
-        eliminado: 0,
-      },
-      defaults: {
+        asunto: tipo_mensaje || 'aclaracion', // 👈 Guardamos el motivo como asunto del ticket
         estado: "abierta",
         tiene_no_leidos_rrhh: 0,
         tiene_no_leidos_usuario: 0,
         cerrado_por: null,
         cerrado_at: null,
-      },
-    });
-
-    if (conversacion.estado === "cerrada") {
-      await conversacion.update({
-        estado: "abierta",
-        cerrado_por: null,
-        cerrado_at: null,
-      });
-
-      await RRHHConversacionMensajesModel.create({
-        conversacion_id: conversacion.id,
-        emisor_user_id,
-        destinatario_tipo: destinatario_tipo === "rrhh" ? "usuario" : "rrhh",
-        tipo_mensaje: "sistema",
-        mensaje: "Conversación reabierta por un nuevo mensaje.",
       });
     }
 
+    // 3. Creamos el mensaje y lo asociamos a la conversación (nueva o existente)
     const nuevoMensaje = await RRHHConversacionMensajesModel.create({
       ...req.body,
       conversacion_id: conversacion.id,
+      marcacion_id: marcacion_id || null,
+      archivo_adjunto_url,
       leido: 0,
       leido_at: null,
       editado: 0,
@@ -327,6 +371,7 @@ export const CR_RRHHConversacionMensaje_CTS = async (req, res) => {
       mensaje_eliminado_at: null,
     });
 
+    // 4. Actualizamos la cabecera del ticket con la alerta de "no leído"
     await conversacion.update({
       ultimo_mensaje: String(mensaje || "").substring(0, 250),
       ultima_fecha_mensaje: new Date(),
@@ -337,7 +382,7 @@ export const CR_RRHHConversacionMensaje_CTS = async (req, res) => {
     });
 
     return res.json({
-      mensaje: "Mensaje registrado con éxito",
+      mensaje: conversacion_id ? "Respuesta registrada con éxito" : "Ticket creado con éxito",
       nuevoMensaje,
     });
   } catch (error) {
@@ -346,10 +391,90 @@ export const CR_RRHHConversacionMensaje_CTS = async (req, res) => {
   }
 };
 
+export const CR_RRHHMensajeDesdeAdmin_CTS = async (req, res) => {
+  try {
+    const {
+      conversacion_id,    // 👈 Recibimos el ID si RRHH responde a un ticket existente
+      usuario_id,         
+      sede_id,            
+      emisor_user_id,     
+      mensaje,
+      tipo_mensaje,       // 'tu_cobro', 'otras_consultas', etc. (Se usa como asunto si es nuevo)
+      marcacion_id,       
+      fecha_referencia
+    } = req.body;
+    
+    const archivo_adjunto_url = req.file 
+    ? `uploads/ticket_consultas_rrhh/${req.file.filename}` 
+    : null;
+
+    let conversacion;
+
+    // 1. Verificamos si RRHH está respondiendo a un ticket o creando uno nuevo
+    if (conversacion_id) {
+      conversacion = await RRHHConversacionesModel.findOne({
+        where: { id: conversacion_id, eliminado: 0 }
+      });
+
+      if (!conversacion) {
+        return res.status(404).json({ mensajeError: "Conversación no encontrada." });
+      }
+
+      if (conversacion.estado === "cerrada") {
+        await conversacion.update({
+          estado: "abierta",
+          cerrado_por: null,
+          cerrado_at: null,
+        });
+      }
+    } else {
+      // Si RRHH crea un ticket de cero para el empleado
+      conversacion = await RRHHConversacionesModel.create({
+        usuario_id,
+        sede_id,
+        asunto: tipo_mensaje || 'otras_consultas', // 👈 Asunto del ticket creado por RRHH
+        estado: "abierta",
+        tiene_no_leidos_rrhh: 0,
+        tiene_no_leidos_usuario: 0,
+        cerrado_por: null,
+        cerrado_at: null,
+      });
+    }
+
+    // 2. Crear el mensaje (Destinatario siempre será 'usuario')
+    const nuevoMensaje = await RRHHConversacionMensajesModel.create({
+      conversacion_id: conversacion.id,
+      emisor_user_id,
+      destinatario_tipo: "usuario", 
+      tipo_mensaje: conversacion_id ? "respuesta_rrhh" : (tipo_mensaje || "respuesta_rrhh"),
+      mensaje: mensaje.trim(),
+      archivo_adjunto_url,
+      marcacion_id: marcacion_id || null,
+      fecha_referencia: fecha_referencia || null,
+      leido: 0,
+    });
+
+    // 3. Actualizar la conversación: marcamos no leídos para el USUARIO
+    await conversacion.update({
+      ultimo_mensaje: String(mensaje || "").substring(0, 250),
+      ultima_fecha_mensaje: new Date(),
+      tiene_no_leidos_usuario: 1, 
+    });
+
+    return res.json({
+      mensaje: conversacion_id ? "Respuesta de RRHH enviada" : "Ticket de RRHH creado",
+      nuevoMensaje,
+    });
+  } catch (error) {
+    console.error("Error en CR_RRHHMensajeDesdeAdmin_CTS:", error);
+    return res.status(500).json({ mensajeError: error.message });
+  }
+};
+
 export const UR_RRHHConversacionMensaje_CTS = async (req, res) => {
   try {
     const { id } = req.params;
-    const { emisor_user_id, mensaje } = req.body;
+    const { emisor_user_id, mensaje, sin_horas_maxima_edicion, tipo_mensaje, eliminar_imagen } = req.body;
 
     const registro = await RRHHConversacionMensajesModel.findOne({
       where: { id, eliminado: 0 },
@@ -381,18 +506,29 @@ export const UR_RRHHConversacionMensaje_CTS = async (req, res) => {
     const creado = new Date(registro.created_at);
     const horasTranscurridas = (ahora.getTime() - creado.getTime()) / (1000 * 60 * 60);
 
-    if (horasTranscurridas > HORAS_MAXIMAS_EDICION) {
+    if (!sin_horas_maxima_edicion && horasTranscurridas > HORAS_MAXIMAS_EDICION) {
       return res.status(400).json({
         mensajeError: `Solo podés editar mensajes dentro de las primeras ${HORAS_MAXIMAS_EDICION} horas.`,
       });
     }
 
-    await registro.update({
-      mensaje: String(mensaje || "").trim(),
-      editado: 1,
-      editado_at: new Date(),
-    });
+    let archivo_adjunto_url;
+    if (req.file) {
+      archivo_adjunto_url = `${RRHH_UPLOAD_PREFIX}${req.file.filename}`;
+    } else if (eliminar_imagen === 'true' || eliminar_imagen === true) {
+        eliminarArchivoRRHH(registro.archivo_adjunto_url);
+      archivo_adjunto_url = null;
+    } else {
+      archivo_adjunto_url = registro.archivo_adjunto_url;
+    }
 
+    registro.mensaje = String(mensaje || registro.mensaje || "").trim();
+    registro.tipo_mensaje = tipo_mensaje || registro.tipo_mensaje;
+    registro.archivo_adjunto_url = archivo_adjunto_url;
+    registro.editado = 1;
+    registro.editado_at = new Date();
+
+    await registro.save();
     await actualizarCabeceraConversacion(registro.conversacion_id);
 
     const registroActualizado = await RRHHConversacionMensajesModel.findOne({

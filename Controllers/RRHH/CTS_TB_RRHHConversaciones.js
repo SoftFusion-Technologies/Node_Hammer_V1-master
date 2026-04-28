@@ -30,8 +30,18 @@ export const OBRS_RRHHConversaciones_CTS = async (req, res) => {
     const limit = Math.max(1, Math.min(Number(req.query.limit) || 20, 50));
     const offset = Math.max(0, Number(req.query.offset) || 0);
 
+    // 1. Capturamos los parámetros dinámicos desde el frontend
+    const { usuario_id, sede_id } = req.query;
+
+    // 2. Construimos la cláusula WHERE dinámicamente
+    const whereConversacion = { eliminado: 0 };
+    
+    if (usuario_id) whereConversacion.usuario_id = Number(usuario_id);
+    if (sede_id) whereConversacion.sede_id = Number(sede_id);
+
+    // 3. Ejecutamos la consulta (traerá 1 o múltiples tickets según el filtro)
     const { count, rows } = await RRHHConversacionesModel.findAndCountAll({
-      where: { eliminado: 0 },
+      where: whereConversacion,
       include: [
         {
           model: SedeModel,
@@ -64,7 +74,10 @@ export const OBRS_RRHHConversaciones_CTS = async (req, res) => {
           required: false,
         },
       ],
-      order: [["ultima_fecha_mensaje", "DESC"]],
+      order: [
+        ["estado", "ASC"],                // abiertas primero (alfabéticamente "abierta" < "cerrada")
+        ["ultima_fecha_mensaje", "DESC"]  // dentro de cada grupo, más recientes arriba
+      ],
       limit,
       offset,
       distinct: true,
@@ -83,16 +96,23 @@ export const OBRS_RRHHConversaciones_CTS = async (req, res) => {
   }
 };
 
-export const OBRS_CantidadNoLeidas_RRHHConversaciones_CTS = async (
-  req,
-  res,
-) => {
+export const OBRS_CantidadNoLeidas_RRHHConversaciones_CTS = async (req, res) => {
   try {
-    const { conversacion_id, usuario_id, sede_id } = req.query;
+    const {
+      conversacion_id,
+      usuario_id,
+      sede_id,
+      tipo = "admin",
+    } = req.query;
+
+    const campoNoLeidos =
+      tipo === "admin"
+        ? "tiene_no_leidos_rrhh"
+        : "tiene_no_leidos_usuario";
 
     const whereConversacion = {
       eliminado: 0,
-      tiene_no_leidos_rrhh: 1,
+      [campoNoLeidos]: 1, 
     };
 
     if (conversacion_id) whereConversacion.id = conversacion_id;
@@ -111,6 +131,7 @@ export const OBRS_CantidadNoLeidas_RRHHConversaciones_CTS = async (
 };
 
 export const OBR_RRHHConversacion_CTS = async (req, res) => {
+  // Este controlador se usa cuando hacen clic en un ticket específico
   try {
     const registro = await RRHHConversacionesModel.findOne({
       where: { id: req.params.id, eliminado: 0 },
@@ -137,7 +158,7 @@ export const OBR_RRHHConversacion_CTS = async (req, res) => {
     if (!registro) {
       return res
         .status(404)
-        .json({ mensajeError: "Conversación no encontrada." });
+        .json({ mensajeError: "Ticket de consulta no encontrado." });
     }
 
     return res.json(registro);

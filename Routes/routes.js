@@ -12,6 +12,7 @@
 
 import express from 'express'; // Importa la librería Express
 import { uploadPreventaTransferencia } from '../utils/uploadPreventasConfig.js';
+import { uploadTicketConsultasRRHH } from '../utils/uploadTicketConsultaRRHHConfig.js';
 import {
   OBR_Trabajo_CTS,
   OBRS_Trabajo_CTS,
@@ -583,6 +584,7 @@ import {
   OBR_RRHHConversacionMensaje_CTS,
   OBRS_RRHHConversacionMensajesPorUsuarioSede_CTS,
   CR_RRHHConversacionMensaje_CTS,
+  CR_RRHHMensajeDesdeAdmin_CTS,
   UR_RRHHConversacionMensaje_CTS,
   ER_RRHHConversacionMensaje_CTS
 } from '../Controllers/RRHH/CTS_TB_RRHHConversacionMensajes.js';
@@ -1965,8 +1967,13 @@ router.get(
   OBRS_RRHHConversacionMensajesPorUsuarioSede_CTS
 );
 router.get('/rrhh-mensajes/:id', OBR_RRHHConversacionMensaje_CTS);
-router.post('/rrhh-mensajes', CR_RRHHConversacionMensaje_CTS);
-router.put('/rrhh-mensajes/:id', UR_RRHHConversacionMensaje_CTS);
+router.post('/rrhh-mensajes', uploadTicketConsultasRRHH.single('archivo_adjunto'), CR_RRHHConversacionMensaje_CTS);
+router.post('/rrhh-mensajes-admin', uploadTicketConsultasRRHH.single('archivo_adjunto'), CR_RRHHMensajeDesdeAdmin_CTS);
+router.put(
+  '/rrhh-mensajes/:id',
+  uploadTicketConsultasRRHH.single('archivo_adjunto'),
+  UR_RRHHConversacionMensaje_CTS
+);
 router.delete('/rrhh-mensajes/:id', ER_RRHHConversacionMensaje_CTS);
 
 // ==========================================

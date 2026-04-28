@@ -38,6 +38,8 @@ const RRHHConversacionMensajesModel = db.define(
         "consulta",
         "respuesta_rrhh",
         "sistema",
+        "tu_cobro",
+        "otras_consultas",
       ),
       defaultValue: "aclaracion",
       allowNull: false,
@@ -45,6 +47,11 @@ const RRHHConversacionMensajesModel = db.define(
     mensaje: {
       type: DataTypes.TEXT,
       allowNull: false,
+    },
+    archivo_adjunto_url: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      defaultValue: null,
     },
     editado: {
       type: DataTypes.TINYINT,

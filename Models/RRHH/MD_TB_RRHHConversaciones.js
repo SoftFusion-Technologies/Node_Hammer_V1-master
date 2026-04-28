@@ -25,6 +25,20 @@ const RRHHConversacionesModel = db.define(
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+    asunto: {
+      type: DataTypes.ENUM(
+        "aclaracion",
+        "hora_extra",
+        "olvido_ingreso",
+        "olvido_salida",
+        "inconveniente_acceso",
+        "consulta",
+        "tu_cobro",
+        "otras_consultas",
+      ),
+      defaultValue: "aclaracion",
+      allowNull: false,
+    },
     estado: {
       type: DataTypes.ENUM("abierta", "cerrada"),
       defaultValue: "abierta",

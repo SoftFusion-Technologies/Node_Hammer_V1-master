@@ -287,6 +287,9 @@ export const OBRS_RRHHMarcaciones_CTS = async (req, res) => {
           model: RRHHConversacionMensajesModel,
           as: "mensajes_aclaracion",
           required: false,
+           where: {
+            mensaje_eliminado: 0, 
+          },
         },
       ],
       order: [
