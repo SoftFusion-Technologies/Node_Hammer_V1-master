@@ -22,6 +22,7 @@ import NotificationModel from '../Models/MD_TB_Notifications.js';
 import MD_TB_QuejasInternasImagenes from '../Models/MD_TB_QuejasInternasImagenes.js';
 const ImagenesModel = MD_TB_QuejasInternasImagenes.QuejasInternasImagenesModel;
 import { Op } from 'sequelize';
+import { CLIENT_RENEG_LIMIT } from 'node:tls';
 
 // Asigna el modelo a una variable
 const QuejasInternasModel = MD_TB_QuejasInternas.QuejasInternasModel;
@@ -40,9 +41,17 @@ function getUserFromReq(req) {
     ''
   ).toString();
   const userName = (req.query.userName ?? req.body?.userName ?? '').toString();
+   const esPilates = (
+    req.user?.esPilates ??
+    req.user?.es_pilates ??
+    req.query.esPilates ??
+    req.body?.esPilates ??
+    false
+  );
   return {
     email: userName.trim().toLowerCase(),
-    levelCanon: toCanonical(userLevel)
+    levelCanon: toCanonical(userLevel),
+    esPilates: esPilates
   };
 }
 
@@ -190,24 +199,33 @@ try {
 
 export const OBR_Queja_CTS = async (req, res) => {
   try {
-    const { email, levelCanon } = getUserFromReq(req);
+    const { email, levelCanon, esPilates } = getUserFromReq(req);
+    
     if (!email || !levelCanon) {
-      return res
-        .status(400)
-        .json({ mensajeError: 'Faltan userName o userLevel.' });
+      return res.status(400).json({ mensajeError: 'Faltan userName o userLevel.' });
     }
 
-    const registro = await QuejasInternasModel.findByPk(req.params.id, {
+    let registro;
+
+    // Comparación estricta y segura
+    if (esPilates === true || esPilates === 'true') {
+      // console.log(" Buscando en tabla PILATES");
+      registro = await QuejasPilatesModel.findByPk(req.params.id);
+    } else {
+      // console.log(" Buscando en tabla INTERNAS");
+      registro = await QuejasInternasModel.findByPk(req.params.id, {
         include: [{ model: ImagenesModel, as: 'imagenes' }] 
-    });
+      });
+    }
 
-    if (!registro) return res.status(404).json({ mensajeError: 'No encontrado.' });
+    if (!registro) {
+      return res.status(404).json({ mensajeError: 'No encontrado.' });
+    }
 
-    // Si no es admin/gerente, solo puede ver lo que cargó él
-/*     if (!isCoordinator(levelCanon) && String(registro.cargado_por).toLowerCase() !== email) return res.status(403).json({ mensajeError: 'Sin permiso.' });*/    return res.json(registro);
+    return res.json(registro);
 
   } catch (error) {
-    console.log(error);
+    console.error('Error en OBR_Queja_CTS:', error);
     return res.status(500).json({ mensajeError: error.message });
   }
 };
